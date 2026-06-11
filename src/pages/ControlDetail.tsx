@@ -1,0 +1,323 @@
+import * as React from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
+import { PageHeader } from '@/components/PageHeader'
+import { StatusChip } from '@/components/StatusChip'
+import { FrameworkPill } from '@/components/FrameworkPill'
+import { EvidenceList } from '@/components/EvidenceList'
+import { Avatar } from '@/components/Avatar'
+import { Button } from '@/components/ui/Button'
+import { Tabs } from '@/components/ui/Tabs'
+import { SeverityBadge } from '@/components/SeverityBadge'
+import { getControl, getIssue, WORLD } from '@/data'
+import { personName, PEOPLE_BY_ID } from '@/data/people'
+import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
+import { useApp } from '@/store'
+import { ComingSoon } from './ComingSoon'
+import type { Control } from '@/types'
+
+const RESULT_ICON = {
+  Pass: <CheckCircle2 className="size-4 text-ok" />,
+  Fail: <XCircle className="size-4 text-critical" />,
+  Partial: <MinusCircle className="size-4 text-medium" />,
+}
+
+export function ControlDetail() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const pushToast = useApp((s) => s.pushToast)
+  const openDrawer = useApp((s) => s.openDrawer)
+  const control = id ? getControl(id) : undefined
+  const [tab, setTab] = React.useState('overview')
+
+  if (!control) return <ComingSoon title="Control not found" />
+
+  const evidence = WORLD.evidence.filter((e) => e.linkedControls.includes(control.id))
+  const issues = control.linkedIssues.map((i) => getIssue(i)).filter(Boolean)
+  const owner = PEOPLE_BY_ID[control.owner]
+  const testHistory = buildTestHistory(control)
+
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'mappings', label: 'Mappings', count: control.frameworks.length },
+    { key: 'history', label: 'Test history', count: testHistory.length },
+    { key: 'evidence', label: 'Evidence', count: evidence.length },
+    { key: 'issues', label: 'Issues', count: issues.length },
+  ]
+
+  return (
+    <div>
+      <button
+        onClick={() => navigate('/controls')}
+        className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="size-3.5" /> Control Library
+      </button>
+
+      <PageHeader
+        eyebrow={
+          <span className="inline-flex items-center gap-1.5">
+            <span className="font-mono text-info">{control.id}</span>
+            {control.automation === 'CCM' ? (
+              <span className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-2xs font-medium text-ok">
+                <Bot className="size-3" /> CCM-automated
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+                <Hand className="size-3" /> Manual
+              </span>
+            )}
+          </span>
+        }
+        title={control.title}
+        description={control.description}
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs">
+              {RESULT_ICON[control.result]}
+              <span className="font-medium text-foreground">{control.result}</span>
+            </span>
+            {control.automation === 'CCM' && control.ccmRuleId && (
+              <Button variant="outline" size="sm" onClick={() => navigate(`/ccm/${control.ccmRuleId}`)}>
+                <Activity className="size-4" /> View CCM rule
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pushToast({ title: 'Control re-test queued', description: `${control.id} re-test scheduled.`, variant: 'info' })}
+            >
+              Re-test
+            </Button>
+          </div>
+        }
+      />
+
+      {/* map-once banner */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-info/30 bg-info-soft/40 px-3.5 py-2.5">
+        <Layers className="size-4 text-info" />
+        <span className="text-xs font-medium text-foreground">Map once, satisfy many —</span>
+        <span className="text-xs text-muted-foreground">this single control satisfies</span>
+        {control.mappedFrameworkRefs.map((m) => (
+          <FrameworkPill key={m.framework} framework={m.framework} refText={m.ref} />
+        ))}
+        <span className="ml-auto text-2xs text-muted-foreground">tested once · {evidence.length} evidence items · counts in {control.frameworks.length} frameworks</span>
+      </div>
+
+      <Tabs tabs={tabs} active={tab} onChange={setTab} className="mb-4" />
+
+      {tab === 'overview' && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="card-surface p-4">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">Control attributes</h3>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+              <Attr label="Owner">
+                <span className="inline-flex items-center gap-1.5">
+                  <Avatar id={control.owner} size={20} /> <span className="text-xs">{owner.name}</span>
+                </span>
+              </Attr>
+              <Attr label="Line of defence">{owner.lod}</Attr>
+              <Attr label="Type">{control.type}</Attr>
+              <Attr label="Automation">{control.automation === 'CCM' ? 'Continuous (CCM)' : 'Manual'}</Attr>
+              <Attr label="Frequency">{control.frequency}</Attr>
+              <Attr label="Last tested">{fmtDate(control.lastTested)}</Attr>
+              <Attr label="Result">
+                <StatusChip status={control.result} />
+              </Attr>
+              <Attr label="Evidence items">{evidence.length}</Attr>
+              <Attr label="Frameworks">{control.frameworks.length}</Attr>
+            </div>
+          </div>
+          <div className="card-surface p-4">
+            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <ShieldCheck className="size-4 text-ok" /> Risks mitigated
+            </h3>
+            {control.linkedRisks.length > 0 ? (
+              <div className="space-y-1">
+                {control.linkedRisks.slice(0, 6).map((rid) => (
+                  <button
+                    key={rid}
+                    onClick={() => navigate(`/risks/${rid}`)}
+                    className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40"
+                  >
+                    <span className="font-mono text-2xs font-semibold text-info">{rid}</span>
+                    <ArrowUpRight className="ml-auto size-3 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No risks currently mapped to this control.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'mappings' && (
+        <div className="card-surface p-4">
+          <h3 className="mb-1 text-sm font-semibold text-foreground">Cross-framework mapping</h3>
+          <p className="mb-4 text-xs text-muted-foreground">
+            One control, one test, one evidence trail — satisfying the equivalent clause in every framework SPF
+            reports against. This is how “map once, satisfy many” removes duplicate testing.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {control.mappedFrameworkRefs.map((m) => (
+              <div key={m.framework} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                <FrameworkPill framework={m.framework} />
+                <div className="min-w-0">
+                  <div className="font-mono text-sm font-semibold text-foreground">{m.ref}</div>
+                  <div className="text-2xs text-muted-foreground">{m.framework} clause satisfied by {control.id}</div>
+                </div>
+                <CheckCircle2 className="ml-auto size-4 text-ok" />
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-md bg-muted/50 px-3 py-2 text-2xs text-muted-foreground">
+            Without unification this control would be tested {control.frameworks.length}× — once per framework. Here it
+            is tested once and the result fans out to all {control.frameworks.length}.
+          </div>
+        </div>
+      )}
+
+      {tab === 'history' && (
+        <div className="card-surface overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2">Run date (IST)</th>
+                <th className="px-4 py-2">Result</th>
+                <th className="px-4 py-2">Method</th>
+                <th className="px-4 py-2">Tester</th>
+                <th className="px-4 py-2">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {testHistory.map((h, i) => (
+                <tr key={i} className="border-b border-border/70 last:border-0">
+                  <td className="px-4 py-2 text-xs text-foreground">{fmtIST(h.at)}</td>
+                  <td className="px-4 py-2"><StatusChip status={h.result} /></td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.method}</td>
+                  <td className="px-4 py-2 text-xs text-foreground">{h.tester}</td>
+                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === 'evidence' && (
+        <div className="card-surface p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Evidence ({evidence.length})</h3>
+            <div className="flex items-center gap-2">
+              <span className="text-2xs text-muted-foreground">
+                {evidence.filter((e) => e.auto).length} auto-captured · {evidence.filter((e) => !e.auto).length} manual
+              </span>
+              <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'evidence-upload', title: `Attach evidence — ${control.id}` })}>
+                Attach evidence
+              </Button>
+            </div>
+          </div>
+          <EvidenceList items={evidence} />
+        </div>
+      )}
+
+      {tab === 'issues' && (
+        <div className="card-surface overflow-hidden">
+          {issues.length > 0 ? (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-2">Issue</th>
+                  <th className="px-4 py-2">Severity</th>
+                  <th className="px-4 py-2">Source</th>
+                  <th className="px-4 py-2">Owner</th>
+                  <th className="px-4 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {issues.map((iss) => (
+                  <tr
+                    key={iss!.id}
+                    onClick={() => navigate(`/issues/${iss!.id}`)}
+                    className="cursor-pointer border-b border-border/70 last:border-0 hover:bg-info-soft/30"
+                  >
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-2xs font-semibold text-info">{iss!.id}</span>
+                      <span className="ml-2 text-xs text-foreground">{iss!.title}</span>
+                    </td>
+                    <td className="px-4 py-2"><SeverityBadge severity={iss!.severity} dense /></td>
+                    <td className="px-4 py-2 text-xs text-muted-foreground">{iss!.source}</td>
+                    <td className="px-4 py-2 text-xs text-foreground">{personName(iss!.owner)}</td>
+                    <td className="px-4 py-2"><StatusChip status={iss!.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+              No open issues — control operating effectively.
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4 flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => openDrawer({ kind: 'export-pdf', title: `Control sheet — ${control.id}`, payload: { filename: `${control.id}-control-sheet.pdf` } })}
+        >
+          <Download className="size-4" /> Export control sheet
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function Attr({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-sm text-foreground">{children}</div>
+    </div>
+  )
+}
+
+interface TestRun {
+  at: string
+  result: Control['result']
+  method: string
+  tester: string
+  note: string
+}
+
+function buildTestHistory(control: Control): TestRun[] {
+  const auto = control.automation === 'CCM'
+  const method = auto ? `Automated (${control.frequency})` : 'Manual test'
+  const tester = auto ? 'CCM (auto)' : personName(control.owner)
+  const runs: TestRun[] = []
+  const intervalDays = auto ? 7 : 30
+  // most recent run reflects current result
+  for (let i = 0; i < 6; i++) {
+    const at = new Date(NOW_MS - i * intervalDays * 86400000 - (auto ? 0 : 3) * 3600000).toISOString()
+    const result: Control['result'] = i === 0 ? control.result : i === 2 && control.result !== 'Pass' ? 'Partial' : 'Pass'
+    runs.push({
+      at,
+      result,
+      method,
+      tester,
+      note:
+        i === 0
+          ? control.result === 'Fail'
+            ? 'Exceptions detected in population — issue auto-spawned'
+            : control.result === 'Partial'
+              ? 'Minor exceptions — remediation tracked'
+              : 'No exceptions across population'
+          : result === 'Pass'
+            ? 'Passed — evidence auto-captured'
+            : 'Exceptions cleared on re-test',
+    })
+  }
+  return runs
+}

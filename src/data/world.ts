@@ -1,0 +1,1186 @@
+import type {
+  Risk,
+  Control,
+  Obligation,
+  Incident,
+  Policy,
+  Issue,
+  Evidence,
+  Audit,
+  AuditFinding,
+  RegulatoryChange,
+  DataAsset,
+  Dsar,
+  ActivityItem,
+  QueueTask,
+  Framework,
+  RiskDomain,
+  Regulator,
+  Severity,
+  RegulatorTrack,
+  TimelineEvent,
+  RoleKey,
+} from '@/types'
+import { Rand } from './rng'
+import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
+import { PEOPLE } from './people'
+import { ist, NOW_MS, minsFromNow, daysFromNow } from '@/lib/time'
+
+const iso = (d: Date) => d.toISOString()
+
+// ── shared named-value pools ────────────────────────────────────────────────
+const NPS_SCHEMES = ['Scheme E', 'Scheme C', 'Scheme G', 'Scheme A']
+const TIERS = ['Tier I', 'Tier II']
+const FA_ASSETS = [
+  'SPF-FA-DB-02 (Fund Accounting DB)',
+  'SPF-FA-APP-01',
+  'SPF-CRA-IF-03 (CRA interface)',
+  'SPF-NAV-ENGINE-01',
+  'SPF-KYC-DB-01',
+  'SPF-WEB-EDGE-02',
+  'SPF-AD-DC-01',
+  'SPF-BKP-VAULT-01',
+  'SPF-SOC-SIEM-01',
+  'SPF-CRM-APP-04',
+]
+const FRAMEWORKS: Framework[] = ['ISO 27001', 'NIST CSF', 'PCI DSS', 'PFRDA ICS']
+
+const CISO_TEAM = ['rajesh', 'karthik', 'rohan', 'neha']
+const COMPLIANCE_TEAM = ['anjali', 'priya', 'deepa', 'farhan']
+const INV_TEAM = ['arvind', 'sanjay', 'imran']
+
+function ownerForFramework(r: Rand, primary: Framework): string {
+  if (primary === 'PFRDA ICS') return r.pick([...INV_TEAM, 'anjali', 'meera'])
+  return r.pick(CISO_TEAM)
+}
+
+// ── Controls (260; each maps to 2–4 frameworks; 38 CCM-automated) ────────────
+function refToId(primary: Framework, ref: string): string {
+  const prefix =
+    primary === 'ISO 27001'
+      ? 'ISO'
+      : primary === 'NIST CSF'
+        ? 'NIST'
+        : primary === 'PCI DSS'
+          ? 'PCI'
+          : 'PFRDA-ICS'
+  return `CTRL-${prefix}-${ref}`
+}
+
+const POOL: Record<Framework, Ref[]> = {
+  'ISO 27001': ISO_REFS,
+  'NIST CSF': NIST_REFS,
+  'PCI DSS': PCI_REFS,
+  'PFRDA ICS': PFRDA_REFS,
+}
+
+function buildControls(): Control[] {
+  const r = new Rand(7001)
+  const controls: Control[] = []
+  // primary allocation: ISO 93, NIST 60, PCI 47, PFRDA 60 = 260
+  // allocations match curated pool sizes exactly → unique primary ids; total 260
+  const plan: [Framework, number][] = [
+    ['ISO 27001', 93],
+    ['NIST CSF', 59],
+    ['PCI DSS', 44],
+    ['PFRDA ICS', 64],
+  ]
+  // result distribution enforced: 10 Fail, 30 Partial, 220 Pass → coverage 96.2%
+  const results: Control['result'][] = []
+  for (let i = 0; i < 220; i++) results.push('Pass')
+  for (let i = 0; i < 30; i++) results.push('Partial')
+  for (let i = 0; i < 10; i++) results.push('Fail')
+  // deterministic shuffle
+  for (let i = results.length - 1; i > 0; i--) {
+    const j = Math.floor(r.next() * (i + 1))
+    ;[results[i], results[j]] = [results[j], results[i]]
+  }
+
+  let idx = 0
+  for (const [primary, count] of plan) {
+    const pool = POOL[primary]
+    for (let i = 0; i < count; i++) {
+      const ref = pool[i % pool.length]
+      const id = refToId(primary, ref.ref)
+      // map once → satisfy many: 2-4 frameworks incl. primary
+      const others = FRAMEWORKS.filter((f) => f !== primary)
+      const extra = r.sample(others, r.int(1, 3))
+      const frameworks: Framework[] = [primary, ...extra]
+      const mappedFrameworkRefs = frameworks.map((f) => {
+        if (f === primary) return { framework: f, ref: ref.ref }
+        const op = POOL[f]
+        return { framework: f, ref: r.pick(op).ref }
+      })
+      const automation: Control['automation'] = controls.length < 0 ? 'CCM' : 'Manual'
+      const type: Control['type'] = /log|monitor|detect|scan|alert|siem|review|audit trail/i.test(
+        ref.title,
+      )
+        ? 'Detective'
+        : 'Preventive'
+      controls.push({
+        id,
+        title: ref.title,
+        frameworks,
+        mappedFrameworkRefs,
+        owner: ownerForFramework(r, primary),
+        type,
+        automation,
+        lastTested: iso(new Date(NOW_MS - r.int(1, 120) * 86400000)),
+        result: results[idx],
+        evidenceCount: r.int(2, 24),
+        linkedRisks: [],
+        linkedIssues: [],
+        description: `${ref.title}. Operated for SPF ${r.pick(['CRA interface', 'Fund Accounting', 'subscriber web', 'corporate IT', 'cloud workloads'])} scope; mapped across ${frameworks.length} frameworks under the unified control taxonomy.`,
+        frequency: r.pick(['Continuous', 'Daily', 'Weekly', 'Monthly', 'Quarterly']),
+      })
+      idx++
+    }
+  }
+
+  // Designate 38 CCM-automated controls (detective/monitoring leaning)
+  const ccmCandidates = controls
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) =>
+      /log|monitor|patch|vulnerab|backup|clock|malware|configuration|mfa|authentication|access|encrypt/i.test(
+        c.title,
+      ),
+    )
+  const chosen = r.sample(ccmCandidates, 38)
+  for (const { c } of chosen) {
+    c.automation = 'CCM'
+    c.ccmRuleId = c.id.replace('CTRL-', 'CCM-')
+  }
+
+  // Guarantee the marquee CCM rule ("patch ≤14 days") is CCM + currently FAILING,
+  // while preserving exactly 10 Fail (coverage 96.2%): swap a non-CCM Fail to Pass.
+  const patchCtrl =
+    chosen.map((x) => x.c).find((c) => /patch|vulnerab/i.test(c.title)) ?? chosen[0].c
+  if (patchCtrl.result !== 'Fail') {
+    const compensator = controls.find((c) => c.result === 'Fail' && c.automation !== 'CCM' && c.id !== patchCtrl.id)
+    if (compensator) {
+      compensator.result = 'Pass' // keep Fail count at exactly 10 → coverage 96.2%
+      patchCtrl.result = 'Fail'
+    }
+  }
+  return controls
+}
+
+// ── Risks (140) ─────────────────────────────────────────────────────────────
+const RISK_TITLES: Record<RiskDomain, string[]> = {
+  IT: [
+    'Unpatched critical vulnerabilities on internet-facing assets',
+    'Privileged access sprawl across CRA interfaces',
+    'Legacy fund-accounting platform end-of-support',
+    'Inadequate network segmentation between corporate IT and CDE',
+    'Backup restoration not regularly tested',
+    'Shadow IT and unsanctioned SaaS usage',
+    'Misconfigured cloud storage exposing logs',
+    'Insufficient logging on the NAV engine',
+  ],
+  Cyber: [
+    'Ransomware impacting fund-accounting servers',
+    'Phishing leading to credential compromise',
+    'Data exfiltration of subscriber PII',
+    'DDoS against the subscriber web portal',
+    'Supply-chain compromise via CRA integration',
+    'Insider misuse of privileged access',
+    'Weak MFA coverage on remote access',
+  ],
+  Operational: [
+    'NAV calculation error across schemes',
+    'Failed subscriber contribution reconciliation',
+    'Key-person dependency in investment operations',
+    'Manual evidence collection delays audit',
+    'Business continuity gap at primary data centre',
+    'Delay in periodical PFRDA returns',
+    'Inaccurate nominee data in CRA',
+  ],
+  Investment: [
+    'Breach of scheme-wise exposure limits',
+    'Concentration risk in a single issuer',
+    'Liquidity mismatch in Scheme G',
+    'Mark-to-market valuation breach',
+    'Derivatives exposure beyond mandate',
+    'Credit-rating downgrade of held securities',
+  ],
+  Compliance: [
+    'Non-filing of GSTR-3B within due date',
+    'DPDP consent gaps for legacy subscribers',
+    'CERT-In 6-hour reporting capability gap',
+    'Companies Act committee cadence slippage',
+    'Labour code compliance across branches',
+    'Regulatory change not assessed in time',
+  ],
+  ThirdParty: [
+    'Vendor SLA breach on CRA services',
+    'Fourth-party concentration in cloud hosting',
+    'Inadequate due diligence on new vendors',
+    'Sub-processor change without notification',
+    'Vendor security posture degradation',
+  ],
+}
+const DOMAIN_PREFIX: Record<RiskDomain, string> = {
+  IT: 'IT',
+  Cyber: 'CYB',
+  Operational: 'OPS',
+  Investment: 'INV',
+  Compliance: 'CMP',
+  ThirdParty: 'TPR',
+}
+
+function buildRisks(controls: Control[]): Risk[] {
+  const r = new Rand(1401)
+  const domains: RiskDomain[] = ['IT', 'Cyber', 'Operational', 'Investment', 'Compliance', 'ThirdParty']
+  const risks: Risk[] = []
+  const counts: Record<RiskDomain, number> = {
+    IT: 30,
+    Cyber: 26,
+    Operational: 28,
+    Investment: 22,
+    Compliance: 20,
+    ThirdParty: 14,
+  }
+  const seqByPrefix: Record<string, number> = {}
+  for (const domain of domains) {
+    for (let i = 0; i < counts[domain]; i++) {
+      const prefix = DOMAIN_PREFIX[domain]
+      seqByPrefix[prefix] = (seqByPrefix[prefix] ?? 30) + r.int(1, 4)
+      const id = `RISK-${prefix}-${String(seqByPrefix[prefix]).padStart(4, '0')}`
+      const titles = RISK_TITLES[domain]
+      const title = titles[i % titles.length]
+      const likelihood = r.int(1, 5)
+      const impact = r.int(2, 5)
+      const inherent = likelihood * impact
+      const mitigation = r.int(2, 12)
+      const residual = Math.max(1, inherent - mitigation)
+      const owner =
+        domain === 'Investment'
+          ? r.pick(INV_TEAM)
+          : domain === 'Compliance'
+            ? r.pick(COMPLIANCE_TEAM)
+            : domain === 'ThirdParty'
+              ? 'imran'
+              : r.pick(CISO_TEAM)
+      const linkedControls = r
+        .sample(controls, r.int(2, 5))
+        .map((c) => c.id)
+      risks.push({
+        id,
+        title,
+        domain,
+        owner,
+        likelihood,
+        impact,
+        inherent,
+        residual,
+        treatment: r.weighted([
+          ['Mitigate', 7],
+          ['Accept', 2],
+          ['Transfer', 1.5],
+          ['Avoid', 0.6],
+        ]),
+        linkedControls,
+        linkedIncidents: [],
+        linkedIssues: [],
+        status: r.weighted([
+          ['Open', 4],
+          ['Monitoring', 4],
+          ['Mitigated', 2],
+          ['Accepted', 1],
+        ]),
+        trend: r.weighted([
+          ['flat', 5],
+          ['down', 3],
+          ['up', 2],
+        ]),
+        lastReviewed: iso(new Date(NOW_MS - r.int(3, 90) * 86400000)),
+        description: `${title}. Assessed under the SPF enterprise risk taxonomy; inherent ${inherent}, residual ${residual} after current treatment.`,
+      })
+    }
+  }
+  return risks
+}
+
+// ── Incidents (60; marquee + 4 open High + 55 closed) ───────────────────────
+const INCIDENT_TITLES: { t: string; sev: Severity; src: Incident['source'] }[] = [
+  { t: 'Phishing campaign targeting operations staff', sev: 'High', src: 'Splunk SIEM' },
+  { t: 'Anomalous privileged login on AD domain controller', sev: 'High', src: 'CrowdStrike EDR' },
+  { t: 'Critical vulnerability exploit attempt on web edge', sev: 'High', src: 'Qualys VM' },
+  { t: 'Suspected data exfiltration from CRM segment', sev: 'High', src: 'Splunk SIEM' },
+  { t: 'Malware quarantined on analyst workstation', sev: 'Medium', src: 'CrowdStrike EDR' },
+  { t: 'Failed backup job on fund-accounting vault', sev: 'Medium', src: 'Sankalp ServiceDesk (ITSM)' },
+  { t: 'Brute-force attempts on subscriber portal', sev: 'Medium', src: 'Splunk SIEM' },
+  { t: 'Unauthorized USB device blocked', sev: 'Low', src: 'CrowdStrike EDR' },
+  { t: 'Expired TLS certificate on internal API', sev: 'Low', src: 'Sankalp ServiceDesk (ITSM)' },
+  { t: 'DLP alert on outbound email with PII', sev: 'Medium', src: 'Splunk SIEM' },
+  { t: 'Misconfiguration flagged by AWS Security Hub', sev: 'Medium', src: 'Qualys VM' },
+  { t: 'Vendor portal credential reuse detected', sev: 'Low', src: 'Splunk SIEM' },
+]
+
+function marqueeTimeline(): TimelineEvent[] {
+  const d = (h: number, m: number, s = 0) => iso(ist(2026, 6, 10, h, m, s))
+  return [
+    { at: d(2, 14, 0), actor: 'Splunk SIEM', channel: 'Splunk SIEM', kind: 'detect', text: 'Splunk SIEM correlation fired: mass file-encryption + SMB lateral movement on SPF-FA-DB-02 (rule "Ransomware — bulk file rename").' },
+    { at: d(2, 15, 30), actor: 'Sankalp ServiceDesk', channel: 'Sankalp ServiceDesk', kind: 'triage', text: 'P1 ticket auto-raised in Sankalp ServiceDesk (ITSM) and bridged to OneGRC as INC-2026-0411.' },
+    { at: d(2, 16, 40), actor: 'OneGRC', channel: 'Sankalp ServiceDesk', kind: 'note', text: 'Affected assets enriched from the Sankalp ServiceDesk CMDB: SPF-FA-DB-02, SPF-FA-APP-01, SPF-AD-DC-01 (CIs mapped to NPS fund accounting).' },
+    { at: d(2, 19, 0), actor: 'neha', channel: 'OneGRC', kind: 'triage', text: 'SOC analyst Neha Joshi acknowledged P1 and confirmed encryption in progress on the fund-accounting DB.' },
+    { at: d(2, 21, 0), actor: 'CrowdStrike EDR', channel: 'CrowdStrike EDR', kind: 'contain', text: 'CrowdStrike EDR auto-isolated SPF-FA-DB-02 on the SIEM signal; process tree captured.' },
+    { at: d(2, 23, 0), actor: 'OneGRC', channel: 'OneGRC', kind: 'note', text: 'Auto-classified CRITICAL (PFRDA ICS 2024 taxonomy): subscriber-impacting + personal data involved.' },
+    { at: d(2, 24, 0), actor: 'OneGRC', channel: 'OneGRC', kind: 'notify', text: 'Three regulator clocks started from one record: CERT-In (6h), PFRDA (48h), DPDP Board (~72h).' },
+    { at: d(2, 31, 0), actor: 'karthik', channel: 'CrowdStrike EDR', kind: 'contain', text: 'SecOps lead Karthik Nair contained: isolated 2 hosts, disabled 4 service accounts, blocked C2 indicators.' },
+    { at: d(2, 38, 0), actor: 'OneGRC', channel: 'OneGRC', kind: 'evidence', text: 'Evidence auto-captured to one trail: SIEM correlation log, EDR detection export, memory capture (EVD-44192).' },
+    { at: d(2, 52, 0), actor: 'rajesh', channel: 'OneGRC', kind: 'note', text: 'CISO Rajesh Iyer invoked the cyber crisis plan; one incident, one evidence trail, three regulator outputs.' },
+    { at: d(3, 40, 0), actor: 'rajesh', channel: 'CERT-In', kind: 'notify', text: 'CERT-In Annexure I draft pre-populated from the incident record; pending CISO sign-off.' },
+    { at: d(4, 18, 0), actor: 'meera', channel: 'PFRDA', kind: 'note', text: 'CRO Meera Krishnan briefed; PFRDA 48-hour intimation track confirmed subscriber-impacting.' },
+  ]
+}
+
+function buildMarquee(): Incident {
+  const detected = iso(ist(2026, 6, 10, 2, 14, 0))
+  const tracks: RegulatorTrack[] = [
+    {
+      regulator: 'CERT-In',
+      clockLabel: 'CERT-In · 6-hour incident report',
+      windowHours: 6,
+      clockStartedAt: detected,
+      deadline: iso(ist(2026, 6, 10, 8, 14, 0)),
+      status: 'At risk',
+      output: 'CERT-In Incident Report — Annexure I (Direction 20(3)/2022)',
+    },
+    {
+      regulator: 'PFRDA',
+      clockLabel: 'PFRDA · 48-hour ICS intimation',
+      windowHours: 48,
+      clockStartedAt: detected,
+      deadline: iso(ist(2026, 6, 12, 2, 14, 0)),
+      status: 'On track',
+      output: 'PFRDA ICS incident intimation + quarterly Annexure (subscriber-impacting)',
+    },
+    {
+      regulator: 'DPDP Board',
+      clockLabel: 'DPDP Board · ~72-hour breach intimation',
+      windowHours: 72,
+      clockStartedAt: detected,
+      deadline: iso(ist(2026, 6, 13, 2, 14, 0)),
+      status: 'On track',
+      output: 'DPDP personal-data-breach intimation to Board & affected principals',
+    },
+  ]
+  return {
+    id: 'INC-2026-0411',
+    title: 'Ransomware on fund-accounting server',
+    classification: 'Critical',
+    detectedAt: detected,
+    source: 'Splunk SIEM',
+    assets: ['SPF-FA-DB-02 (Fund Accounting DB)', 'SPF-FA-APP-01', 'SPF-AD-DC-01'],
+    owner: 'rajesh',
+    status: 'Contained',
+    regulatorTracks: tracks,
+    timeline: marqueeTimeline(),
+    subscriberImpacting: true,
+    personalDataInvolved: true,
+    linkedRisks: [],
+    linkedControls: [],
+    linkedIssues: [],
+    evidence: [],
+    summary:
+      'Splunk SIEM correlated mass file-encryption with SMB lateral movement on the fund-accounting database SPF-FA-DB-02 at 02:14 IST and auto-raised a P1 ticket in Sankalp ServiceDesk (the in-house ITSM); affected assets were enriched from the ServiceDesk CMDB. CrowdStrike EDR auto-isolated the host and SecOps contained lateral movement within 17 minutes. Because the event is subscriber-impacting and involves personal data, OneGRC auto-classified it Critical (PFRDA ICS 2024) and opened three regulator tracks on one clock — CERT-In (6h), PFRDA (48h), DPDP Board (~72h) — driving three regulator outputs from a single incident record and one evidence trail.',
+  }
+}
+
+function buildIncidents(): Incident[] {
+  const r = new Rand(2026)
+  const incidents: Incident[] = [buildMarquee()]
+
+  // 4 additional OPEN High incidents with live regulator tracks
+  for (let i = 0; i < 4; i++) {
+    const spec = INCIDENT_TITLES[i]
+    const num = 405 - i
+    const detectedHrsAgo = r.int(8, 40)
+    const detected = iso(new Date(NOW_MS - detectedHrsAgo * 3600000))
+    const subImpact = r.bool(0.5)
+    const pdInvolved = r.bool(0.6)
+    const tracks: RegulatorTrack[] = []
+    const certWindow = 6
+    tracks.push({
+      regulator: 'CERT-In',
+      clockLabel: 'CERT-In · 6-hour incident report',
+      windowHours: certWindow,
+      clockStartedAt: detected,
+      deadline: iso(new Date(new Date(detected).getTime() + certWindow * 3600000)),
+      status: 'Filed',
+      output: 'CERT-In Incident Report — Annexure I',
+    })
+    if (pdInvolved) {
+      tracks.push({
+        regulator: 'DPDP Board',
+        clockLabel: 'DPDP Board · ~72-hour breach intimation',
+        windowHours: 72,
+        clockStartedAt: detected,
+        deadline: iso(new Date(new Date(detected).getTime() + 72 * 3600000)),
+        status: r.weighted([['On track', 3], ['At risk', 1]]),
+        output: 'DPDP personal-data-breach intimation',
+      })
+    }
+    incidents.push({
+      id: `INC-2026-0${num}`,
+      title: spec.t,
+      classification: 'High',
+      detectedAt: detected,
+      source: spec.src,
+      assets: r.sample(FA_ASSETS, r.int(1, 3)),
+      owner: r.pick(CISO_TEAM),
+      status: r.pick(['Open', 'Contained'] as const),
+      regulatorTracks: tracks,
+      timeline: [
+        { at: detected, actor: spec.src, channel: spec.src.includes('Splunk') ? 'Splunk SIEM' : 'CrowdStrike EDR', kind: 'detect', text: `${spec.t} detected.` },
+        { at: iso(new Date(new Date(detected).getTime() + 12 * 60000)), actor: 'neha', channel: 'OneGRC', kind: 'triage', text: 'Triaged by SOC; incident opened.' },
+        { at: iso(new Date(new Date(detected).getTime() + 50 * 60000)), actor: 'karthik', channel: 'OneGRC', kind: 'contain', text: 'Containment actions applied.' },
+      ],
+      subscriberImpacting: subImpact,
+      personalDataInvolved: pdInvolved,
+      linkedRisks: [],
+      linkedControls: [],
+      linkedIssues: [],
+      evidence: [],
+      summary: `${spec.t}. Detected via ${spec.src}; under active response by the SecOps team.`,
+    })
+  }
+
+  // 55 closed historical incidents
+  for (let i = 0; i < 55; i++) {
+    const spec = INCIDENT_TITLES[(i + 4) % INCIDENT_TITLES.length]
+    const num = 400 - i - 5
+    const daysAgo = r.int(6, 150)
+    const detected = iso(new Date(NOW_MS - daysAgo * 86400000 - r.int(0, 20) * 3600000))
+    incidents.push({
+      id: `INC-2026-${String(num).padStart(4, '0')}`,
+      title: spec.t,
+      classification: spec.sev,
+      detectedAt: detected,
+      source: spec.src,
+      assets: r.sample(FA_ASSETS, r.int(1, 2)),
+      owner: r.pick(CISO_TEAM),
+      status: 'Closed',
+      regulatorTracks:
+        spec.sev === 'High' || spec.sev === 'Critical'
+          ? [
+              {
+                regulator: 'CERT-In',
+                clockLabel: 'CERT-In · 6-hour incident report',
+                windowHours: 6,
+                clockStartedAt: detected,
+                deadline: iso(new Date(new Date(detected).getTime() + 6 * 3600000)),
+                status: 'Filed',
+                output: 'CERT-In Incident Report — Annexure I',
+              },
+            ]
+          : [],
+      timeline: [
+        { at: detected, actor: spec.src, channel: spec.src.includes('Splunk') ? 'Splunk SIEM' : 'CrowdStrike EDR', kind: 'detect', text: `${spec.t} detected.` },
+        { at: iso(new Date(new Date(detected).getTime() + 36 * 3600000)), actor: 'karthik', channel: 'OneGRC', kind: 'note', text: 'Resolved and closed with post-incident review.' },
+      ],
+      subscriberImpacting: r.bool(0.2),
+      personalDataInvolved: r.bool(0.3),
+      linkedRisks: [],
+      linkedControls: [],
+      linkedIssues: [],
+      evidence: [],
+      summary: `${spec.t}. Resolved and closed; retained for trend analysis and lessons learned.`,
+    })
+  }
+  return incidents
+}
+
+// ── Obligations (180; 9 overdue, 23 due ≤30 days) ───────────────────────────
+const OBLIGATION_DEFS: { reg: Regulator; title: string; freq: string; ref: string; team: string[] }[] = [
+  { reg: 'PFRDA', title: 'Quarterly compliance return (Annexure)', freq: 'Quarterly', ref: 'PFRDA/2025/05/ICS/01', team: ['anjali', 'arvind'] },
+  { reg: 'PFRDA', title: 'Monthly NAV & AUM statement', freq: 'Monthly', ref: 'PFRDA-NAV', team: ['arvind', 'sanjay'] },
+  { reg: 'PFRDA', title: 'Half-yearly ICS self-assessment', freq: 'Half-yearly', ref: 'ICS-50', team: ['anjali', 'rajesh'] },
+  { reg: 'PFRDA', title: 'Annual cyber-security audit submission', freq: 'Annual', ref: 'ICS-50', team: ['rajesh', 'sunita'] },
+  { reg: 'PFRDA', title: 'Investment committee minutes filing', freq: 'Quarterly', ref: 'ICS-46', team: ['arvind', 'vikram'] },
+  { reg: 'PFRDA', title: 'Exposure-limit breach report', freq: 'Event-based', ref: 'ICS-40', team: ['sanjay', 'arvind'] },
+  { reg: 'CERT-In', title: 'Cyber incident summary report', freq: 'Monthly', ref: '20(3)/2022', team: ['rajesh', 'karthik'] },
+  { reg: 'CERT-In', title: 'Log retention & NTP sync attestation', freq: 'Quarterly', ref: '20(3)/2022', team: ['karthik', 'rohan'] },
+  { reg: 'DPDP', title: 'Consent records reconciliation', freq: 'Quarterly', ref: 'DPDP-Rules-2025', team: ['priya', 'anjali'] },
+  { reg: 'DPDP', title: 'DSAR fulfilment status report', freq: 'Monthly', ref: 'DPDP-Rules-2025', team: ['priya'] },
+  { reg: 'GST', title: 'GSTR-3B monthly return', freq: 'Monthly', ref: 'GSTR-3B', team: ['deepa'] },
+  { reg: 'GST', title: 'GSTR-1 outward supplies', freq: 'Monthly', ref: 'GSTR-1', team: ['deepa'] },
+  { reg: 'GST', title: 'GSTR-9C reconciliation statement', freq: 'Annual', ref: 'GSTR-9C', team: ['deepa'] },
+  { reg: 'Labour', title: 'PF & ESI monthly challan', freq: 'Monthly', ref: 'EPFO', team: ['farhan'] },
+  { reg: 'Labour', title: 'Professional tax remittance', freq: 'Monthly', ref: 'PT', team: ['farhan'] },
+  { reg: 'Companies Act', title: 'Board meeting & minutes', freq: 'Quarterly', ref: 'CA-2013-173', team: ['vikram'] },
+  { reg: 'Companies Act', title: 'Audit committee meeting', freq: 'Quarterly', ref: 'CA-2013-177', team: ['vikram', 'sunita'] },
+  { reg: 'Companies Act', title: 'Annual return MGT-7 filing', freq: 'Annual', ref: 'MGT-7', team: ['vikram', 'farhan'] },
+]
+
+function obligationCode(reg: Regulator): string {
+  switch (reg) {
+    case 'PFRDA': return 'PFRDA'
+    case 'CERT-In': return 'CERTIN'
+    case 'DPDP': return 'DPDP'
+    case 'GST': return 'GST'
+    case 'Labour': return 'LAB'
+    case 'Companies Act': return 'CA'
+  }
+}
+
+function buildObligations(): Obligation[] {
+  const r = new Rand(180)
+  const obligations: Obligation[] = []
+  // status plan: 9 overdue, 23 due ≤30d, rest filed/in-review
+  const statuses: Obligation['status'][] = []
+  for (let i = 0; i < 9; i++) statuses.push('Overdue')
+  for (let i = 0; i < 23; i++) statuses.push('Due')
+  for (let i = 0; i < 28; i++) statuses.push('In review')
+  for (let i = 0; i < 120; i++) statuses.push('Filed')
+  for (let i = statuses.length - 1; i > 0; i--) {
+    const j = Math.floor(r.next() * (i + 1))
+    ;[statuses[i], statuses[j]] = [statuses[j], statuses[i]]
+  }
+
+  const seq: Record<string, number> = {}
+  for (let i = 0; i < 180; i++) {
+    const def = OBLIGATION_DEFS[i % OBLIGATION_DEFS.length]
+    const code = obligationCode(def.reg)
+    seq[code] = (seq[code] ?? 0) + 1
+    const period = r.pick(['Q1', 'Q2', 'Q3', 'JUN26', 'MAY26', 'FY26', 'APR26', 'H1'])
+    const id = `OBL-${code}-${period}-${String(seq[code]).padStart(2, '0')}`
+    const status = statuses[i]
+    let dueDate: string
+    if (status === 'Overdue') dueDate = iso(new Date(NOW_MS - r.int(1, 18) * 86400000))
+    else if (status === 'Due') dueDate = iso(new Date(NOW_MS + r.int(1, 30) * 86400000))
+    else if (status === 'In review') dueDate = iso(new Date(NOW_MS + r.int(2, 20) * 86400000))
+    else dueDate = iso(new Date(NOW_MS - r.int(5, 120) * 86400000))
+    const maker = r.pick(def.team)
+    const checker = r.pick(def.reg === 'PFRDA' ? ['meera', 'anjali'] : ['anjali', 'vikram', 'meera'])
+    obligations.push({
+      id,
+      regulator: def.reg,
+      title: def.title,
+      frequency: def.freq,
+      dueDate,
+      owner: maker,
+      status,
+      makerChecker: {
+        maker,
+        checker,
+        state:
+          status === 'Filed'
+            ? 'Approved'
+            : status === 'In review'
+              ? 'Submitted'
+              : status === 'Overdue'
+                ? 'Pending'
+                : 'Drafted',
+      },
+      evidence: [],
+      reference: def.ref,
+    })
+  }
+  return obligations
+}
+
+// ── Policies (45) ───────────────────────────────────────────────────────────
+const POLICY_DEFS: { title: string; cat: string; owner: string }[] = [
+  { title: 'Information Security Policy', cat: 'Security', owner: 'rajesh' },
+  { title: 'Access Control & Identity Policy', cat: 'Security', owner: 'rohan' },
+  { title: 'Acceptable Use Policy', cat: 'Security', owner: 'rajesh' },
+  { title: 'Cryptography & Key Management Policy', cat: 'Security', owner: 'karthik' },
+  { title: 'Vulnerability & Patch Management Policy', cat: 'Security', owner: 'rohan' },
+  { title: 'Incident Response Policy', cat: 'Security', owner: 'rajesh' },
+  { title: 'Business Continuity & DR Policy', cat: 'Resilience', owner: 'meera' },
+  { title: 'Backup & Recovery Policy', cat: 'Resilience', owner: 'rohan' },
+  { title: 'Data Classification & Handling Policy', cat: 'Data', owner: 'priya' },
+  { title: 'Data Privacy (DPDP) Policy', cat: 'Data', owner: 'priya' },
+  { title: 'Data Retention & Disposal Policy', cat: 'Data', owner: 'priya' },
+  { title: 'Third-Party & Outsourcing Risk Policy', cat: 'Risk', owner: 'imran' },
+  { title: 'Cloud Security Policy', cat: 'Security', owner: 'karthik' },
+  { title: 'Change Management Policy', cat: 'IT', owner: 'rohan' },
+  { title: 'Logging & Monitoring Policy', cat: 'Security', owner: 'karthik' },
+  { title: 'Enterprise Risk Management Policy', cat: 'Risk', owner: 'meera' },
+  { title: 'Investment Risk & Exposure Policy', cat: 'Investment', owner: 'arvind' },
+  { title: 'Code of Conduct', cat: 'Governance', owner: 'vikram' },
+  { title: 'Whistleblower Policy', cat: 'Governance', owner: 'vikram' },
+  { title: 'Anti-Money-Laundering & KYC Policy', cat: 'Compliance', owner: 'anjali' },
+  { title: 'Regulatory Change Management Policy', cat: 'Compliance', owner: 'anjali' },
+  { title: 'Physical & Environmental Security Policy', cat: 'Security', owner: 'rohan' },
+  { title: 'Remote Working Policy', cat: 'IT', owner: 'rohan' },
+  { title: 'Secure Development Policy', cat: 'IT', owner: 'rohan' },
+  { title: 'Vendor Code of Conduct', cat: 'Risk', owner: 'imran' },
+]
+
+function buildPolicies(controls: Control[]): Policy[] {
+  const r = new Rand(45)
+  const policies: Policy[] = []
+  for (let i = 0; i < 45; i++) {
+    const def = POLICY_DEFS[i % POLICY_DEFS.length]
+    const dup = i >= POLICY_DEFS.length ? ` (${r.pick(['CRA', 'Corporate', 'Cloud', 'Branch'])} addendum)` : ''
+    const major = r.int(1, 4)
+    const minor = r.int(0, 6)
+    policies.push({
+      id: `POL-${String(i + 1).padStart(3, '0')}`,
+      title: def.title + dup,
+      version: `v${major}.${minor}`,
+      owner: def.owner,
+      approvedBy: r.pick(['meera', 'rajesh', 'vikram']),
+      approvedOn: iso(new Date(NOW_MS - r.int(60, 400) * 86400000)),
+      nextReview: iso(new Date(NOW_MS + r.int(-20, 240) * 86400000)),
+      mappedControls: r.sample(controls, r.int(3, 9)).map((c) => c.id),
+      status: r.weighted([['Published', 8], ['In review', 2], ['Draft', 1]]),
+      category: def.cat,
+    })
+  }
+  return policies
+}
+
+// ── Issues (120; 27 derive open audit findings linkage handled in audits) ───
+function buildIssues(controls: Control[], incidents: Incident[]): Issue[] {
+  const r = new Rand(120)
+  const issues: Issue[] = []
+  const failControls = controls.filter((c) => c.result === 'Fail' || c.result === 'Partial')
+  for (let i = 0; i < 120; i++) {
+    const num = 100 + i
+    const source = r.weighted<Issue['source']>([
+      ['Control failure', 4],
+      ['Audit finding', 3],
+      ['Incident', 2],
+    ])
+    let sourceRef = ''
+    let linkedControls: string[] = []
+    if (source === 'Control failure') {
+      const c = r.pick(failControls.length ? failControls : controls)
+      sourceRef = c.id
+      linkedControls = [c.id]
+    } else if (source === 'Incident') {
+      sourceRef = r.pick(incidents).id
+    } else {
+      sourceRef = `AUD-${r.pick(['IS', 'INT', 'PFRDA'])}-2026-${String(r.int(1, 8)).padStart(2, '0')}`
+    }
+    const ageDays = r.int(2, 140)
+    const dueOffset = r.int(-25, 45)
+    const status = r.weighted<Issue['status']>([
+      ['Open', 3],
+      ['In progress', 4],
+      ['Overdue', 2],
+      ['Resolved', 3],
+    ])
+    issues.push({
+      id: `ISS-2026-${String(num).padStart(4, '0')}`,
+      title: titleForIssue(source, sourceRef, r),
+      source,
+      sourceRef,
+      severity: r.weighted<Severity>([
+        ['Critical', 1],
+        ['High', 3],
+        ['Medium', 5],
+        ['Low', 3],
+      ]),
+      owner: r.pick([...CISO_TEAM, ...COMPLIANCE_TEAM, ...INV_TEAM]),
+      dueDate: iso(new Date(NOW_MS + dueOffset * 86400000)),
+      ageDays,
+      status,
+      linkedControls,
+    })
+  }
+  return issues
+}
+
+function titleForIssue(source: Issue['source'], ref: string, r: Rand): string {
+  if (source === 'Control failure')
+    return `Remediate failing control ${ref} — ${r.pick(['evidence gap', 'config drift', 'overdue re-test', 'exception expired'])}`
+  if (source === 'Incident')
+    return `Post-incident action from ${ref} — ${r.pick(['harden access', 'patch affected hosts', 'update runbook', 'tune detection'])}`
+  return `Audit finding remediation (${ref}) — ${r.pick(['segregation of duties', 'access recertification', 'logging coverage', 'policy update'])}`
+}
+
+// ── Evidence (600; ~70% auto) ───────────────────────────────────────────────
+function buildEvidence(controls: Control[], obligations: Obligation[]): Evidence[] {
+  const r = new Rand(600)
+  const ev: Evidence[] = []
+  const types: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attestation', 'Filing ack']
+  const sources = ['AWS Security Hub', 'Splunk SIEM', 'Qualys VM', 'CrowdStrike EDR', 'Okta/AD', 'Sankalp ServiceDesk', 'OneTrust', 'ClearTax']
+  for (let i = 0; i < 600; i++) {
+    const id = `EVD-${44000 + i}`
+    const auto = i < 420 // 70%
+    const type = auto ? r.pick(['Log', 'Config export', 'Screenshot'] as Evidence['type'][]) : r.pick(types)
+    const linkedControls = r.sample(controls, r.int(1, 2)).map((c) => c.id)
+    const linkObl = r.bool(0.35) ? r.sample(obligations, 1).map((o) => o.id) : []
+    const ctrl = controls.find((c) => c.id === linkedControls[0])
+    ev.push({
+      id,
+      title: evidenceTitle(type, ctrl?.title ?? 'control', r),
+      type,
+      capturedAt: iso(new Date(NOW_MS - r.int(0, 120) * 86400000 - r.int(0, 1400) * 60000)),
+      capturedBy: auto ? 'CCM (auto)' : r.pick([...CISO_TEAM, ...COMPLIANCE_TEAM]),
+      auto,
+      linkedControls,
+      linkedObligations: linkObl,
+      frameworkRefs: ctrl?.frameworks ?? ['ISO 27001'],
+      source: auto ? r.pick(sources) : 'Manual upload',
+    })
+  }
+  return ev
+}
+
+function evidenceTitle(type: Evidence['type'], ctrlTitle: string, r: Rand): string {
+  switch (type) {
+    case 'Log': return `${r.pick(['Access', 'Audit', 'SIEM', 'Patch'])} log export — ${ctrlTitle}`
+    case 'Config export': return `Config baseline export — ${ctrlTitle}`
+    case 'Screenshot': return `Console screenshot — ${ctrlTitle}`
+    case 'Attestation': return `Signed attestation — ${ctrlTitle}`
+    case 'Filing ack': return `Regulatory filing acknowledgement — ${ctrlTitle}`
+  }
+}
+
+// ── Audits (18; total OPEN findings = 27) ───────────────────────────────────
+function buildAudits(): Audit[] {
+  const r = new Rand(18)
+  const audits: Audit[] = []
+  const defs: { title: string; type: Audit['type']; auditor: string }[] = [
+    { title: 'Annual IS Audit FY2025-26', type: 'IS audit (CERT-In empanelled)', auditor: 'SecureLayer (CERT-In empanelled)' },
+    { title: 'PFRDA ICS Compliance Audit', type: 'PFRDA', auditor: 'PFRDA-appointed auditor' },
+    { title: 'Internal Audit — Access Management', type: 'Internal', auditor: 'Lakshmi Rao' },
+    { title: 'Internal Audit — Investment Operations', type: 'Internal', auditor: 'Lakshmi Rao' },
+    { title: 'Internal Audit — DPDP Readiness', type: 'Internal', auditor: 'Sunita Menon' },
+    { title: 'Internal Audit — GST & Tax', type: 'Internal', auditor: 'Lakshmi Rao' },
+    { title: 'Cloud Security Review (AWS)', type: 'IS audit (CERT-In empanelled)', auditor: 'SecureLayer' },
+    { title: 'Internal Audit — BCP/DR', type: 'Internal', auditor: 'Sunita Menon' },
+  ]
+  // distribute 27 open findings across audits
+  const openPlan = [6, 5, 4, 3, 3, 2, 2, 2] // sums to 27
+  for (let i = 0; i < 18; i++) {
+    const def = defs[i % defs.length]
+    const idType = def.type.startsWith('IS') ? 'IS' : def.type === 'PFRDA' ? 'PFRDA' : 'INT'
+    const id = `AUD-${idType}-2026-${String(i + 1).padStart(2, '0')}`
+    const findings: AuditFinding[] = []
+    const openCount = i < openPlan.length ? openPlan[i] : 0
+    const closedCount = r.int(2, 8)
+    for (let f = 0; f < openCount; f++) {
+      findings.push({
+        id: `${id}-F${f + 1}`,
+        title: r.pick([
+          'Privileged access not recertified within policy window',
+          'Patch SLA exceeded on internet-facing assets',
+          'Logging gaps on the NAV engine',
+          'Segregation of duties weakness in payments',
+          'Backup restoration test overdue',
+          'DPDP consent records incomplete for legacy subscribers',
+          'Exposure-limit monitoring not fully automated',
+          'Vendor due-diligence documentation incomplete',
+        ]),
+        severity: r.weighted<Severity>([['Critical', 1], ['High', 3], ['Medium', 4], ['Low', 2]]),
+        status: r.bool(0.5) ? 'Open' : 'Remediation',
+      })
+    }
+    for (let f = 0; f < closedCount; f++) {
+      findings.push({
+        id: `${id}-C${f + 1}`,
+        title: r.pick(['Closed finding — control retested', 'Closed finding — evidence provided', 'Closed finding — policy updated']),
+        severity: r.weighted<Severity>([['High', 1], ['Medium', 3], ['Low', 4]]),
+        status: 'Closed',
+      })
+    }
+    audits.push({
+      id,
+      title: i < defs.length ? def.title : `${def.title} (cycle ${Math.floor(i / defs.length) + 1})`,
+      type: def.type,
+      auditor: def.auditor,
+      period: r.pick(['Q1 FY2026-27', 'Q4 FY2025-26', 'FY2025-26', 'H1 FY2026-27']),
+      status: i < openPlan.length ? r.pick(['Fieldwork', 'Reporting'] as const) : 'Closed',
+      findings,
+      scope: r.pick([
+        'CRA interface, fund accounting and subscriber web',
+        'Identity, access and privileged accounts',
+        'Investment operations and exposure limits',
+        'Data privacy, consent and DSAR handling',
+      ]),
+    })
+  }
+  return audits
+}
+
+// ── Regulatory changes (90) ─────────────────────────────────────────────────
+function buildRegChanges(): RegulatoryChange[] {
+  const r = new Rand(90)
+  const changes: RegulatoryChange[] = []
+  const feed: { summary: string; reg: Regulator; src: RegulatoryChange['source']; detail: string }[] = [
+    { summary: 'GSTR-3B table 4 ITC reporting format revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'CBIC notification revises the GSTR-3B Table 4 auto-population and ITC reversal disclosure. The monthly GSTR-3B obligation template and the reconciliation control are auto-updated; owner Deepa Iyer alerted.' },
+    { summary: 'PFRDA revises scheme-wise exposure caps for Scheme E', reg: 'PFRDA', src: 'PFRDA circular', detail: 'PFRDA circular tightens single-issuer and sectoral exposure caps for Scheme E. The exposure-limit monitoring control and the quarterly investment return obligation are auto-updated; owners Arvind Patel and Sanjay Verma alerted.' },
+    { summary: 'CERT-In reiterates 6-hour reporting & log retention', reg: 'CERT-In', src: 'Lexplosion Komrisk', detail: 'Advisory reiterates Direction 20(3)/2022 — 6-hour incident reporting, 180-day in-India log retention and NTP synchronization.' },
+    { summary: 'DPDP Rules 2025 notify consent-manager obligations', reg: 'DPDP', src: 'Lexplosion Komrisk', detail: 'DPDP Rules 2025 operationalize consent-manager registration and breach intimation timelines.' },
+    { summary: 'Companies Act — CSR disclosure amendment', reg: 'Companies Act', src: 'TeamLease RegTech', detail: 'MCA amends CSR reporting in the board report.' },
+    { summary: 'Labour codes — wage definition clarification', reg: 'Labour', src: 'TeamLease RegTech', detail: 'Clarification on wage definition impacting PF contribution computation.' },
+    { summary: 'PFRDA committee cadence guidance updated', reg: 'PFRDA', src: 'PFRDA circular', detail: 'Guidance on Risk, Audit, Investment and NRC committee frequency and minute-keeping.' },
+    { summary: 'GST e-invoicing threshold revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'e-invoicing applicability threshold revised.' },
+  ]
+  const statuses: RegulatoryChange['status'][] = ['Assessed', 'In progress', 'Closed']
+  for (let i = 0; i < 90; i++) {
+    const def = feed[i % feed.length]
+    changes.push({
+      id: `RCM-2026-${String(118 - i).padStart(3, '0')}`,
+      source: def.src,
+      summary: def.summary,
+      regulator: def.reg,
+      publishedAt: iso(new Date(NOW_MS - r.int(0, 150) * 86400000 - r.int(0, 1400) * 60000)),
+      impactedObligations: [],
+      impactedControls: [],
+      owner: def.reg === 'GST' ? 'deepa' : def.reg === 'PFRDA' ? 'arvind' : def.reg === 'DPDP' ? 'priya' : def.reg === 'CERT-In' ? 'rajesh' : 'vikram',
+      status: i < 8 ? r.pick(['Assessed', 'In progress'] as const) : r.pick(statuses),
+      detail: def.detail,
+    })
+  }
+  return changes
+}
+
+// ── Data assets (120) + DSARs (14 open) ─────────────────────────────────────
+function buildDataAssets(): DataAsset[] {
+  const r = new Rand(1200)
+  const assets: DataAsset[] = []
+  const stores: DataAsset['store'][] = ['CRA', 'KYC DB', 'Fund Accounting', 'CRM']
+  const piiAll: DataAsset['piiTypes'] = ['PRAN', 'KYC', 'Nominee', 'Bank', 'Financial']
+  for (let i = 0; i < 120; i++) {
+    const store = r.pick(stores)
+    assets.push({
+      id: `DA-${String(i + 1).padStart(3, '0')}`,
+      name: `${store} — ${r.pick(['Subscriber master', 'Transaction ledger', 'Nominee register', 'KYC documents', 'Contribution records', 'NAV history', 'Grievance records'])} ${r.pick(NPS_SCHEMES)}/${r.pick(TIERS)}`,
+      store,
+      piiTypes: r.sample(piiAll, r.int(1, 4)),
+      classification: r.weighted<DataAsset['classification']>([['Restricted', 4], ['Confidential', 4], ['Internal', 2]]),
+      retentionRule: r.pick(['Retain 10 years (PFRDA)', 'Retain 8 years (Companies Act)', 'Retain till exit + 7 years', 'Retain 180 days (CERT-In logs)']),
+      consentStatus: r.weighted<DataAsset['consentStatus']>([['Captured', 6], ['Partial', 2], ['Legacy', 2]]),
+      records: r.int(12000, 940000),
+    })
+  }
+  return assets
+}
+
+function buildDsars(): Dsar[] {
+  const r = new Rand(14)
+  const dsars: Dsar[] = []
+  // worked erasure-vs-retention case first
+  dsars.push({
+    id: 'DSAR-2026-0047',
+    pran: '110078451293',
+    type: 'Erasure',
+    raisedAt: iso(new Date(NOW_MS - 5 * 86400000)),
+    dueDate: iso(new Date(NOW_MS + 25 * 86400000)),
+    status: 'On hold',
+    owner: 'priya',
+    note: 'Subscriber requests erasure. PFRDA mandates 10-year retention of pension records — erasure withheld for statutory data; marketing/CRM consent revoked and purged. Worked erasure-vs-retention case.',
+  })
+  const types: Dsar['type'][] = ['Access', 'Erasure', 'Correction', 'Nomination']
+  for (let i = 0; i < 13; i++) {
+    dsars.push({
+      id: `DSAR-2026-00${48 + i}`,
+      pran: `1100${r.int(1000, 9999)}${r.int(1000, 9999)}`,
+      type: r.pick(types),
+      raisedAt: iso(new Date(NOW_MS - r.int(1, 25) * 86400000)),
+      dueDate: iso(new Date(NOW_MS + r.int(3, 28) * 86400000)),
+      status: r.weighted<Dsar['status']>([['Open', 3], ['In review', 3], ['On hold', 1]]),
+      owner: 'priya',
+      note: r.pick([
+        'Access request — compiling data inventory across CRA and KYC stores.',
+        'Correction of nominee details pending CRA confirmation.',
+        'Nomination update routed to CRA (Protean) interface.',
+        'Access request — identity verification completed.',
+      ]),
+    })
+  }
+  return dsars
+}
+
+// ── exported world ──────────────────────────────────────────────────────────
+const controls = buildControls()
+const risks = buildRisks(controls)
+const incidents = buildIncidents()
+const obligations = buildObligations()
+const policies = buildPolicies(controls)
+const issues = buildIssues(controls, incidents)
+const evidence = buildEvidence(controls, obligations)
+const audits = buildAudits()
+const regChanges = buildRegChanges()
+const dataAssets = buildDataAssets()
+const dsars = buildDsars()
+
+// ── cross-linking pass ──────────────────────────────────────────────────────
+function crossLink() {
+  const r = new Rand(999)
+  const controlById = new Map(controls.map((c) => [c.id, c]))
+
+  // risks → controls (already) → back-link controls → risks
+  for (const risk of risks) {
+    for (const cid of risk.linkedControls) {
+      const c = controlById.get(cid)
+      if (c && !c.linkedRisks.includes(risk.id)) c.linkedRisks.push(risk.id)
+    }
+  }
+
+  // issues → controls back-link
+  for (const issue of issues) {
+    for (const cid of issue.linkedControls) {
+      const c = controlById.get(cid)
+      if (c && !c.linkedIssues.includes(issue.id)) c.linkedIssues.push(issue.id)
+    }
+  }
+
+  // evidence → controls evidenceCount + obligations
+  const oblById = new Map(obligations.map((o) => [o.id, o]))
+  for (const ev of evidence) {
+    for (const oid of ev.linkedObligations) {
+      const o = oblById.get(oid)
+      if (o && !o.evidence.includes(ev.id)) o.evidence.push(ev.id)
+    }
+  }
+
+  // ensure overdue/in-review obligations have at least one evidence reference
+  for (const o of obligations) {
+    if (o.evidence.length === 0) {
+      const candidate = evidence[(o.id.length * 7) % evidence.length]
+      o.evidence.push(candidate.id)
+      candidate.linkedObligations.push(o.id)
+    }
+  }
+
+  // marquee incident links — pick cyber/IT risks, relevant controls, issues
+  const marquee = incidents[0]
+  const cyberRisks = risks.filter((x) => x.domain === 'Cyber' || x.domain === 'IT').slice(0, 3)
+  marquee.linkedRisks = cyberRisks.map((x) => x.id)
+  cyberRisks.forEach((x) => x.linkedIncidents.push(marquee.id))
+  const malwareControls = controls.filter((c) => /malware|backup|patch|vulnerab|monitor|logging|authentication/i.test(c.title)).slice(0, 5)
+  marquee.linkedControls = malwareControls.map((c) => c.id)
+  marquee.evidence = ['EVD-44192', 'EVD-44193', 'EVD-44201', 'EVD-44215']
+
+  // link the failing CCM control (set up in buildControls) to a spawned issue + the marquee.
+  // This is the "failures auto-escalate" chain: CCM rule → Issue → Incident.
+  const patchControl =
+    controls.find((c) => /patch|vulnerab/i.test(c.title) && c.automation === 'CCM' && c.result === 'Fail') ??
+    controls.find((c) => c.automation === 'CCM' && c.result === 'Fail')
+  if (patchControl) {
+    const spawnedIssue = issues.find((i) => i.source === 'Control failure')
+    if (spawnedIssue) {
+      spawnedIssue.linkedControls = [patchControl.id]
+      spawnedIssue.sourceRef = patchControl.id
+      spawnedIssue.severity = 'High'
+      spawnedIssue.status = 'In progress'
+      spawnedIssue.title = 'Breached patch SLA — 3 critical vulnerabilities past the 14-day window'
+      patchControl.linkedIssues = Array.from(new Set([...patchControl.linkedIssues, spawnedIssue.id]))
+      marquee.linkedIssues = Array.from(new Set([...marquee.linkedIssues, spawnedIssue.id]))
+      // make the CCM control a first-class cross-ref on the incident ("control failure that spawned it")
+      marquee.linkedControls = Array.from(new Set([patchControl.id, ...marquee.linkedControls]))
+      patchControl.linkedRisks = Array.from(new Set([...patchControl.linkedRisks, ...marquee.linkedRisks]))
+    }
+  }
+
+  // other open incidents → risks/controls
+  for (let i = 1; i < 5; i++) {
+    const inc = incidents[i]
+    inc.linkedRisks = r.sample(risks.filter((x) => x.domain === 'Cyber' || x.domain === 'IT'), 2).map((x) => x.id)
+    inc.linkedControls = r.sample(controls, 3).map((c) => c.id)
+  }
+
+  // reg-change → obligations/controls impact (featured ones)
+  const gstChange = regChanges.find((c) => c.summary.includes('GSTR-3B'))
+  if (gstChange) {
+    gstChange.impactedObligations = obligations.filter((o) => o.regulator === 'GST' && o.title.includes('3B')).slice(0, 2).map((o) => o.id)
+    gstChange.impactedControls = controls.filter((c) => /reconcil|filing|change management/i.test(c.title)).slice(0, 2).map((c) => c.id)
+  }
+  const pfrdaChange = regChanges.find((c) => c.summary.includes('exposure caps'))
+  if (pfrdaChange) {
+    pfrdaChange.impactedObligations = obligations.filter((o) => o.regulator === 'PFRDA').slice(0, 2).map((o) => o.id)
+    pfrdaChange.impactedControls = controls.filter((c) => /exposure|investment limit/i.test(c.title)).slice(0, 2).map((c) => c.id)
+  }
+  // generic linkage for the rest
+  for (const ch of regChanges) {
+    if (ch.impactedObligations.length === 0)
+      ch.impactedObligations = obligations.filter((o) => o.regulator === ch.regulator).slice(0, 1).map((o) => o.id)
+  }
+
+  // link obligations back to reg-change
+  for (const ch of regChanges) {
+    for (const oid of ch.impactedObligations) {
+      const o = oblById.get(oid)
+      if (o) o.linkedRegChange = ch.id
+    }
+  }
+
+  // audit finding → spawned Issue (1:1 for open findings) — "each finding spawns an Issue"
+  const openFindings = audits.flatMap((a) => a.findings.filter((f) => f.status !== 'Closed').map((f) => ({ a, f })))
+  const auditIssues = issues.filter((i) => i.source === 'Audit finding')
+  openFindings.forEach(({ a, f }, idx) => {
+    const issue = auditIssues[idx % auditIssues.length]
+    if (issue) {
+      f.linkedIssue = issue.id
+      issue.sourceRef = f.id
+      issue.title = `${f.title} — remediation (${a.id})`
+      issue.severity = f.severity
+    }
+  })
+}
+crossLink()
+
+// ── activity stream (15 rows, real IST timestamps near NOW) ─────────────────
+function buildActivity(): ActivityItem[] {
+  const items: ActivityItem[] = []
+  const ccmFail = controls.find((c) => c.result === 'Fail' && c.automation === 'CCM')!
+  const push = (mins: number, kind: ActivityItem['kind'], actor: string, text: string, ref: string, route: string) =>
+    items.push({ id: `ACT-${items.length + 1}`, at: minsFromNow(-mins), actor, kind, text, ref, route })
+
+  push(8, 'ccm-fail', 'CCM (auto)', `CCM rule "${ccmFail.title}" FAILED — 3 of population non-compliant; auto-spawned issue + incident link`, ccmFail.id, `/ccm/${ccmFail.ccmRuleId ?? ccmFail.id}`)
+  push(14, 'evidence', 'CCM (auto)', 'Evidence EVD-44192 auto-captured (EDR detection export) and linked to INC-2026-0411', 'EVD-44192', '/incidents/INC-2026-0411')
+  push(23, 'incident', 'Neha Joshi', 'Incident INC-2026-0411 escalated to Critical — three regulator clocks started', 'INC-2026-0411', '/incidents/INC-2026-0411')
+  push(41, 'evidence', 'CCM (auto)', 'Config baseline export auto-captured for 12 controls (AWS Security Hub feed)', 'EVD-44380', '/evidence')
+  push(58, 'reg-change', 'TeamLease RegTech', 'Regulatory change RCM-2026-118 ingested — GSTR-3B Table 4 format revised; obligation + control auto-updated', 'RCM-2026-118', '/reg-change/RCM-2026-118')
+  push(72, 'dsar', 'Priya Sharma', 'DSAR-2026-0047 raised — erasure request placed on hold pending PFRDA retention rule', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047')
+  push(96, 'approval', 'Anjali Deshmukh', 'Approved (maker-checker) quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations')
+  push(118, 'obligation', 'Deepa Iyer', 'GSTR-3B monthly return moved to "In review" after reg-change impact assessment', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations')
+  push(140, 'ccm-pass', 'CCM (auto)', 'CCM rule "MFA enforced on privileged access" PASSED across full population (0 exceptions)', 'CTRL-ISO-A.8.5', '/controls/CTRL-ISO-A.8.5')
+  push(165, 'audit', 'Lakshmi Rao', 'New audit finding logged in AUD-INT-2026-03 — privileged access recertification overdue', 'AUD-INT-2026-03', '/audits/AUD-INT-2026-03')
+  push(190, 'reg-change', 'PFRDA circular', 'PFRDA circular PFRDA/2025/05/ICS/01 — Scheme E exposure caps tightened; investment control flagged', 'RCM-2026-117', '/reg-change/RCM-2026-117')
+  push(220, 'evidence', 'Rohan Gupta', 'Manual attestation uploaded for backup restoration test (Q1)', 'EVD-44510', '/evidence')
+  push(255, 'incident', 'Karthik Nair', 'High incident INC-2026-0405 contained — phishing campaign; CERT-In report filed', 'INC-2026-0405', '/incidents/INC-2026-0405')
+  push(300, 'policy', 'Priya Sharma', 'Data Privacy (DPDP) Policy v3.2 published and mapped to 7 controls', 'POL-010', '/policies/POL-010')
+  push(355, 'obligation', 'Farhan Ali', 'PF & ESI monthly challan filed; filing acknowledgement captured as evidence', obligations.find((o) => o.regulator === 'Labour')!.id, '/obligations')
+
+  return items
+}
+const activity = buildActivity()
+
+// ── role-aware queue ────────────────────────────────────────────────────────
+function buildQueue(): QueueTask[] {
+  const q: QueueTask[] = []
+  let n = 1
+  const add = (role: RoleKey, kind: QueueTask['kind'], title: string, ref: string, route: string, dueDays: number, priority: Severity) =>
+    q.push({ id: `Q-${n++}`, role, kind, title, ref, route, due: daysFromNow(dueDays), priority })
+
+  // CRO (Meera) — 14 tasks
+  add('CRO', 'Approval', 'Approve quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 1, 'High')
+  add('CRO', 'Incident action', 'Review & sign off three-regulator response for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
+  add('CRO', 'Approval', 'Approve enterprise risk treatment plan for top-5 residual risks', risks[0].id, '/risks', 2, 'High')
+  add('CRO', 'Reg-change review', 'Endorse impact assessment of PFRDA exposure-cap circular', 'RCM-2026-117', '/reg-change/RCM-2026-117', 1, 'High')
+  add('CRO', 'Approval', 'Approve board risk pack for Risk Management Committee', 'POL-016', '/policies', 3, 'Medium')
+  add('CRO', 'Evidence request', 'Confirm KRI evidence for monthly board dashboard', 'EVD-44380', '/evidence', 2, 'Medium')
+  add('CRO', 'Approval', 'Sign off DPDP erasure-vs-retention decision (DSAR-2026-0047)', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047', 4, 'Medium')
+  add('CRO', 'Incident action', 'Approve PFRDA 48-hour intimation for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'Critical')
+  add('CRO', 'Control re-test', 'Review failing CCM control escalation', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
+  add('CRO', 'Approval', 'Approve overdue obligation remediation plan (9 items)', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 2, 'High')
+  add('CRO', 'Reg-change review', 'Acknowledge GSTR-3B format change impact', 'RCM-2026-118', '/reg-change/RCM-2026-118', 3, 'Low')
+  add('CRO', 'Evidence request', 'Approve audit evidence pack for AUD-IS-2026-01', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 5, 'Medium')
+  add('CRO', 'Approval', 'Approve third-party risk acceptance for vendor renewal', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 6, 'Low')
+  add('CRO', 'Incident action', 'Review open High incidents on the clock (4)', 'INC-2026-0405', '/incidents', 1, 'High')
+
+  // CISO (Rajesh)
+  add('CISO', 'Incident action', 'Sign off CERT-In Annexure I for INC-2026-0411 (clock running)', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
+  add('CISO', 'Control re-test', 'Re-test failing patch-SLA CCM rule', 'CTRL-PCI-6.3.3', '/ccm', 0, 'Critical')
+  add('CISO', 'Incident action', 'Approve containment closure for INC-2026-0402', 'INC-2026-0402', '/incidents', 1, 'High')
+  add('CISO', 'Control re-test', 'Recertify privileged access (CRA interface)', 'CTRL-ISO-A.8.2', '/controls/CTRL-ISO-A.8.2', 2, 'High')
+  add('CISO', 'Evidence request', 'Provide SIEM log evidence for IS audit', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 3, 'Medium')
+  add('CISO', 'Approval', 'Approve vulnerability remediation exception', 'ISS-2026-0100', '/issues', 2, 'High')
+  add('CISO', 'Reg-change review', 'Assess CERT-In log-retention advisory', 'RCM-2026-116', '/reg-change/RCM-2026-116', 4, 'Medium')
+  add('CISO', 'Control re-test', 'Review backup restoration test result', 'CTRL-ISO-A.8.13', '/controls/CTRL-ISO-A.8.13', 5, 'Medium')
+  add('CISO', 'Incident action', 'Tune detection rule from phishing incident', 'INC-2026-0405', '/incidents/INC-2026-0405', 3, 'Medium')
+  add('CISO', 'Approval', 'Approve cloud security policy update', 'POL-013', '/policies/POL-013', 6, 'Low')
+  add('CISO', 'Evidence request', 'Attest endpoint EDR coverage', 'EVD-44192', '/evidence', 4, 'Low')
+  add('CISO', 'Control re-test', 'Validate NTP clock-sync control', 'CTRL-ISO-A.8.17', '/controls/CTRL-ISO-A.8.17', 2, 'Medium')
+
+  // Compliance (Anjali)
+  add('COMPLIANCE', 'Approval', 'Check & approve GSTR-3B monthly return', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations', 1, 'High')
+  add('COMPLIANCE', 'Reg-change review', 'Assess GSTR-3B Table 4 format change', 'RCM-2026-118', '/reg-change/RCM-2026-118', 1, 'High')
+  add('COMPLIANCE', 'Approval', 'Approve DSAR fulfilment status report', 'DSAR-2026-0047', '/dpdp', 2, 'Medium')
+  add('COMPLIANCE', 'Approval', 'Sign off 9 overdue obligations remediation', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 0, 'Critical')
+  add('COMPLIANCE', 'Reg-change review', 'Review DPDP Rules 2025 consent-manager obligations', 'RCM-2026-115', '/reg-change/RCM-2026-115', 3, 'Medium')
+  add('COMPLIANCE', 'Evidence request', 'Collect consent reconciliation evidence', 'EVD-44400', '/evidence', 4, 'Medium')
+  add('COMPLIANCE', 'Approval', 'Approve regulatory change closure (12 assessed)', 'RCM-2026-114', '/reg-change', 5, 'Low')
+  add('COMPLIANCE', 'Approval', 'Check PFRDA half-yearly ICS self-assessment', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 6, 'Medium')
+  add('COMPLIANCE', 'Reg-change review', 'Triage 8 new regulatory updates this week', 'RCM-2026-113', '/reg-change', 2, 'Medium')
+  add('COMPLIANCE', 'Approval', 'Approve AML/KYC policy refresh', 'POL-020', '/policies', 7, 'Low')
+  add('COMPLIANCE', 'Evidence request', 'Provide filing acks for board compliance pack', 'EVD-44510', '/evidence', 3, 'Low')
+  add('COMPLIANCE', 'Incident action', 'Confirm DPDP track for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
+
+  // CoSec (Vikram)
+  add('COSEC', 'Approval', 'Finalize board meeting minutes (Q1)', 'OBL-CA-Q1-01', '/obligations', 2, 'Medium')
+  add('COSEC', 'Approval', 'Approve audit committee agenda', 'OBL-CA-Q1-02', '/obligations', 3, 'Medium')
+  add('COSEC', 'Reg-change review', 'Assess Companies Act CSR disclosure amendment', 'RCM-2026-114', '/reg-change/RCM-2026-114', 4, 'Medium')
+  add('COSEC', 'Approval', 'Approve MGT-7 annual return draft', 'OBL-CA-FY26-03', '/obligations', 8, 'Low')
+  add('COSEC', 'Evidence request', 'Compile committee cadence evidence (PFRDA Pack)', 'EVD-44420', '/pfrda', 5, 'Medium')
+  add('COSEC', 'Approval', 'Approve whistleblower policy update', 'POL-019', '/policies/POL-019', 6, 'Low')
+  add('COSEC', 'Reg-change review', 'Review labour code wage-definition change', 'RCM-2026-112', '/reg-change', 7, 'Low')
+  add('COSEC', 'Approval', 'Sign off NRC committee minutes', 'OBL-CA-Q1-04', '/obligations', 9, 'Low')
+  add('COSEC', 'Incident action', 'Note board-reportable status of INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 2, 'High')
+  add('COSEC', 'Evidence request', 'Provide secretarial filings for internal audit', 'AUD-INT-2026-06', '/audits', 4, 'Low')
+  add('COSEC', 'Approval', 'Approve code of conduct annual attestation', 'POL-018', '/policies/POL-018', 10, 'Low')
+  add('COSEC', 'Reg-change review', 'Acknowledge MCA filing portal change', 'RCM-2026-111', '/reg-change', 5, 'Low')
+
+  // Audit (Sunita)
+  add('AUDIT', 'Evidence request', 'Request access-recertification evidence (finding F1)', 'AUD-INT-2026-03', '/audits/AUD-INT-2026-03', 1, 'High')
+  add('AUDIT', 'Approval', 'Approve audit report for IS audit FY2025-26', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 2, 'High')
+  add('AUDIT', 'Incident action', 'Verify post-incident actions for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 3, 'High')
+  add('AUDIT', 'Evidence request', 'Collect logging-coverage evidence for NAV engine', 'EVD-44380', '/evidence', 2, 'Medium')
+  add('AUDIT', 'Approval', 'Approve issue closure for ISS-2026-0102', 'ISS-2026-0102', '/issues', 4, 'Medium')
+  add('AUDIT', 'Control re-test', 'Independent re-test of patch-SLA control', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
+  add('AUDIT', 'Evidence request', 'Sample exposure-limit monitoring evidence', 'EVD-44420', '/evidence', 5, 'Medium')
+  add('AUDIT', 'Approval', 'Approve DPDP readiness audit scope', 'AUD-INT-2026-05', '/audits/AUD-INT-2026-05', 6, 'Low')
+  add('AUDIT', 'Evidence request', 'Request BCP/DR test evidence', 'EVD-44510', '/evidence', 3, 'Medium')
+  add('AUDIT', 'Approval', 'Approve internal audit plan for next quarter', 'AUD-INT-2026-08', '/audits', 8, 'Low')
+  add('AUDIT', 'Incident action', 'Track 27 open findings to remediation', 'ISS-2026-0100', '/issues', 2, 'Medium')
+  add('AUDIT', 'Control re-test', 'Validate segregation-of-duties remediation', 'CTRL-ISO-A.5.3', '/controls/CTRL-ISO-A.5.3', 4, 'Medium')
+
+  // Investment Compliance (Arvind)
+  add('INVCOMP', 'Approval', 'Approve exposure-limit breach report to PFRDA', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/pfrda', 1, 'High')
+  add('INVCOMP', 'Reg-change review', 'Assess Scheme E exposure-cap circular impact', 'RCM-2026-117', '/reg-change/RCM-2026-117', 0, 'Critical')
+  add('INVCOMP', 'Control re-test', 'Validate exposure-limit monitoring control', 'CTRL-PFRDA-ICS-40', '/controls', 2, 'High')
+  add('INVCOMP', 'Approval', 'Check monthly NAV & AUM statement', obligations.find((o) => o.regulator === 'PFRDA' && o.title.includes('NAV'))?.id ?? 'OBL-PFRDA-JUN26-02', '/obligations', 1, 'High')
+  add('INVCOMP', 'Evidence request', 'Provide investment committee minutes evidence', 'EVD-44420', '/pfrda', 3, 'Medium')
+  add('INVCOMP', 'Approval', 'Approve issuer concentration risk treatment', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 4, 'Medium')
+  add('INVCOMP', 'Control re-test', 'Re-test maker-checker on financial transactions', 'CTRL-PFRDA-ICS-43', '/controls', 5, 'Medium')
+  add('INVCOMP', 'Reg-change review', 'Review derivatives mandate clarification', 'RCM-2026-110', '/reg-change', 6, 'Low')
+  add('INVCOMP', 'Approval', 'Sign off liquidity-mismatch monitoring for Scheme G', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 3, 'Medium')
+  add('INVCOMP', 'Evidence request', 'Collect reconciliation evidence for contributions', 'EVD-44430', '/evidence', 4, 'Medium')
+  add('INVCOMP', 'Incident action', 'Confirm subscriber-impact assessment for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
+  add('INVCOMP', 'Approval', 'Approve vendor TPRM renewal (CRA services)', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 7, 'Low')
+
+  return q
+}
+const queue = buildQueue()
+
+// ── headline metrics (board KPIs) ───────────────────────────────────────────
+const passOrPartial = controls.filter((c) => c.result !== 'Fail').length
+const controlCoverage = (passOrPartial / controls.length) * 100 // → 96.2%
+const openIncidents = incidents.filter((i) => i.status !== 'Closed')
+const criticalOpen = openIncidents.filter((i) => i.classification === 'Critical').length
+const overdueObligations = obligations.filter((o) => o.status === 'Overdue').length
+const openFindings = audits.reduce((s, a) => s + a.findings.filter((f) => f.status === 'Open' || f.status === 'Remediation').length, 0)
+
+export const METRICS = {
+  enterpriseRisk: 7.8, // /10 (board aggregate), ▲ vs last quarter
+  enterpriseRiskTrend: 'up' as const,
+  controlCoverage, // ≈ 96.2
+  ccmAutomated: controls.filter((c) => c.automation === 'CCM').length,
+  openIncidents: openIncidents.length, // 5
+  criticalOpen, // 1
+  overdueObligations, // 9
+  dueSoonObligations: obligations.filter((o) => o.status === 'Due').length,
+  openFindings, // 27
+  aumCrore: 324718,
+  subscribers: 4186902,
+  regUpdates2025: 12973,
+}
+
+export const WORLD = {
+  people: PEOPLE,
+  controls,
+  risks,
+  incidents,
+  obligations,
+  policies,
+  issues,
+  evidence,
+  audits,
+  regChanges,
+  dataAssets,
+  dsars,
+  activity,
+  queue,
+}
+
+export type World = typeof WORLD
