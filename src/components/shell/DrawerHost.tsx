@@ -1,9 +1,12 @@
-import { Download, FileCheck2, Send, ShieldAlert } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, ArrowUpRight } from 'lucide-react'
 import { useApp } from '@/store'
 import { Drawer } from '../Drawer'
 import { Button } from '../ui/Button'
-import { MARQUEE } from '@/data'
-import { fmtIST } from '@/lib/time'
+import { MARQUEE, getSource } from '@/data'
+import { citingRecords } from '@/lib/sources'
+import { resolveEntity } from '@/lib/entity'
+import { fmtDate, fmtIST } from '@/lib/time'
 import { maskPran } from '@/lib/format'
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -16,11 +19,76 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function DrawerHost() {
+  const navigate = useNavigate()
   const drawer = useApp((s) => s.drawer)
   const close = useApp((s) => s.closeDrawer)
   const pushToast = useApp((s) => s.pushToast)
 
   const inc = MARQUEE
+
+  // ── Source viewer (Epic 1) — instrument, citation, real excerpt + reverse lookup
+  const sourceId = (drawer.payload as { sourceId?: string })?.sourceId
+  const src = sourceId ? getSource(sourceId) : undefined
+  const producedIds = src ? citingRecords(src.id) : []
+  const sourceBody = src && (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-2xs font-semibold text-foreground">
+          {src.authority}
+        </span>
+        <span className="rounded bg-info-soft px-2 py-0.5 text-2xs font-medium text-info">{src.sourceType}</span>
+        <span className="text-2xs text-muted-foreground">Published {fmtDate(src.publishedDate)}</span>
+      </div>
+      <div>
+        <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Citation</div>
+        <div className="text-sm font-medium text-foreground">{src.citation}</div>
+      </div>
+      <div>
+        <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Excerpt</div>
+        <blockquote className="border-l-2 border-info/50 bg-muted/40 px-3 py-2 text-xs italic leading-relaxed text-foreground">
+          “{src.snippet}”
+        </blockquote>
+      </div>
+      <a
+        href={src.url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline"
+      >
+        <ExternalLink className="size-3.5" /> Open full source
+      </a>
+      {producedIds.length > 0 && (
+        <div className="border-t border-border pt-3">
+          <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+            What this source produced · {producedIds.length}
+          </div>
+          <div className="scrollbar-thin max-h-64 space-y-1 overflow-y-auto">
+            {producedIds.slice(0, 12).map((id) => {
+              const e = resolveEntity(id)
+              return (
+                <button
+                  key={id}
+                  onClick={() => {
+                    close()
+                    navigate(e.route)
+                  }}
+                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left transition-colors hover:border-info/40 hover:bg-info-soft/40"
+                >
+                  <span className="font-mono text-2xs font-semibold text-info">{id}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{e.label}</span>
+                  <span className="rounded bg-muted px-1 py-0 text-2xs text-muted-foreground">{e.type}</span>
+                  <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </button>
+              )
+            })}
+            {producedIds.length > 12 && (
+              <div className="pl-2 text-2xs text-muted-foreground">+{producedIds.length - 12} more</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 
   const certInBody = (
     <div className="space-y-4">
@@ -105,10 +173,13 @@ export function DrawerHost() {
     'pfrda-notify': { title: 'Notify PFRDA', subtitle: `${inc.id} · ICS intimation`, body: pfrdaBody, cta: 'Send intimation', icon: <Send className="size-4" /> },
     'dpdp-track': { title: 'DPDP Breach Track', subtitle: `${inc.id} · Data Protection Board`, body: dpdpBody, cta: 'Open DPDP track', icon: <ShieldAlert className="size-4" /> },
     'export-pdf': { title: drawer.title ?? 'Export', subtitle: 'Document ready', body: exportBody, cta: 'Download', icon: <Download className="size-4" /> },
+    'source-viewer': { title: src?.documentTitle ?? 'Source', subtitle: src ? `${src.authority} · provenance` : '', body: sourceBody ?? <div className="text-sm text-muted-foreground">Source not found.</div>, cta: 'Done', icon: <ScrollText className="size-4" /> },
     generic: { title: drawer.title ?? 'Details', subtitle: '', body: <div className="text-sm text-muted-foreground">Action recorded.</div>, cta: 'Done', icon: null },
   }
 
   const cfg = drawer.kind ? map[drawer.kind] ?? map.generic : map.generic
+  // The source viewer is read-only — no mocked "action" CTA, just close.
+  const readOnly = drawer.kind === 'source-viewer'
 
   return (
     <Drawer
@@ -121,16 +192,18 @@ export function DrawerHost() {
           <Button variant="outline" size="sm" onClick={close}>
             Close
           </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              pushToast({ title: cfg.cta, description: 'Action completed.', variant: 'success' })
-              close()
-            }}
-          >
-            {cfg.icon}
-            {cfg.cta}
-          </Button>
+          {!readOnly && (
+            <Button
+              size="sm"
+              onClick={() => {
+                pushToast({ title: cfg.cta, description: 'Action completed.', variant: 'success' })
+                close()
+              }}
+            >
+              {cfg.icon}
+              {cfg.cta}
+            </Button>
+          )}
         </div>
       }
     >

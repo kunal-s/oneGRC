@@ -11,8 +11,21 @@ export interface Toast {
 
 export interface DrawerState {
   open: boolean
-  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'export-pdf' | 'generic' | null
+  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'export-pdf' | 'source-viewer' | 'generic' | null
   title?: string
+  payload?: unknown
+}
+
+/**
+ * Session-held artifact model (design seam — Epic 1; UI wired in Epic 10).
+ * Generated templates and uploaded evidence live here in-memory and reset on
+ * reload — no persistence, no backend.
+ */
+export interface Artifact {
+  id: string
+  kind: 'template' | 'evidence' | 'report'
+  title: string
+  createdAt: string // ISO
   payload?: unknown
 }
 
@@ -31,9 +44,14 @@ interface AppState {
 
   commandOpen: boolean
   setCommandOpen: (v: boolean) => void
+
+  artifacts: Artifact[]
+  addArtifact: (a: Omit<Artifact, 'id'>) => string
+  getArtifact: (id: string) => Artifact | undefined
 }
 
 let toastSeq = 0
+let artifactSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'CRO',
@@ -56,4 +74,12 @@ export const useApp = create<AppState>((set, get) => ({
 
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
+
+  artifacts: [],
+  addArtifact: (a) => {
+    const id = `ART-${++artifactSeq}`
+    set((s) => ({ artifacts: [...s.artifacts, { ...a, id }] }))
+    return id
+  },
+  getArtifact: (id) => get().artifacts.find((x) => x.id === id),
 }))

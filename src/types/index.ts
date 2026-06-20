@@ -19,6 +19,29 @@ export type Regulator =
 
 export type LineOfDefence = '1LoD' | '2LoD' | '3LoD'
 
+// ── Provenance (Epic 1 — Source and Provenance) ─────────────────────────────
+// A real statutory/standard instrument a record derives from. Held inline so a
+// future document repository slots behind the same type. ids use the SRC- prefix.
+export type SourceType =
+  | 'Master Circular'
+  | 'Act'
+  | 'Rules'
+  | 'Direction'
+  | 'Standard'
+  | 'Notification'
+  | 'Circular'
+
+export interface SourceReference {
+  id: string // 'SRC-PFRDA-INV-2025'
+  documentTitle: string // 'PFRDA Master Circular on Investment Guidelines for NPS Schemes'
+  authority: string // instrument/issuing authority, e.g. 'PFRDA' | 'MCA' | 'CERT-In' | 'CBIC' | 'EPFO' | 'ISO'
+  citation: string // exact section/clause/paragraph reference
+  snippet: string // short real excerpt of the instrument
+  publishedDate: string // ISO
+  url: string
+  sourceType: SourceType
+}
+
 export interface Person {
   id: string
   name: string
@@ -60,7 +83,7 @@ export interface Control {
   id: string
   title: string
   frameworks: Framework[]
-  mappedFrameworkRefs: { framework: Framework; ref: string }[]
+  mappedFrameworkRefs: { framework: Framework; ref: string; sourceRef?: string }[]
   owner: string
   type: 'Preventive' | 'Detective'
   automation: 'CCM' | 'Manual'
@@ -72,6 +95,7 @@ export interface Control {
   ccmRuleId?: string
   description: string
   frequency: string
+  sourceRefs?: string[] // SourceReference ids — provenance for this control
 }
 
 export interface Obligation {
@@ -86,6 +110,7 @@ export interface Obligation {
   evidence: string[]
   linkedRegChange?: string
   reference: string
+  sourceRefs?: string[] // SourceReference ids — the instrument(s) this obligation derives from
 }
 
 export interface RegulatorTrack {
@@ -137,6 +162,7 @@ export interface Policy {
   mappedControls: string[]
   status: 'Published' | 'In review' | 'Draft'
   category: string
+  sourceRefs?: string[] // SourceReference ids — the instrument(s) this policy derives from
 }
 
 export interface Issue {

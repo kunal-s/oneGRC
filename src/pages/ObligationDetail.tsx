@@ -1,11 +1,12 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck, ScrollText } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { EvidenceList } from '@/components/EvidenceList'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { MakerCheckerChain } from '@/components/MakerChecker'
+import { SourceList } from '@/components/SourceRef'
 import { RegulatorChip } from '@/lib/regulators'
 import { cn } from '@/lib/utils'
 import { getObligation, getRegChange, WORLD } from '@/data'
@@ -96,6 +97,18 @@ export function ObligationDetail() {
         </div>
 
         <div className="space-y-4">
+          {o.sourceRefs && o.sourceRefs.length > 0 && (
+            <div className="card-surface p-3.5">
+              <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <ScrollText className="size-4 text-info" /> Source
+              </h3>
+              <SourceList ids={o.sourceRefs} />
+              <p className="mt-2 text-2xs text-muted-foreground">
+                The instrument this obligation derives from — open to read the exact section and excerpt.
+              </p>
+            </div>
+          )}
+
           {regChange ? (
             <div className="card-surface p-3.5">
               <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">

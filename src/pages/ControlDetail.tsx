@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPill } from '@/components/FrameworkPill'
@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
+import { SourceList, SourceChip } from '@/components/SourceRef'
 import { getControl, getIssue, WORLD } from '@/data'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
 import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
@@ -148,6 +149,17 @@ export function ControlDetail() {
             ) : (
               <p className="text-xs text-muted-foreground">No risks currently mapped to this control.</p>
             )}
+            {control.sourceRefs && control.sourceRefs.length > 0 && (
+              <div className="mt-4 border-t border-border pt-3">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <ScrollText className="size-4 text-info" /> Source
+                </h3>
+                <SourceList ids={control.sourceRefs} />
+                <p className="mt-2 text-2xs text-muted-foreground">
+                  The standards this control is tested against — each mapping carries its instrument.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -167,7 +179,10 @@ export function ControlDetail() {
                   <div className="font-mono text-sm font-semibold text-foreground">{m.ref}</div>
                   <div className="text-2xs text-muted-foreground">{m.framework} clause satisfied by {control.id}</div>
                 </div>
-                <CheckCircle2 className="ml-auto size-4 text-ok" />
+                <div className="ml-auto flex items-center gap-2">
+                  {m.sourceRef && <SourceChip id={m.sourceRef} />}
+                  <CheckCircle2 className="size-4 text-ok" />
+                </div>
               </div>
             ))}
           </div>

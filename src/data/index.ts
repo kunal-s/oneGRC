@@ -1,10 +1,13 @@
 export { WORLD, METRICS } from './world'
 export type { World } from './world'
 export { PEOPLE, PEOPLE_BY_ID, personName, ROLES } from './people'
+export { SOURCES, SOURCES_BY_ID, sourceForRegulator, sourceForFramework } from './sources'
 
 import { WORLD } from './world'
+import { SOURCES_BY_ID } from './sources'
 import type {
   Risk, Control, Obligation, Incident, Policy, Issue, Evidence, Audit, RegulatoryChange, DataAsset, Dsar,
+  SourceReference,
 } from '@/types'
 
 // id → entity lookups
@@ -33,6 +36,7 @@ export const getAudit = (id: string): Audit | undefined => idx.audit.get(id)
 export const getRegChange = (id: string): RegulatoryChange | undefined => idx.regChange.get(id)
 export const getDataAsset = (id: string): DataAsset | undefined => idx.dataAsset.get(id)
 export const getDsar = (id: string): Dsar | undefined => idx.dsar.get(id)
+export const getSource = (id: string): SourceReference | undefined => SOURCES_BY_ID[id]
 
 // the marquee incident
 export const MARQUEE = WORLD.incidents[0]

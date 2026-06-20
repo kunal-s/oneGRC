@@ -24,6 +24,7 @@ import type {
 import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
 import { PEOPLE } from './people'
+import { SOURCES, sourceForRegulator, sourceForFramework } from './sources'
 import { ist, NOW_MS, minsFromNow, daysFromNow } from '@/lib/time'
 
 const iso = (d: Date) => d.toISOString()
@@ -1019,6 +1020,59 @@ function crossLink() {
 }
 crossLink()
 
+// ── provenance pass (Epic 1) — attach real instrument sources to records ────
+// Every obligation, policy and control gets ≥1 openable SourceReference; the
+// reverse lookup (lib/sources.ts) resolves a source back to what it produced.
+function linkSources() {
+  const uniq = (xs: string[]) => Array.from(new Set(xs))
+
+  // Obligations: regulator default + title-specific instruments.
+  for (const o of obligations) {
+    const refs: string[] = [sourceForRegulator(o.regulator)]
+    const t = o.title.toLowerCase()
+    if (o.regulator === 'PFRDA') {
+      if (/invest|nav|aum|exposure|committee/.test(t)) refs.push('SRC-PFRDA-INV-2025')
+      if (/cyber|ics|incident|self-assessment/.test(t)) refs.push('SRC-PFRDA-ICS-2024', 'SRC-PFRDA-ICS-2025')
+    } else if (o.regulator === 'GST') {
+      refs.push('SRC-CGST-50')
+    } else if (o.regulator === 'CERT-In') {
+      refs.push('SRC-ITACT-70B')
+    } else if (o.regulator === 'Companies Act') {
+      if (/mgt-7|annual return/.test(t)) refs.push('SRC-CA-92-5', 'SRC-CA-403')
+      else if (/financial|aoc/.test(t)) refs.push('SRC-CA-137-3', 'SRC-CA-403')
+      else refs.push('SRC-CA-92-5')
+    } else if (o.regulator === 'Labour') {
+      if (/pf|esi|provident/.test(t)) refs.push('SRC-EPF-14B', 'SRC-EPF-7Q')
+    }
+    o.sourceRefs = uniq(refs)
+  }
+
+  // Policies: by category, leading with the closest instrument/standard.
+  const byCat: Record<string, string[]> = {
+    Investment: ['SRC-PFRDA-INV-2025', 'SRC-ISO-37301'],
+    Security: ['SRC-ISO-27001', 'SRC-NIST-CSF'],
+    Data: ['SRC-DPDP-2025', 'SRC-ISO-27001'],
+    Compliance: ['SRC-ISO-37301'],
+    Governance: ['SRC-CA-92-5', 'SRC-ISO-37301'],
+    Risk: ['SRC-ISO-37301', 'SRC-ISO-27001'],
+    Resilience: ['SRC-ISO-27001'],
+    IT: ['SRC-ISO-27001', 'SRC-NIST-CSF'],
+  }
+  for (const p of policies) {
+    p.sourceRefs = uniq(byCat[p.category] ?? ['SRC-ISO-37301'])
+  }
+
+  // Controls: each framework mapping carries the standard it satisfies.
+  for (const c of controls) {
+    c.mappedFrameworkRefs = c.mappedFrameworkRefs.map((m) => ({
+      ...m,
+      sourceRef: sourceForFramework(m.framework),
+    }))
+    c.sourceRefs = uniq(c.mappedFrameworkRefs.map((m) => m.sourceRef!))
+  }
+}
+linkSources()
+
 // ── activity stream (15 rows, real IST timestamps near NOW) ─────────────────
 function buildActivity(): ActivityItem[] {
   const items: ActivityItem[] = []
@@ -1181,6 +1235,7 @@ export const WORLD = {
   dsars,
   activity,
   queue,
+  sources: SOURCES,
 }
 
 export type World = typeof WORLD
