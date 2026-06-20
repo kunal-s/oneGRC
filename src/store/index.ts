@@ -1,6 +1,8 @@
 import { create } from 'zustand'
-import type { RoleKey } from '@/types'
+import type { ReviewState, RoleKey } from '@/types'
 import { ROLES } from '@/data/people'
+import type { ReviewOverride, ReviewOverrides } from '@/lib/sources'
+import { NOW } from '@/lib/time'
 
 export interface Toast {
   id: string
@@ -48,6 +50,10 @@ interface AppState {
   artifacts: Artifact[]
   addArtifact: (a: Omit<Artifact, 'id'>) => string
   getArtifact: (id: string) => Artifact | undefined
+
+  // Applicability review (Epic 15) — session overrides on provision review state.
+  reviewOverrides: ReviewOverrides
+  setReviewState: (provisionId: string, state: ReviewState, rationale?: string) => void
 }
 
 let toastSeq = 0
@@ -82,4 +88,11 @@ export const useApp = create<AppState>((set, get) => ({
     return id
   },
   getArtifact: (id) => get().artifacts.find((x) => x.id === id),
+
+  reviewOverrides: {},
+  setReviewState: (provisionId, state, rationale) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const override: ReviewOverride = { reviewState: state, reviewer, reviewedAt: NOW.toISOString(), rationale }
+    set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: override } }))
+  },
 }))

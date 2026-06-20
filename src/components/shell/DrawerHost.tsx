@@ -3,7 +3,7 @@ import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, Arro
 import { useApp } from '@/store'
 import { Drawer } from '../Drawer'
 import { Button } from '../ui/Button'
-import { MARQUEE, getSource } from '@/data'
+import { MARQUEE, getSource, getInstrument } from '@/data'
 import { citingRecords } from '@/lib/sources'
 import { resolveEntity } from '@/lib/entity'
 import { fmtDate, fmtIST } from '@/lib/time'
@@ -22,70 +22,63 @@ export function DrawerHost() {
   const navigate = useNavigate()
   const drawer = useApp((s) => s.drawer)
   const close = useApp((s) => s.closeDrawer)
-  const openDrawer = useApp((s) => s.openDrawer)
   const pushToast = useApp((s) => s.pushToast)
 
   const inc = MARQUEE
 
-  // Re-open the source viewer on a different source (supersession links).
-  const openSource = (id: string) => {
-    const doc = getSource(id)
-    openDrawer({ kind: 'source-viewer', title: doc?.documentTitle ?? 'Source', payload: { sourceId: id } })
-  }
-
-  // ── Source viewer (Epic 1) — full provenance group + supersession + reverse lookup
+  // ── Source viewer (Epic 1; normalized Epic 15) — provision + parent instrument
   const sourceId = (drawer.payload as { sourceId?: string })?.sourceId
   const src = sourceId ? getSource(sourceId) : undefined
+  const inst = src ? getInstrument(src.instrumentId) : undefined
   const producedIds = src ? citingRecords(src.id) : []
-  const supersedes = src?.supersedesId ? getSource(src.supersedesId) : undefined
-  const supersededBy = src?.supersededById ? getSource(src.supersededById) : undefined
-  const sourceBody = src && (
+  const supersedes = inst?.supersedesId ? getInstrument(inst.supersedesId) : undefined
+  const supersededBy = inst?.supersededById ? getInstrument(inst.supersededById) : undefined
+  // "Open full source" deep-links into the full-page Source Library (Epic 15).
+  const openInLibrary = () => {
+    if (!inst) return
+    close()
+    navigate(`/sources/${inst.id}`)
+  }
+  const sourceBody = src && inst && (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-2xs font-semibold text-foreground">
-          {src.authority}
+          {inst.authority}
         </span>
-        <span className="rounded bg-info-soft px-2 py-0.5 text-2xs font-medium text-info">{src.instrumentType}</span>
-        <span className="rounded bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">{src.sourceChannel}</span>
+        <span className="rounded bg-info-soft px-2 py-0.5 text-2xs font-medium text-info">{inst.instrumentType}</span>
+        <span className="rounded bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">{inst.sourceChannel}</span>
+        <span className="text-2xs text-muted-foreground">{inst.status}</span>
       </div>
 
       {supersededBy && (
-        <button
-          onClick={() => openSource(supersededBy.id)}
-          className="flex w-full items-center gap-2 rounded-md border border-medium/40 bg-medium-soft/40 px-3 py-2 text-left transition-colors hover:bg-medium-soft/70"
-        >
+        <div className="flex w-full items-center gap-2 rounded-md border border-medium/40 bg-medium-soft/40 px-3 py-2 text-xs text-foreground">
           <History className="size-3.5 shrink-0 text-medium" />
-          <span className="min-w-0 flex-1 text-xs text-foreground">
-            Superseded by a newer version ({fmtDate(supersededBy.dateOfIssue)}) — view current
+          <span className="min-w-0 flex-1">
+            Superseded by a newer version ({fmtDate(supersededBy.dateOfIssue)}) — {supersededBy.version ?? 'current'}
           </span>
-          <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
-        </button>
+        </div>
       )}
 
       <div className="rounded-lg border border-border p-3">
-        <Field label="Instrument" value={src.instrument} />
+        <Field label="Instrument" value={inst.title} />
         <Field label="Provision" value={src.provision} />
-        {src.referenceNumber && <Field label="Reference number" value={src.referenceNumber} />}
-        <Field label="Date of issue" value={fmtDate(src.dateOfIssue)} />
-        {src.effectiveDate && <Field label="Effective date" value={fmtDate(src.effectiveDate)} />}
-        {src.version && (
+        {inst.referenceNumber && <Field label="Reference number" value={inst.referenceNumber} />}
+        <Field label="Date of issue" value={fmtDate(inst.dateOfIssue)} />
+        {inst.effectiveDate && <Field label="Effective date" value={fmtDate(inst.effectiveDate)} />}
+        {inst.version && (
           <Field
             label="Version"
             value={
               supersedes ? (
                 <span className="inline-flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium text-foreground">{src.version}</span>
+                  <span className="font-medium text-foreground">{inst.version}</span>
                   <span className="text-muted-foreground">· supersedes</span>
-                  <button
-                    onClick={() => openSource(supersedes.id)}
-                    className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-info transition-colors hover:bg-info-soft"
-                  >
+                  <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-foreground">
                     {supersedes.version ?? 'prior'} ({fmtDate(supersedes.dateOfIssue)})
-                    <ArrowUpRight className="size-3" />
-                  </button>
+                  </span>
                 </span>
               ) : (
-                src.version
+                inst.version
               )
             }
           />
@@ -103,7 +96,7 @@ export function DrawerHost() {
         </blockquote>
       </div>
 
-      {src.attachedDocument && (
+      {inst.attachedDocument && (
         <div>
           <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
             Attached document
@@ -111,10 +104,10 @@ export function DrawerHost() {
           <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2">
             <Paperclip className="size-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-xs font-medium text-foreground">{src.attachedDocument.filename}</div>
+              <div className="truncate text-xs font-medium text-foreground">{inst.attachedDocument.filename}</div>
               <div className="text-2xs text-muted-foreground">
-                {src.attachedDocument.label} · {src.attachedDocument.sizeLabel} · attached{' '}
-                {fmtDate(src.attachedDocument.capturedAt)}
+                {inst.attachedDocument.label} · {inst.attachedDocument.sizeLabel} · attached{' '}
+                {fmtDate(inst.attachedDocument.capturedAt)}
               </div>
             </div>
             <Button
@@ -134,14 +127,22 @@ export function DrawerHost() {
         </div>
       )}
 
-      <a
-        href={src.sourceLink}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline"
-      >
-        <ExternalLink className="size-3.5" /> Open full source
-      </a>
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          onClick={openInLibrary}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline"
+        >
+          <ScrollText className="size-3.5" /> Open full source
+        </button>
+        <a
+          href={inst.sourceLink}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-info hover:underline"
+        >
+          <ExternalLink className="size-3.5" /> {inst.sourceChannel}
+        </a>
+      </div>
       {producedIds.length > 0 && (
         <div className="border-t border-border pt-3">
           <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -258,7 +259,7 @@ export function DrawerHost() {
     'pfrda-notify': { title: 'Notify PFRDA', subtitle: `${inc.id} · ICS intimation`, body: pfrdaBody, cta: 'Send intimation', icon: <Send className="size-4" /> },
     'dpdp-track': { title: 'DPDP Breach Track', subtitle: `${inc.id} · Data Protection Board`, body: dpdpBody, cta: 'Open DPDP track', icon: <ShieldAlert className="size-4" /> },
     'export-pdf': { title: drawer.title ?? 'Export', subtitle: 'Document ready', body: exportBody, cta: 'Download', icon: <Download className="size-4" /> },
-    'source-viewer': { title: src?.documentTitle ?? 'Source', subtitle: src ? `${src.authority} · ${src.provision}` : '', body: sourceBody ?? <div className="text-sm text-muted-foreground">Source not found.</div>, cta: 'Done', icon: <ScrollText className="size-4" /> },
+    'source-viewer': { title: inst?.title ?? 'Source', subtitle: src ? `${inst?.authority ?? ''} · ${src.provision}` : '', body: sourceBody ?? <div className="text-sm text-muted-foreground">Source not found.</div>, cta: 'Done', icon: <ScrollText className="size-4" /> },
     generic: { title: drawer.title ?? 'Details', subtitle: '', body: <div className="text-sm text-muted-foreground">Action recorded.</div>, cta: 'Done', icon: null },
   }
 

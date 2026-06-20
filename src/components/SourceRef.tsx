@@ -1,14 +1,14 @@
 import { ScrollText, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getSource } from '@/data'
+import { refDisplayTitle } from '@/lib/sources'
 import { useApp } from '@/store'
 
-/** Open the read-only source viewer drawer for a SourceReference id. */
+/** Open the read-only source viewer drawer for a SourceReference (provision) id. */
 function useOpenSource() {
   const openDrawer = useApp((s) => s.openDrawer)
   return (id: string) => {
-    const doc = getSource(id)
-    openDrawer({ kind: 'source-viewer', title: doc?.documentTitle ?? 'Source', payload: { sourceId: id } })
+    openDrawer({ kind: 'source-viewer', title: refDisplayTitle(id), payload: { sourceId: id } })
   }
 }
 
@@ -30,7 +30,7 @@ export function SourceList({ ids, className }: { ids: string[]; className?: stri
         >
           <ScrollText className="mt-0.5 size-3.5 shrink-0 text-info" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium text-foreground">{s!.documentTitle}</span>
+            <span className="block truncate text-xs font-medium text-foreground">{s!.title}</span>
             <span className="block truncate text-2xs text-muted-foreground">{s!.citation}</span>
           </span>
           <ArrowUpRight className="mt-0.5 size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

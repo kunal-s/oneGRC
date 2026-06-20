@@ -24,7 +24,7 @@ import type {
 import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
 import { PEOPLE } from './people'
-import { SOURCES, sourceForRegulator, sourceForFramework } from './sources'
+import { SOURCES, INSTRUMENTS, sourceForRegulator, sourceForFramework } from './sources'
 import { ist, NOW_MS, minsFromNow, daysFromNow } from '@/lib/time'
 
 const iso = (d: Date) => d.toISOString()
@@ -1038,23 +1038,39 @@ function linkSources() {
 
   // Obligations: regulator default + title-specific instruments.
   for (const o of obligations) {
-    const refs: string[] = [sourceForRegulator(o.regulator)]
     const t = o.title.toLowerCase()
-    if (o.regulator === 'PFRDA') {
-      if (/invest|nav|aum|exposure|committee/.test(t)) refs.push('SRC-PFRDA-INV-2025')
-      if (/cyber|ics|incident|self-assessment/.test(t)) refs.push('SRC-PFRDA-ICS-2024', 'SRC-PFRDA-ICS-2025')
-    } else if (o.regulator === 'GST') {
-      refs.push('SRC-CGST-50')
-    } else if (o.regulator === 'CERT-In') {
-      refs.push('SRC-ITACT-70B')
-    } else if (o.regulator === 'Companies Act') {
-      if (/mgt-7|annual return/.test(t)) refs.push('SRC-CA-92-5', 'SRC-CA-403')
-      else if (/financial|aoc/.test(t)) refs.push('SRC-CA-137-3', 'SRC-CA-403')
-      else refs.push('SRC-CA-92-5')
-    } else if (o.regulator === 'Labour') {
-      if (/pf|esi|provident/.test(t)) refs.push('SRC-EPF-14B', 'SRC-EPF-7Q')
+    let refs: string[]
+    if (o.regulator === 'Labour') {
+      // Professional tax → the state PT Act (not the EPF Act — corrects the
+      // earlier mislink); PF/ESI → the EPF & MP Act provisions.
+      refs = /professional tax|profession/.test(t)
+        ? ['SRC-PT-3', 'SRC-PT-6']
+        : ['SRC-EPF-6', 'SRC-EPF-14B', 'SRC-EPF-7Q']
+    } else {
+      refs = [sourceForRegulator(o.regulator)]
+      if (o.regulator === 'PFRDA') {
+        if (/invest|nav|aum|exposure|committee/.test(t)) refs.push('SRC-PFRDA-INV-2025')
+        if (/cyber|ics|incident|self-assessment/.test(t)) refs.push('SRC-PFRDA-ICS-2024', 'SRC-PFRDA-ICS-2025')
+      } else if (o.regulator === 'GST') {
+        refs.push('SRC-CGST-50')
+      } else if (o.regulator === 'CERT-In') {
+        refs.push('SRC-ITACT-70B')
+      } else if (o.regulator === 'Companies Act') {
+        if (/mgt-7|annual return/.test(t)) refs.push('SRC-CA-92-5', 'SRC-CA-403')
+        else if (/financial|aoc/.test(t)) refs.push('SRC-CA-137-3', 'SRC-CA-403')
+        else refs.push('SRC-CA-92-5')
+      }
     }
     o.sourceRefs = uniq(refs)
+  }
+
+  // Provision applicability reviews — the obligations the ingestion mapped to
+  // each provision are the reverse of o.sourceRefs (computed from real ids).
+  for (const s of SOURCES) {
+    if (!s.review) continue
+    s.review.recommendedObligationIds = obligations
+      .filter((o) => o.sourceRefs?.includes(s.id))
+      .map((o) => o.id)
   }
 
   // Policies: by category, leading with the closest instrument/standard.
@@ -1246,6 +1262,7 @@ export const WORLD = {
   activity,
   queue,
   sources: SOURCES,
+  instruments: INSTRUMENTS,
 }
 
 export type World = typeof WORLD

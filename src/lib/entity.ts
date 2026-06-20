@@ -1,7 +1,7 @@
 // Map an entity id to its detail route + a human label, for cross-references.
 import {
   getRisk, getControl, getObligation, getIncident, getPolicy, getIssue,
-  getEvidence, getAudit, getRegChange, getDsar, getSource,
+  getEvidence, getAudit, getRegChange, getDsar, getSource, getInstrument,
 } from '@/data'
 
 export interface EntityRef {
@@ -23,7 +23,8 @@ export function resolveEntity(id: string): EntityRef {
   if (id.startsWith('RCM-')) return { id, route: `/reg-change/${id}`, label: getRegChange(id)?.summary ?? id, type: 'Reg-change' }
   if (id.startsWith('DSAR-')) return { id, route: `/dpdp/dsar/${id}`, label: getDsar(id)?.type ?? id, type: 'DSAR' }
   if (id.startsWith('DA-')) return { id, route: '/dpdp', label: id, type: 'Data asset' }
-  // Sources have no dedicated route — the viewer is a drawer (see SourceRef).
-  if (id.startsWith('SRC-')) return { id, route: '#source', label: getSource(id)?.documentTitle ?? id, type: 'Source' }
+  // Instruments have a full-page route; provisions open the drawer (see SourceRef).
+  if (id.startsWith('INST-')) return { id, route: `/sources/${id}`, label: getInstrument(id)?.title ?? id, type: 'Instrument' }
+  if (id.startsWith('SRC-')) return { id, route: '#source', label: getSource(id)?.title ?? id, type: 'Source' }
   return { id, route: '/', label: id, type: 'Item' }
 }

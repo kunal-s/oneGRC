@@ -6,6 +6,7 @@ import {
   getRisk, getControl, getObligation, getIncident, getPolicy, getSource,
 } from '@/data'
 import { resolveEntity } from '@/lib/entity'
+import { refDisplayTitle } from '@/lib/sources'
 import type { SourceReference } from '@/types'
 
 export interface ContextLink {
@@ -42,7 +43,7 @@ function toSources(ids: string[] = []): ContextSource[] {
   return ids
     .map((id) => getSource(id))
     .filter((s): s is SourceReference => Boolean(s))
-    .map((s) => ({ id: s.id, documentTitle: s.documentTitle, citation: s.citation, snippet: s.sourceExtract }))
+    .map((s) => ({ id: s.id, documentTitle: refDisplayTitle(s), citation: s.citation, snippet: s.sourceExtract }))
 }
 
 /** Serialize any supported record (id-prefixed) into copilot context, or null. */

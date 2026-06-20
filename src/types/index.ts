@@ -19,12 +19,14 @@ export type Regulator =
 
 export type LineOfDefence = '1LoD' | '2LoD' | '3LoD'
 
-// ── Provenance (Epic 1 — Source and Provenance) ─────────────────────────────
-// THE single rich provenance object a record derives from. Held inline so a
-// future document repository slots behind the same type. ids use the SRC-
-// prefix. Reused by Obligation, Policy, Control framework mappings, future
-// penalty/consequence tiers and the future Compliance Intake record (Epic 14).
-// There is deliberately no second source model anywhere.
+// ── Provenance (Epic 1 — Source and Provenance; normalized in Epic 15) ───────
+// THE single source model, normalized into a parent SourceInstrument (the legal
+// instrument — Act / Rules / Circular / Standard) and provision-level
+// SourceReference children (the exact section / rule / clause). Held inline so a
+// future document repository slots behind the same types. Reused by Obligation,
+// Policy, Control framework mappings, future penalty/consequence tiers and the
+// future Compliance Intake record (Epic 14). There is deliberately no second
+// source model anywhere.
 export type InstrumentType =
   | 'Act'
   | 'Rules'
@@ -35,15 +37,18 @@ export type InstrumentType =
   | 'Standard'
   | 'Circular'
 
-// Where the citation was sourced from.
+// Where the instrument was sourced from.
 export type SourceChannel =
   | 'Regulator site'
   | 'Official Gazette'
   | 'Content feed'
   | 'Manual upload'
 
-// The session-held artifact behind a source (a future repository slots behind
-// this). file pickers are mocked (A10) — "replace with newer version" is a toast.
+export type InstrumentStatus = 'In force' | 'Superseded' | 'Draft' | 'Repealed'
+
+// The session-held artifact behind an instrument (a future repository slots
+// behind this). file pickers are mocked (A10) — "replace with newer version"
+// is a toast.
 export interface AttachedDocument {
   filename: string // 'PFRDA-MC-Investment-Guidelines-10Dec2025.pdf'
   label: string // 'Master Circular (PDF)'
@@ -51,24 +56,63 @@ export interface AttachedDocument {
   sizeLabel: string // '412 KB' (non-round, A4)
 }
 
-export interface SourceReference {
-  id: string // 'SRC-PFRDA-INV-2025'
-  documentTitle: string // full descriptive title (kept)
-  authority: string // issuing authority, e.g. 'PFRDA' | 'MCA' | 'CERT-In' | 'CBIC' | 'EPFO' | 'ISO'
-  instrument: string // canonical instrument name, e.g. 'Companies Act, 2013'
+// Parent — the legal instrument. Instrument-level fields live here once.
+export interface SourceInstrument {
+  id: string // 'INST-EPF-1952'
+  title: string // 'Employees’ Provident Funds & Miscellaneous Provisions Act, 1952'
+  authority: string // issuing authority, e.g. 'EPFO' | 'MCA' | 'PFRDA' | 'CBIC' | 'ISO'
+  regulator?: Regulator // mapped Regulator where one applies
   instrumentType: InstrumentType
-  provision: string // PINNED — the exact section, rule, clause or paragraph (not document-level)
-  citation: string // formal full citation line (kept; used by SourceRef cards)
   referenceNumber?: string // circular / notification number, only where genuinely known
   dateOfIssue: string // ISO
   effectiveDate?: string // ISO — distinct from any due date
   version?: string // 'v2025.12' / '2022 edition'
-  supersedesId?: string // the prior SourceReference this replaces
-  supersededById?: string // reverse link — set on the older record
+  supersedesId?: string // the prior SourceInstrument this replaces
+  supersededById?: string // reverse link — set on the older instrument
   sourceChannel: SourceChannel
   sourceLink: string // URL
-  sourceExtract: string // short real excerpt of the cited provision
   attachedDocument?: AttachedDocument
+  status: InstrumentStatus
+}
+
+// Child — a pinned provision of one instrument, with its extract and the
+// applicability review the ingestion process proposes.
+export interface SourceReference {
+  id: string // 'SRC-EPF-14B' — keeps the SRC- prefix; cited by obligations/policies/controls
+  instrumentId: string // parent SourceInstrument
+  provision: string // PINNED — the exact section, rule, clause or paragraph
+  title: string // short provision title, e.g. 'Section 14B — Damages for default'
+  citation: string // formal full citation line
+  sourceExtract: string // short real excerpt of the cited provision
+  review?: ApplicabilityReview // per-provision applicability review (statutory provisions)
+}
+
+// A scripted, deterministic action from an agent (here, the ingestion agent).
+// Carries provenance + confidence; never a model API call.
+export interface AgentAction {
+  agent: string // 'Ingestion Agent'
+  recommendation: string // the proposed outcome, plain English
+  confidence: number // 0–100 (non-round, A4)
+  at: string // ISO — when the agent produced it
+  basis: string // provenance — what the recommendation was derived from
+}
+
+export type ReviewState =
+  | 'Recommended'
+  | 'Confirmed applies'
+  | 'Not applicable'
+  | 'Needs expert opinion'
+  | 'Under internal review'
+
+// The applicability review of one provision: what the ingestion agent proposed,
+// and the Compliance maker-checker decision over it.
+export interface ApplicabilityReview {
+  recommendedObligationIds: string[] // obligations the ingestion mapped to this provision
+  aiRecommendation: AgentAction // the ingestion agent's recommendation (the maker)
+  reviewState: ReviewState
+  reviewer?: string // person id (the checker — Compliance / Company Secretary)
+  reviewedAt?: string // ISO
+  rationale?: string // the reviewer's reason
 }
 
 export interface Person {
