@@ -20,26 +20,55 @@ export type Regulator =
 export type LineOfDefence = '1LoD' | '2LoD' | '3LoD'
 
 // ── Provenance (Epic 1 — Source and Provenance) ─────────────────────────────
-// A real statutory/standard instrument a record derives from. Held inline so a
-// future document repository slots behind the same type. ids use the SRC- prefix.
-export type SourceType =
-  | 'Master Circular'
+// THE single rich provenance object a record derives from. Held inline so a
+// future document repository slots behind the same type. ids use the SRC-
+// prefix. Reused by Obligation, Policy, Control framework mappings, future
+// penalty/consequence tiers and the future Compliance Intake record (Epic 14).
+// There is deliberately no second source model anywhere.
+export type InstrumentType =
   | 'Act'
   | 'Rules'
+  | 'Regulation'
+  | 'Master Circular'
+  | 'Notification'
   | 'Direction'
   | 'Standard'
-  | 'Notification'
   | 'Circular'
+
+// Where the citation was sourced from.
+export type SourceChannel =
+  | 'Regulator site'
+  | 'Official Gazette'
+  | 'Content feed'
+  | 'Manual upload'
+
+// The session-held artifact behind a source (a future repository slots behind
+// this). file pickers are mocked (A10) — "replace with newer version" is a toast.
+export interface AttachedDocument {
+  filename: string // 'PFRDA-MC-Investment-Guidelines-10Dec2025.pdf'
+  label: string // 'Master Circular (PDF)'
+  capturedAt: string // ISO — when the artifact was attached this session
+  sizeLabel: string // '412 KB' (non-round, A4)
+}
 
 export interface SourceReference {
   id: string // 'SRC-PFRDA-INV-2025'
-  documentTitle: string // 'PFRDA Master Circular on Investment Guidelines for NPS Schemes'
-  authority: string // instrument/issuing authority, e.g. 'PFRDA' | 'MCA' | 'CERT-In' | 'CBIC' | 'EPFO' | 'ISO'
-  citation: string // exact section/clause/paragraph reference
-  snippet: string // short real excerpt of the instrument
-  publishedDate: string // ISO
-  url: string
-  sourceType: SourceType
+  documentTitle: string // full descriptive title (kept)
+  authority: string // issuing authority, e.g. 'PFRDA' | 'MCA' | 'CERT-In' | 'CBIC' | 'EPFO' | 'ISO'
+  instrument: string // canonical instrument name, e.g. 'Companies Act, 2013'
+  instrumentType: InstrumentType
+  provision: string // PINNED — the exact section, rule, clause or paragraph (not document-level)
+  citation: string // formal full citation line (kept; used by SourceRef cards)
+  referenceNumber?: string // circular / notification number, only where genuinely known
+  dateOfIssue: string // ISO
+  effectiveDate?: string // ISO — distinct from any due date
+  version?: string // 'v2025.12' / '2022 edition'
+  supersedesId?: string // the prior SourceReference this replaces
+  supersededById?: string // reverse link — set on the older record
+  sourceChannel: SourceChannel
+  sourceLink: string // URL
+  sourceExtract: string // short real excerpt of the cited provision
+  attachedDocument?: AttachedDocument
 }
 
 export interface Person {
@@ -111,6 +140,8 @@ export interface Obligation {
   linkedRegChange?: string
   reference: string
   sourceRefs?: string[] // SourceReference ids — the instrument(s) this obligation derives from
+  requirement?: string // plain-English outcome the provision imposes — shown as "What this requires"
+  applicability?: string // whether/why it applies to SPF + the basis — shown as "Applies because"
 }
 
 export interface RegulatorTrack {

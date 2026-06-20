@@ -494,25 +494,33 @@ function buildIncidents(): Incident[] {
 }
 
 // ── Obligations (180; 9 overdue, 23 due ≤30 days) ───────────────────────────
-const OBLIGATION_DEFS: { reg: Regulator; title: string; freq: string; ref: string; team: string[] }[] = [
-  { reg: 'PFRDA', title: 'Quarterly compliance return (Annexure)', freq: 'Quarterly', ref: 'PFRDA/2025/05/ICS/01', team: ['anjali', 'arvind'] },
-  { reg: 'PFRDA', title: 'Monthly NAV & AUM statement', freq: 'Monthly', ref: 'PFRDA-NAV', team: ['arvind', 'sanjay'] },
-  { reg: 'PFRDA', title: 'Half-yearly ICS self-assessment', freq: 'Half-yearly', ref: 'ICS-50', team: ['anjali', 'rajesh'] },
-  { reg: 'PFRDA', title: 'Annual cyber-security audit submission', freq: 'Annual', ref: 'ICS-50', team: ['rajesh', 'sunita'] },
-  { reg: 'PFRDA', title: 'Investment committee minutes filing', freq: 'Quarterly', ref: 'ICS-46', team: ['arvind', 'vikram'] },
-  { reg: 'PFRDA', title: 'Exposure-limit breach report', freq: 'Event-based', ref: 'ICS-40', team: ['sanjay', 'arvind'] },
-  { reg: 'CERT-In', title: 'Cyber incident summary report', freq: 'Monthly', ref: '20(3)/2022', team: ['rajesh', 'karthik'] },
-  { reg: 'CERT-In', title: 'Log retention & NTP sync attestation', freq: 'Quarterly', ref: '20(3)/2022', team: ['karthik', 'rohan'] },
-  { reg: 'DPDP', title: 'Consent records reconciliation', freq: 'Quarterly', ref: 'DPDP-Rules-2025', team: ['priya', 'anjali'] },
-  { reg: 'DPDP', title: 'DSAR fulfilment status report', freq: 'Monthly', ref: 'DPDP-Rules-2025', team: ['priya'] },
-  { reg: 'GST', title: 'GSTR-3B monthly return', freq: 'Monthly', ref: 'GSTR-3B', team: ['deepa'] },
-  { reg: 'GST', title: 'GSTR-1 outward supplies', freq: 'Monthly', ref: 'GSTR-1', team: ['deepa'] },
-  { reg: 'GST', title: 'GSTR-9C reconciliation statement', freq: 'Annual', ref: 'GSTR-9C', team: ['deepa'] },
-  { reg: 'Labour', title: 'PF & ESI monthly challan', freq: 'Monthly', ref: 'EPFO', team: ['farhan'] },
-  { reg: 'Labour', title: 'Professional tax remittance', freq: 'Monthly', ref: 'PT', team: ['farhan'] },
-  { reg: 'Companies Act', title: 'Board meeting & minutes', freq: 'Quarterly', ref: 'CA-2013-173', team: ['vikram'] },
-  { reg: 'Companies Act', title: 'Audit committee meeting', freq: 'Quarterly', ref: 'CA-2013-177', team: ['vikram', 'sunita'] },
-  { reg: 'Companies Act', title: 'Annual return MGT-7 filing', freq: 'Annual', ref: 'MGT-7', team: ['vikram', 'farhan'] },
+const OBLIGATION_DEFS: {
+  reg: Regulator
+  title: string
+  freq: string
+  ref: string
+  team: string[]
+  requirement: string
+  applicability: string
+}[] = [
+  { reg: 'PFRDA', title: 'Quarterly compliance return (Annexure)', freq: 'Quarterly', ref: 'PFRDA/2025/05/ICS/01', team: ['anjali', 'arvind'], requirement: 'File the quarterly compliance Annexure with PFRDA within the prescribed window, certified by the Compliance Officer.', applicability: 'SPF is a PFRDA-registered NPS Pension Fund Manager (Category I Regulated Entity) and must report on the PFRDA ICS compliance cadence.' },
+  { reg: 'PFRDA', title: 'Monthly NAV & AUM statement', freq: 'Monthly', ref: 'PFRDA-NAV', team: ['arvind', 'sanjay'], requirement: 'Submit the monthly scheme-wise NAV and AUM statement to PFRDA and the NPS Trust, reconciled to the CRA records.', applicability: 'SPF manages NPS Scheme E/C/G/A across Tier I & II and must report scheme NAV/AUM as a PFM.' },
+  { reg: 'PFRDA', title: 'Half-yearly ICS self-assessment', freq: 'Half-yearly', ref: 'ICS-50', team: ['anjali', 'rajesh'], requirement: 'Complete the half-yearly Information & Cyber Security self-assessment against the PFRDA ICS Guidelines and place it before the board.', applicability: 'As a PFRDA intermediary, SPF must maintain and self-attest a board-approved ICS posture aligned to ISO 27001 / NIST CSF.' },
+  { reg: 'PFRDA', title: 'Annual cyber-security audit submission', freq: 'Annual', ref: 'ICS-50', team: ['rajesh', 'sunita'], requirement: 'Submit the annual cyber-security audit report (CERT-In empanelled auditor) to PFRDA with the closure status of findings.', applicability: 'PFRDA ICS Guidelines require regulated intermediaries to undergo and file an annual independent IS audit.' },
+  { reg: 'PFRDA', title: 'Investment committee minutes filing', freq: 'Quarterly', ref: 'ICS-46', team: ['arvind', 'vikram'], requirement: 'Record and file the Investment Committee minutes evidencing the periodic review of the approved investment universe.', applicability: 'The PFRDA Master Circular on Investment Guidelines requires SPF to review its portfolio and universe and minute it at the Investment Committee.' },
+  { reg: 'PFRDA', title: 'Exposure-limit breach report', freq: 'Event-based', ref: 'ICS-40', team: ['sanjay', 'arvind'], requirement: 'Report any breach of prescribed investment exposure limits to PFRDA, with the cause and the corrective action taken.', applicability: 'SPF’s scheme portfolios are bound by PFRDA investment exposure limits; breaches are reportable events for a PFM.' },
+  { reg: 'CERT-In', title: 'Cyber incident summary report', freq: 'Monthly', ref: '20(3)/2022', team: ['rajesh', 'karthik'], requirement: 'Report cyber incidents to CERT-In within six hours of detection and provide the periodic incident summary.', applicability: 'As a body corporate operating ICT systems in India, SPF is bound by CERT-In Direction 20(3)/2022.' },
+  { reg: 'CERT-In', title: 'Log retention & NTP sync attestation', freq: 'Quarterly', ref: '20(3)/2022', team: ['karthik', 'rohan'], requirement: 'Maintain logs for a rolling 180 days within Indian jurisdiction and keep ICT system clocks synchronised to NTP; attest the same.', applicability: 'CERT-In Direction 20(3)/2022 mandates in-India 180-day log retention and NTP synchronisation for SPF’s systems.' },
+  { reg: 'DPDP', title: 'Consent records reconciliation', freq: 'Quarterly', ref: 'DPDP-Rules-2025', team: ['priya', 'anjali'], requirement: 'Reconcile the consent ledger for subscriber personal data and evidence a valid lawful basis for each processing purpose.', applicability: 'SPF is a Data Fiduciary processing PRAN/KYC/nominee data and must maintain consent under the DPDP Act, 2023 r/w DPDP Rules, 2025.' },
+  { reg: 'DPDP', title: 'DSAR fulfilment status report', freq: 'Monthly', ref: 'DPDP-Rules-2025', team: ['priya'], requirement: 'Track and report Data Principal request (access/correction/erasure) fulfilment within the prescribed timelines.', applicability: 'As a Data Fiduciary, SPF must honour Data Principal rights for subscriber personal data under the DPDP framework.' },
+  { reg: 'GST', title: 'GSTR-3B monthly return', freq: 'Monthly', ref: 'GSTR-3B', team: ['deepa'], requirement: 'File the monthly GSTR-3B summary return and discharge the net tax liability by the due date.', applicability: 'SPF is a GST-registered person and must furnish GSTR-3B under Section 39 of the CGST Act, 2017.' },
+  { reg: 'GST', title: 'GSTR-1 outward supplies', freq: 'Monthly', ref: 'GSTR-1', team: ['deepa'], requirement: 'File the monthly GSTR-1 statement of outward supplies (management/advisory fees) by the due date.', applicability: 'SPF is a GST-registered person and must report outward supplies under Section 37 / Section 39 of the CGST Act, 2017.' },
+  { reg: 'GST', title: 'GSTR-9C reconciliation statement', freq: 'Annual', ref: 'GSTR-9C', team: ['deepa'], requirement: 'File the annual GSTR-9 return with the GSTR-9C reconciliation statement reconciling the books to the returns.', applicability: 'SPF’s aggregate turnover crosses the GSTR-9C threshold, attracting the annual reconciliation requirement.' },
+  { reg: 'Labour', title: 'PF & ESI monthly challan', freq: 'Monthly', ref: 'EPFO', team: ['farhan'], requirement: 'Remit employee/employer provident-fund contributions via the monthly ECR challan by the statutory due date.', applicability: 'SPF is a covered establishment under the EPF & MP Act, 1952; late deposit attracts damages (s.14B) and interest (s.7Q).' },
+  { reg: 'Labour', title: 'Professional tax remittance', freq: 'Monthly', ref: 'PT', team: ['farhan'], requirement: 'Deduct and remit state professional tax on employee salaries and file the periodic PT return.', applicability: 'SPF employs staff in states levying professional tax and must deduct and deposit it as an employer.' },
+  { reg: 'Companies Act', title: 'Board meeting & minutes', freq: 'Quarterly', ref: 'CA-2013-173', team: ['vikram'], requirement: 'Convene at least four board meetings a year with the maximum gap prescribed, and record and sign the minutes.', applicability: 'SPF is a company incorporated under the Companies Act, 2013 and bound by the Section 173 board-cadence requirement.' },
+  { reg: 'Companies Act', title: 'Audit committee meeting', freq: 'Quarterly', ref: 'CA-2013-177', team: ['vikram', 'sunita'], requirement: 'Hold the Audit Committee meetings, review the financials and internal controls, and minute the proceedings.', applicability: 'SPF meets the Section 177 thresholds and must constitute and operate an Audit Committee.' },
+  { reg: 'Companies Act', title: 'Annual return MGT-7 filing', freq: 'Annual', ref: 'MGT-7', team: ['vikram', 'farhan'], requirement: 'File the annual return in Form MGT-7 with the Registrar of Companies within the period specified after the AGM.', applicability: 'Section 92(5) of the Companies Act, 2013 requires SPF to file its annual return; delay attracts a per-day penalty.' },
 ]
 
 function obligationCode(reg: Regulator): string {
@@ -577,6 +585,8 @@ function buildObligations(): Obligation[] {
       },
       evidence: [],
       reference: def.ref,
+      requirement: def.requirement,
+      applicability: def.applicability,
     })
   }
   return obligations
