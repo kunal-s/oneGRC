@@ -22,7 +22,7 @@ export type LineOfDefence = '1LoD' | '2LoD' | '3LoD'
 // ── Provenance (Epic 1 — Source and Provenance; normalized in Epic 15) ───────
 // THE single source model, normalized into a parent SourceInstrument (the legal
 // instrument — Act / Rules / Circular / Standard) and provision-level
-// SourceReference children (the exact section / rule / clause). Held inline so a
+// SourceProvision children (the exact section / rule / clause). Held inline so a
 // future document repository slots behind the same types. Reused by Obligation,
 // Policy, Control framework mappings, future penalty/consequence tiers and the
 // future Compliance Intake record (Epic 14). There is deliberately no second
@@ -75,20 +75,9 @@ export interface SourceInstrument {
   status: InstrumentStatus
 }
 
-// Child — a pinned provision of one instrument, with its extract and the
-// applicability review the ingestion process proposes.
-export interface SourceReference {
-  id: string // 'SRC-EPF-14B' — keeps the SRC- prefix; cited by obligations/policies/controls
-  instrumentId: string // parent SourceInstrument
-  provision: string // PINNED — the exact section, rule, clause or paragraph
-  title: string // short provision title, e.g. 'Section 14B — Damages for default'
-  citation: string // formal full citation line
-  sourceExtract: string // short real excerpt of the cited provision
-  review?: ApplicabilityReview // per-provision applicability review (statutory provisions)
-}
-
 // A scripted, deterministic action from an agent (here, the ingestion agent).
-// Carries provenance + confidence; never a model API call.
+// Carries provenance + confidence; never a model API call. The minimal Epic 7
+// slice — the fuller agentic workflow comes later.
 export interface AgentAction {
   agent: string // 'Ingestion Agent'
   recommendation: string // the proposed outcome, plain English
@@ -97,22 +86,56 @@ export interface AgentAction {
   basis: string // provenance — what the recommendation was derived from
 }
 
+// One penalty/consequence tier of a provision, each sourced. Its severity feeds
+// the deterministic severity-from-penalty (the minimal Epic 4 slice).
+export interface PenaltyTier {
+  trigger: string // 'Late filing of the annual return'
+  consequence: string // '₹100 per day, max ₹2,00,000'
+  severity: Severity // gravity of this tier
+  sourceRef: string // SourceProvision id stating this penalty
+}
+
+// The per-provision review lifecycle (Story 15.6): the ingestion recommends,
+// Compliance reviews, then it is approved-and-tracked, routed for internal
+// review, or sent to a specialist.
 export type ReviewState =
   | 'Recommended'
-  | 'Confirmed applies'
-  | 'Not applicable'
-  | 'Needs expert opinion'
-  | 'Under internal review'
+  | 'Under review'
+  | 'Approved and saved'
+  | 'Needs internal review'
+  | 'Needs specialist'
 
-// The applicability review of one provision: what the ingestion agent proposed,
-// and the Compliance maker-checker decision over it.
-export interface ApplicabilityReview {
-  recommendedObligationIds: string[] // obligations the ingestion mapped to this provision
-  aiRecommendation: AgentAction // the ingestion agent's recommendation (the maker)
-  reviewState: ReviewState
+// Child — a section/clause of one instrument (the renamed, enriched Epic 1
+// SourceReference). Owns the per-section structured compliance fields and the
+// review-to-track lifecycle. One model, reused by Epic 14 intake.
+export interface SourceProvision {
+  id: string // 'SRC-EPF-14B' — keeps the SRC- prefix; cited by obligations/policies/controls
+  instrumentId: string // parent SourceInstrument
+  provision: string // PINNED — the exact section, rule, clause or paragraph
+  title: string // short provision title, e.g. 'Section 14B — Damages for default'
+  citation: string // formal full citation line
+  sourceExtract: string // short real excerpt of the cited provision
+  sourceLink?: string // optional per-provision deep link (else the instrument's)
+  attachedDocument?: AttachedDocument // optional per provision
+  // Structured compliance fields (set on statutory provisions; absent on pure
+  // framework-standard references).
+  nameOfCompliance?: string // 'PF contribution — damages on default'
+  briefDescription?: string // one-line plain-English description
+  keyParts?: string[] // the key obligations/parts of the section
+  penaltyTiers?: PenaltyTier[] // consequence tiers, each sourced
+  severity?: Severity // derived from the penalty tiers (severity-from-penalty)
+  frequency?: string // 'Monthly' | 'Quarterly' | 'Annual' | 'Event-based'
+  nextDue?: string // ISO — next due date of the return, where applicable
+  // Ingestion recommendation + review record (the maker-checker over the AI).
+  aiRecommendation?: AgentAction
+  recommendedObligationIds: string[] // obligations the ingestion mapped here (filled in world.ts)
+  reviewState?: ReviewState
   reviewer?: string // person id (the checker — Compliance / Company Secretary)
   reviewedAt?: string // ISO
   rationale?: string // the reviewer's reason
+  // On approval (Save to controls) — the tracked records this section produced.
+  linkedObligationId?: string
+  linkedControlId?: string
 }
 
 export interface Person {
@@ -168,7 +191,7 @@ export interface Control {
   ccmRuleId?: string
   description: string
   frequency: string
-  sourceRefs?: string[] // SourceReference ids — provenance for this control
+  sourceRefs?: string[] // SourceProvision ids — provenance for this control
 }
 
 export interface Obligation {
@@ -183,7 +206,7 @@ export interface Obligation {
   evidence: string[]
   linkedRegChange?: string
   reference: string
-  sourceRefs?: string[] // SourceReference ids — the instrument(s) this obligation derives from
+  sourceRefs?: string[] // SourceProvision ids — the instrument(s) this obligation derives from
   requirement?: string // plain-English outcome the provision imposes — shown as "What this requires"
   applicability?: string // whether/why it applies to SPF + the basis — shown as "Applies because"
 }
@@ -237,7 +260,7 @@ export interface Policy {
   mappedControls: string[]
   status: 'Published' | 'In review' | 'Draft'
   category: string
-  sourceRefs?: string[] // SourceReference ids — the instrument(s) this policy derives from
+  sourceRefs?: string[] // SourceProvision ids — the instrument(s) this policy derives from
 }
 
 export interface Issue {

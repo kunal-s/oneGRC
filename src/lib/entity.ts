@@ -23,8 +23,9 @@ export function resolveEntity(id: string): EntityRef {
   if (id.startsWith('RCM-')) return { id, route: `/reg-change/${id}`, label: getRegChange(id)?.summary ?? id, type: 'Reg-change' }
   if (id.startsWith('DSAR-')) return { id, route: `/dpdp/dsar/${id}`, label: getDsar(id)?.type ?? id, type: 'DSAR' }
   if (id.startsWith('DA-')) return { id, route: '/dpdp', label: id, type: 'Data asset' }
-  // Instruments have a full-page route; provisions open the drawer (see SourceRef).
+  // Instruments and their sections both have full-page routes in the Source
+  // Library; the Epic 1 drawer (SourceRef) remains the quick view.
   if (id.startsWith('INST-')) return { id, route: `/sources/${id}`, label: getInstrument(id)?.title ?? id, type: 'Instrument' }
-  if (id.startsWith('SRC-')) return { id, route: '#source', label: getSource(id)?.title ?? id, type: 'Source' }
+  if (id.startsWith('SRC-')) return { id, route: `/sources/section/${id}`, label: getSource(id)?.title ?? id, type: 'Section' }
   return { id, route: '/', label: id, type: 'Item' }
 }

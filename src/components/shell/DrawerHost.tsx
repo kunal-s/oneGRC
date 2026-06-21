@@ -33,11 +33,12 @@ export function DrawerHost() {
   const producedIds = src ? citingRecords(src.id) : []
   const supersedes = inst?.supersedesId ? getInstrument(inst.supersedesId) : undefined
   const supersededBy = inst?.supersededById ? getInstrument(inst.supersededById) : undefined
-  // "Open full source" deep-links into the full-page Source Library (Epic 15).
+  // "Open full source" deep-links into the full-page Source Library section
+  // detail (Epic 15); the Epic 1 drawer is retained as the quick view.
   const openInLibrary = () => {
-    if (!inst) return
+    if (!src) return
     close()
-    navigate(`/sources/${inst.id}`)
+    navigate(`/sources/section/${src.id}`)
   }
   const sourceBody = src && inst && (
     <div className="space-y-4">

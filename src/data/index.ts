@@ -7,7 +7,7 @@ import { WORLD } from './world'
 import { SOURCES_BY_ID, INSTRUMENTS_BY_ID } from './sources'
 import type {
   Risk, Control, Obligation, Incident, Policy, Issue, Evidence, Audit, RegulatoryChange, DataAsset, Dsar,
-  SourceReference, SourceInstrument,
+  SourceProvision, SourceInstrument,
 } from '@/types'
 
 // id → entity lookups
@@ -36,7 +36,7 @@ export const getAudit = (id: string): Audit | undefined => idx.audit.get(id)
 export const getRegChange = (id: string): RegulatoryChange | undefined => idx.regChange.get(id)
 export const getDataAsset = (id: string): DataAsset | undefined => idx.dataAsset.get(id)
 export const getDsar = (id: string): Dsar | undefined => idx.dsar.get(id)
-export const getSource = (id: string): SourceReference | undefined => SOURCES_BY_ID[id]
+export const getSource = (id: string): SourceProvision | undefined => SOURCES_BY_ID[id]
 export const getInstrument = (id: string): SourceInstrument | undefined => INSTRUMENTS_BY_ID[id]
 
 // the marquee incident

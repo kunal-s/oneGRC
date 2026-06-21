@@ -18,7 +18,8 @@ import { ObligationDetail } from '@/pages/ObligationDetail'
 import { RegChange } from '@/pages/RegChange'
 import { RegChangeDetail } from '@/pages/RegChangeDetail'
 import { Sources } from '@/pages/Sources'
-import { SourceDetail } from '@/pages/SourceDetail'
+import { SourceInstrumentDetail } from '@/pages/SourceInstrumentDetail'
+import { SourceSectionDetail } from '@/pages/SourceSectionDetail'
 import { PfrdaPack } from '@/pages/PfrdaPack'
 import { Dpdp } from '@/pages/Dpdp'
 import { DsarDetail } from '@/pages/DsarDetail'
@@ -53,7 +54,8 @@ export default function App() {
         <Route path="/reg-change" element={<RegChange />} />
         <Route path="/reg-change/:id" element={<RegChangeDetail />} />
         <Route path="/sources" element={<Sources />} />
-        <Route path="/sources/:id" element={<SourceDetail />} />
+        <Route path="/sources/section/:id" element={<SourceSectionDetail />} />
+        <Route path="/sources/:id" element={<SourceInstrumentDetail />} />
         <Route path="/pfrda" element={<PfrdaPack />} />
         <Route path="/dpdp" element={<Dpdp />} />
         <Route path="/dpdp/dsar/:id" element={<DsarDetail />} />

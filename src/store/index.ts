@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { ReviewState, RoleKey } from '@/types'
 import { ROLES } from '@/data/people'
-import type { ReviewOverride, ReviewOverrides } from '@/lib/sources'
+import { getSource } from '@/data'
+import type { ProvisionOverride, ReviewOverrides } from '@/lib/sources'
 import { NOW } from '@/lib/time'
 
 export interface Toast {
@@ -51,13 +52,19 @@ interface AppState {
   addArtifact: (a: Omit<Artifact, 'id'>) => string
   getArtifact: (id: string) => Artifact | undefined
 
-  // Applicability review (Epic 15) — session overrides on provision review state.
+  // Source Library review/approve lifecycle (Epic 15) — session overrides on a
+  // provision's review state and the tracked records an approval produced.
   reviewOverrides: ReviewOverrides
-  setReviewState: (provisionId: string, state: ReviewState, rationale?: string) => void
+  // Route a section to internal review / specialist (no records produced).
+  reviewProvision: (provisionId: string, state: ReviewState, rationale?: string) => void
+  // Save to controls — approve and track: creates the tracked obligation +
+  // Control Library entry, returns their ids for the toast/navigation.
+  approveProvision: (provisionId: string, rationale?: string) => { obligationId?: string; controlId: string }
 }
 
 let toastSeq = 0
 let artifactSeq = 0
+let savedControlSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'CRO',
@@ -90,9 +97,27 @@ export const useApp = create<AppState>((set, get) => ({
   getArtifact: (id) => get().artifacts.find((x) => x.id === id),
 
   reviewOverrides: {},
-  setReviewState: (provisionId, state, rationale) => {
+  reviewProvision: (provisionId, state, rationale) => {
     const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
-    const override: ReviewOverride = { reviewState: state, reviewer, reviewedAt: NOW.toISOString(), rationale }
+    const override: ProvisionOverride = { reviewState: state, reviewer, reviewedAt: NOW.toISOString(), rationale }
+    set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: { ...s.reviewOverrides[provisionId], ...override } } }))
+  },
+  approveProvision: (provisionId, rationale) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const prov = getSource(provisionId)
+    // The tracked obligation is the one the ingestion recommended; the control
+    // is a new Control Library entry (session-held, A10).
+    const obligationId = prov?.linkedObligationId ?? prov?.recommendedObligationIds?.[0]
+    const controlId = prov?.linkedControlId ?? `CTRL-NEW-${String(++savedControlSeq).padStart(3, '0')}`
+    const override: ProvisionOverride = {
+      reviewState: 'Approved and saved',
+      reviewer,
+      reviewedAt: NOW.toISOString(),
+      rationale: rationale ?? 'Approved and saved to controls; tracked obligation created.',
+      linkedObligationId: obligationId,
+      linkedControlId: controlId,
+    }
     set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: override } }))
+    return { obligationId, controlId }
   },
 }))

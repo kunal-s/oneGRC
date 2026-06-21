@@ -7,7 +7,7 @@ import {
 } from '@/data'
 import { resolveEntity } from '@/lib/entity'
 import { refDisplayTitle } from '@/lib/sources'
-import type { SourceReference } from '@/types'
+import type { SourceProvision } from '@/types'
 
 export interface ContextLink {
   id: string
@@ -42,7 +42,7 @@ function link(id: string, relation: string): ContextLink {
 function toSources(ids: string[] = []): ContextSource[] {
   return ids
     .map((id) => getSource(id))
-    .filter((s): s is SourceReference => Boolean(s))
+    .filter((s): s is SourceProvision => Boolean(s))
     .map((s) => ({ id: s.id, documentTitle: refDisplayTitle(s), citation: s.citation, snippet: s.sourceExtract }))
 }
 

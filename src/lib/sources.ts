@@ -1,13 +1,14 @@
-// Source & Provenance helpers (Epic 1; normalized in Epic 15).
+// Source & Provenance helpers (Epic 1; normalized + enriched in Epic 15).
 // Forward: a record's instrument sources. Reverse (Story 1.2): a source resolves
-// to the records that cite it. Epic 15 adds instrument/provision navigation and
-// the applicability-review merge with session overrides.
+// to the records that cite it. Epic 15 adds instrument/provision navigation, the
+// severity-from-penalty, and the review/approve merge with session overrides.
 import { WORLD, getSource, getInstrument } from '@/data'
-import type { ApplicabilityReview, ReviewState, SourceInstrument, SourceReference } from '@/types'
+import { severityFromPenalty } from '@/data/sources'
+import type { ReviewState, SourceInstrument, SourceProvision } from '@/types'
 
-export { getSource, getInstrument }
+export { getSource, getInstrument, severityFromPenalty }
 
-export function allSources(): SourceReference[] {
+export function allSources(): SourceProvision[] {
   return WORLD.sources
 }
 
@@ -16,18 +17,18 @@ export function allInstruments(): SourceInstrument[] {
 }
 
 /** The parent instrument of a provision (by id or object). */
-export function instrumentForRef(ref: string | SourceReference): SourceInstrument | undefined {
+export function instrumentForRef(ref: string | SourceProvision): SourceInstrument | undefined {
   const r = typeof ref === 'string' ? getSource(ref) : ref
   return r ? getInstrument(r.instrumentId) : undefined
 }
 
 /** Every provision belonging to an instrument, in seed order. */
-export function provisionsForInstrument(instrumentId: string): SourceReference[] {
+export function provisionsForInstrument(instrumentId: string): SourceProvision[] {
   return WORLD.sources.filter((s) => s.instrumentId === instrumentId)
 }
 
 /** A display title for a provision: instrument title + provision title. */
-export function refDisplayTitle(ref: string | SourceReference): string {
+export function refDisplayTitle(ref: string | SourceProvision): string {
   const r = typeof ref === 'string' ? getSource(ref) : ref
   if (!r) return typeof ref === 'string' ? ref : ''
   const inst = getInstrument(r.instrumentId)
@@ -54,52 +55,66 @@ export function citingRecords(srcId: string): string[] {
   return ids
 }
 
-// ── Applicability review (Epic 15) ──────────────────────────────────────────
-// Session overrides from the Compliance review actions (confirm / not-applicable
-// / expert / internal). Kept out of the seed so reloads reset (A10).
-export interface ReviewOverride {
+// ── Review / approve lifecycle (Epic 15) ────────────────────────────────────
+// Session overrides from the Compliance review actions (save-to-controls /
+// internal review / specialist). Kept out of the seed so reloads reset (A10).
+export interface ProvisionOverride {
   reviewState: ReviewState
   reviewer?: string
   reviewedAt?: string
   rationale?: string
+  linkedObligationId?: string
+  linkedControlId?: string
 }
 
-export type ReviewOverrides = Record<string, ReviewOverride>
+export type ReviewOverrides = Record<string, ProvisionOverride>
 
-/** The seed review merged with any session override. */
-export function effectiveReview(
-  ref: SourceReference,
-  overrides: ReviewOverrides,
-): ApplicabilityReview | undefined {
-  if (!ref.review) return undefined
-  const o = overrides[ref.id]
-  return o ? { ...ref.review, ...o } : ref.review
+/** A provision merged with any session override. */
+export function effectiveProvision(p: SourceProvision, overrides: ReviewOverrides): SourceProvision {
+  const o = overrides[p.id]
+  return o ? { ...p, ...o } : p
 }
 
-/** True when a provision's review still needs Compliance attention. */
-export function needsAttention(state: ReviewState): boolean {
-  return state === 'Recommended' || state === 'Needs expert opinion' || state === 'Under internal review'
+/** True when a reviewable provision still needs Compliance attention. */
+export function needsAttention(state?: ReviewState): boolean {
+  return state !== undefined && state !== 'Approved and saved'
+}
+
+/** StatusChip tone for a review state — one consistent chip everywhere. */
+export function reviewTone(state: ReviewState): 'ok' | 'warn' | 'danger' | 'info' | 'progress' {
+  switch (state) {
+    case 'Approved and saved':
+      return 'ok'
+    case 'Recommended':
+      return 'info'
+    case 'Under review':
+      return 'progress'
+    case 'Needs internal review':
+      return 'warn'
+    case 'Needs specialist':
+      return 'danger'
+  }
 }
 
 export interface InstrumentSummary {
-  provisions: number
-  obligations: number // unique across this instrument's provisions
-  needsReview: number // provisions still awaiting a Compliance decision
-  needsExpert: number // provisions flagged for expert opinion
+  provisions: number // sections in the instrument
+  reviewable: number // sections that carry an applicability review
+  needsReview: number // sections still awaiting an approval decision
+  approved: number // sections approved and in action
 }
 
 /** Per-instrument rollup for the Source Library list, honouring overrides. */
 export function instrumentSummary(instrumentId: string, overrides: ReviewOverrides): InstrumentSummary {
   const provisions = provisionsForInstrument(instrumentId)
-  const obligationIds = new Set<string>()
+  let reviewable = 0
   let needsReview = 0
-  let needsExpert = 0
+  let approved = 0
   for (const p of provisions) {
-    const r = effectiveReview(p, overrides)
-    if (!r) continue
-    for (const oid of r.recommendedObligationIds) obligationIds.add(oid)
-    if (needsAttention(r.reviewState)) needsReview++
-    if (r.reviewState === 'Needs expert opinion') needsExpert++
+    const eff = effectiveProvision(p, overrides)
+    if (!eff.reviewState) continue
+    reviewable++
+    if (eff.reviewState === 'Approved and saved') approved++
+    else if (needsAttention(eff.reviewState)) needsReview++
   }
-  return { provisions: provisions.length, obligations: obligationIds.size, needsReview, needsExpert }
+  return { provisions: provisions.length, reviewable, needsReview, approved }
 }

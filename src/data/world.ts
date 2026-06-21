@@ -20,6 +20,7 @@ import type {
   RegulatorTrack,
   TimelineEvent,
   RoleKey,
+  SourceProvision,
 } from '@/types'
 import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
@@ -1064,13 +1065,24 @@ function linkSources() {
     o.sourceRefs = uniq(refs)
   }
 
-  // Provision applicability reviews — the obligations the ingestion mapped to
-  // each provision are the reverse of o.sourceRefs (computed from real ids).
+  // Provision reviews — the obligations the ingestion mapped to each provision
+  // are the reverse of o.sourceRefs (computed from real generated ids). For
+  // provisions already approved in the seed, wire the tracked obligation +
+  // control they produced (Story 15.6 — "in action for tracking").
+  const pickControl = (s: SourceProvision): string | undefined => {
+    if (s.instrumentId.includes('PFRDA')) return controls.find((c) => c.frameworks.includes('PFRDA ICS'))?.id
+    if (s.instrumentId.includes('CERTIN') || s.instrumentId.includes('ITACT')) return controls.find((c) => c.frameworks.includes('NIST CSF'))?.id
+    return controls.find((c) => c.frameworks.includes('ISO 27001'))?.id
+  }
   for (const s of SOURCES) {
-    if (!s.review) continue
-    s.review.recommendedObligationIds = obligations
+    if (!s.reviewState) continue
+    s.recommendedObligationIds = obligations
       .filter((o) => o.sourceRefs?.includes(s.id))
       .map((o) => o.id)
+    if (s.reviewState === 'Approved and saved') {
+      s.linkedObligationId = s.recommendedObligationIds[0]
+      s.linkedControlId = pickControl(s) ?? controls[0]?.id
+    }
   }
 
   // Policies: by category, leading with the closest instrument/standard.
