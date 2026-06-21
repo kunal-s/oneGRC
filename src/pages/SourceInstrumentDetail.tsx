@@ -1,29 +1,37 @@
+import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowUpRight, Scale, Paperclip, Upload, ExternalLink, History, ChevronRight, FileInput } from 'lucide-react'
+import {
+  ArrowLeft, ArrowUpRight, Scale, ExternalLink, History, ChevronRight, BookOpen, Building2,
+  CheckCircle2, UserSearch, ShieldCheck,
+} from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { Button } from '@/components/ui/Button'
-import { getInstrument } from '@/data'
-import { provisionsForInstrument, effectiveProvision, reviewTone, effectiveTriage, triageTone } from '@/lib/sources'
-import { fmtDate, fmtIST } from '@/lib/time'
+import { SaveClauseChooser } from '@/components/SaveClauseChooser'
+import { getInstrument, getControl } from '@/data'
+import { provisionsForInstrument, effectiveClause, statusTone, awaitingDecision } from '@/lib/sources'
+import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import type { SourceProvision } from '@/types'
 import { ComingSoon } from './ComingSoon'
 
 export function SourceInstrumentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const inst = id ? getInstrument(id) : undefined
+  const role = useApp((s) => s.role)
+  const overrides = useApp((s) => s.clauseOverrides)
+  const engageSpecialist = useApp((s) => s.engageSpecialist)
   const pushToast = useApp((s) => s.pushToast)
-  const overrides = useApp((s) => s.reviewOverrides)
-  const intakeOverrides = useApp((s) => s.intakeOverrides)
+  const [saving, setSaving] = React.useState<SourceProvision | null>(null)
 
-  if (!inst) return <ComingSoon title="Instrument not found" />
+  if (!inst) return <ComingSoon title="Act not found" />
 
-  const provisions = provisionsForInstrument(inst.id)
+  const clauses = provisionsForInstrument(inst.id).map((p) => effectiveClause(p, overrides))
   const supersedes = inst.supersedesId ? getInstrument(inst.supersedesId) : undefined
   const supersededBy = inst.supersededById ? getInstrument(inst.supersededById) : undefined
-  const triage = inst.intake ? effectiveTriage(inst, intakeOverrides) : undefined
+  const canAct = role === 'COMPLIANCE' || role === 'COSEC'
 
   return (
     <div>
@@ -40,138 +48,127 @@ export function SourceInstrumentDetail() {
           </span>
         }
         title={inst.title}
-        description={`${provisions.length} section${provisions.length === 1 ? '' : 's'} broken down for analysis — each carries its compliance fields and review status.`}
         actions={
           <div className="flex items-center gap-2">
             <StatusChip status={inst.status} tone={inst.status === 'In force' ? 'ok' : inst.status === 'Superseded' ? 'warn' : 'neutral'} />
-            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Update version', description: 'New version uploaded; the prior version is marked superseded (session). Real document versioning is a backend item.', variant: 'success' })}>
-              <Upload className="size-4" /> Update version
-            </Button>
+            <a href={inst.sourceLink} target="_blank" rel="noreferrer">
+              <Button variant="outline" size="sm"><ExternalLink className="size-4" /> Open source</Button>
+            </a>
           </div>
         }
       />
 
       {supersededBy && (
-        <button
-          onClick={() => navigate(`/sources/${supersededBy.id}`)}
-          className="mb-4 flex w-full items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-medium-soft/70"
-        >
+        <button onClick={() => navigate(`/sources/${supersededBy.id}`)} className="mb-4 flex w-full items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-medium-soft/70">
           <History className="size-4 shrink-0 text-medium" />
-          <span className="min-w-0 flex-1 text-sm text-foreground">
-            Superseded by the newer version ({supersededBy.version} · {fmtDate(supersededBy.dateOfIssue)})
-          </span>
+          <span className="min-w-0 flex-1 text-sm text-foreground">Superseded by the newer version ({supersededBy.version} · {fmtDate(supersededBy.dateOfIssue)})</span>
           <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
         </button>
       )}
 
-      {inst.intake && triage && (
-        <button
-          onClick={() => navigate('/intake')}
-          className="mb-4 flex w-full flex-wrap items-center gap-2 rounded-lg border border-info/30 bg-info-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-info-soft/70"
-        >
-          <FileInput className="size-4 shrink-0 text-info" />
-          <span className="min-w-0 flex-1 text-xs text-foreground">
-            Arrived via Compliance Intake · {inst.intake.channel} · received {fmtIST(inst.intake.receivedAt)}
-          </span>
-          <StatusChip status={triage} tone={triageTone(triage)} />
-          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
-        </button>
-      )}
-
-      {/* Instrument header card */}
-      <div className="card-surface mb-4 p-4">
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4">
-          <Meta label="Authority">{inst.authority}</Meta>
-          {inst.regulator && <Meta label="Regulator">{inst.regulator}</Meta>}
-          <Meta label="Type">{inst.instrumentType}</Meta>
-          {inst.referenceNumber && <Meta label="Reference">{inst.referenceNumber}</Meta>}
-          <Meta label="Date of issue">{fmtDate(inst.dateOfIssue)}</Meta>
-          {inst.effectiveDate && <Meta label="Effective date">{fmtDate(inst.effectiveDate)}</Meta>}
-          {inst.version && (
-            <Meta label="Version">
-              <span className="inline-flex flex-wrap items-center gap-1.5">
-                <span>{inst.version}</span>
-                {supersedes && (
-                  <button
-                    onClick={() => navigate(`/sources/${supersedes.id}`)}
-                    className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-info transition-colors hover:bg-info-soft"
-                  >
-                    supersedes {supersedes.version}
-                    <ArrowUpRight className="size-3" />
-                  </button>
-                )}
-              </span>
-            </Meta>
+      {/* Lead: what the act covers + how it affects SPF */}
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="card-surface p-4">
+          <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground"><BookOpen className="size-4 text-info" /> What this act covers</h3>
+          <p className="text-sm leading-relaxed text-foreground">{inst.summary ?? `${inst.title} — see the clauses below.`}</p>
+          {inst.version && supersedes && (
+            <button onClick={() => navigate(`/sources/${supersedes.id}`)} className="mt-2 inline-flex items-center gap-1 text-2xs font-medium text-info hover:underline">
+              {inst.version} · supersedes {supersedes.version} <ArrowUpRight className="size-3" />
+            </button>
           )}
-          <Meta label="Channel">{inst.sourceChannel}</Meta>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-border pt-3">
-          <a href={inst.sourceLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline">
-            <ExternalLink className="size-3.5" /> Open at {inst.sourceChannel}
-          </a>
-          {inst.attachedDocument && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Paperclip className="size-3.5" /> {inst.attachedDocument.filename}
-              <span className="text-2xs">· {inst.attachedDocument.sizeLabel}</span>
-            </span>
-          )}
+        <div className="card-surface p-4">
+          <h3 className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-foreground"><Building2 className="size-4 text-info" /> How it affects SPF</h3>
+          <p className="text-sm leading-relaxed text-foreground">{inst.applicability ?? 'Applicability under review.'}</p>
         </div>
       </div>
 
-      {/* Tabulated section breakdown */}
+      {/* Clause breakdown */}
       <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        <Scale className="size-4 text-info" /> Sections · {provisions.length}
+        <Scale className="size-4 text-info" /> Clauses · {clauses.length}
       </h3>
-      <div className="card-surface overflow-hidden">
-        <table className="w-full text-left">
+      <div className="card-surface overflow-x-auto">
+        <table className="w-full min-w-[1100px] text-left">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2">Section</th>
+              <th className="px-3 py-2">Clause</th>
               <th className="px-3 py-2">Name of compliance</th>
-              <th className="px-3 py-2">Severity</th>
-              <th className="px-3 py-2">Frequency</th>
-              <th className="px-3 py-2">Next due</th>
-              <th className="px-3 py-2">Review status</th>
-              <th className="w-8 px-3 py-2" />
+              <th className="px-3 py-2">Description</th>
+              <th className="px-3 py-2">What it means</th>
+              <th className="px-3 py-2">Penalty</th>
+              <th className="px-3 py-2">When due</th>
+              <th className="px-3 py-2">Applicability</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody>
-            {provisions.map((p0) => {
-              const p = effectiveProvision(p0, overrides)
+            {clauses.map((c) => {
+              const topTier = (c.penaltyTiers ?? []).slice().sort((a, b) => severityRank(b.severity) - severityRank(a.severity))[0]
+              const linked = c.linkedControlId ? getControl(c.linkedControlId) : undefined
               return (
-                <tr
-                  key={p.id}
-                  onClick={() => navigate(`/sources/section/${p.id}`)}
-                  className="cursor-pointer border-b border-border text-sm transition-colors last:border-0 hover:bg-info-soft/40"
-                >
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium text-foreground">{p.title}</div>
-                    <div className="font-mono text-2xs text-muted-foreground">{p.id}</div>
+                <tr key={c.id} className="border-b border-border align-top text-sm last:border-0 hover:bg-info-soft/30">
+                  <td className="cursor-pointer px-3 py-2.5" onClick={() => navigate(`/sources/section/${c.id}`)}>
+                    <div className="font-medium text-foreground">{c.title}</div>
+                    <div className="font-mono text-2xs text-muted-foreground">{c.id}</div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-foreground">{p.nameOfCompliance ?? <span className="text-muted-foreground">Framework reference</span>}</td>
-                  <td className="px-3 py-2.5">{p.severity ? <SeverityBadge severity={p.severity} dense /> : <span className="text-2xs text-muted-foreground">—</span>}</td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{p.frequency ?? '—'}</td>
-                  <td className="px-3 py-2.5 text-xs tnum text-muted-foreground">{p.nextDue ? fmtDate(p.nextDue) : '—'}</td>
-                  <td className="px-3 py-2.5">{p.reviewState ? <StatusChip status={p.reviewState} tone={reviewTone(p.reviewState)} /> : <span className="text-2xs text-muted-foreground">Reference</span>}</td>
-                  <td className="px-3 py-2.5"><ChevronRight className="size-4 text-muted-foreground" /></td>
+                  <td className="px-3 py-2.5 text-xs text-foreground">{c.nameOfCompliance ?? <span className="text-muted-foreground">Reference</span>}</td>
+                  <td className="max-w-[180px] px-3 py-2.5 text-xs text-muted-foreground"><span className="line-clamp-2">{c.briefDescription ?? '—'}</span></td>
+                  <td className="max-w-[220px] px-3 py-2.5 text-xs text-foreground"><span className="line-clamp-2">{c.whatItMeans ?? '—'}</span></td>
+                  <td className="max-w-[180px] px-3 py-2.5">
+                    {topTier ? (
+                      <span className="inline-flex flex-col gap-0.5">
+                        <SeverityBadge severity={topTier.severity} dense />
+                        <span className="line-clamp-1 text-2xs text-muted-foreground">{topTier.consequence}</span>
+                      </span>
+                    ) : (
+                      <span className="text-2xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs tnum text-muted-foreground">{c.nextDue ? fmtDate(c.nextDue) : c.frequency ?? '—'}</td>
+                  <td className="px-3 py-2.5">
+                    {c.applicable === undefined ? (
+                      <span className="text-2xs text-muted-foreground">—</span>
+                    ) : c.applicable ? (
+                      <StatusChip status="Applicable" tone="ok" />
+                    ) : (
+                      <StatusChip status="Not applicable" tone="neutral" />
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">{c.status ? <StatusChip status={c.status} tone={statusTone(c.status)} /> : <span className="text-2xs text-muted-foreground">Reference</span>}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    {c.status === 'Saved' && linked ? (
+                      <button onClick={() => navigate(`/controls/${linked.id}`)} className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-1 text-2xs font-medium text-ok hover:bg-ok-soft/70" title={linked.title}>
+                        <ShieldCheck className="size-3" /> {linked.id}
+                      </button>
+                    ) : c.applicable && c.status && awaitingDecision(c.status) && canAct ? (
+                      <span className="inline-flex items-center justify-end gap-1.5">
+                        <button onClick={() => setSaving(c)} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-2xs font-medium text-foreground hover:border-info/40 hover:bg-info-soft/40">
+                          <CheckCircle2 className="size-3" /> Save
+                        </button>
+                        {c.status !== 'Specialist review' && (
+                          <button onClick={() => { engageSpecialist(c.id); pushToast({ title: 'Specialist engaged', description: `${c.id} sent for specialist review (mocked — pending backend).`, variant: 'info' }) }} className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-2xs font-medium text-foreground hover:border-info/40 hover:bg-info-soft/40">
+                            <UserSearch className="size-3" /> Specialist
+                          </button>
+                        )}
+                      </span>
+                    ) : (
+                      <ChevronRight className="ml-auto size-4 cursor-pointer text-muted-foreground" onClick={() => navigate(`/sources/section/${c.id}`)} />
+                    )}
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-2xs text-muted-foreground">
-        The heavier fields — description, key parts, penalty tiers and the ingestion recommendation — open in the section detail.
-      </p>
+      <p className="mt-2 text-2xs text-muted-foreground">Open a clause for the full detail, the penalty tiers and the recommendation. Save maps a clause to a control; Specialist kicks a mocked review.</p>
+
+      {saving && <SaveClauseChooser clause={saving} onClose={() => setSaving(null)} />}
     </div>
   )
 }
 
-function Meta({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm text-foreground">{children}</div>
-    </div>
-  )
+function severityRank(s: SourceProvision['severity']): number {
+  return ['Low', 'Medium', 'High', 'Critical'].indexOf(s ?? 'Low')
 }

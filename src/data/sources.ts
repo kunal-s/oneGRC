@@ -1,9 +1,10 @@
-// OneGRC — Source & Provenance seed (Epic 1; normalized + enriched in Epic 15).
-// THE single source model: parent SourceInstrument (the legal instrument) +
-// SourceProvision children (the section/clause), each carrying its full
-// structured compliance fields, sourced penalty tiers, a severity derived from
-// the penalty, and a review-to-track lifecycle. Extracts are short real
-// excerpts held inline. No second source model exists — Epic 14 reuses this one.
+// OneGRC — Source & Provenance seed (Sources pipeline: act → clause → control).
+// THE single source model: parent SourceInstrument (the act/instrument) +
+// SourceProvision children (the clauses), each carrying its structured
+// compliance fields, sourced penalty tiers, a severity derived from the penalty,
+// applicability to SPF, a scripted applicability recommendation, and the
+// act→clause→control pipeline status. Extracts are short real excerpts held
+// inline. No backend, no model call.
 import type {
   AgentAction,
   Framework,
@@ -18,18 +19,7 @@ import { ist } from '@/lib/time'
 const d = (y: number, m: number, day: number) => ist(y, m, day).toISOString()
 const t = (y: number, m: number, day: number, h: number, mi: number) => ist(y, m, day, h, mi).toISOString()
 
-// The Regulatory-Change Agent parse (Epic 14, Story 14.2) — scripted, with
-// provenance + confidence; severity is then auto-rated from the penalty. Defined
-// here because the intake instruments below reference it.
-const parse = (recommendation: string, confidence: number, basis: string, at: string): AgentAction => ({
-  agent: 'Regulatory-Change Agent',
-  recommendation,
-  confidence,
-  at,
-  basis,
-})
-
-// ── Severity from penalty (the minimal Epic 4 slice) ────────────────────────
+// ── Severity from penalty (deterministic) ───────────────────────────────────
 const SEV_ORDER: Severity[] = ['Low', 'Medium', 'High', 'Critical']
 export function severityFromPenalty(tiers: PenaltyTier[] = []): Severity | undefined {
   if (!tiers.length) return undefined
@@ -39,8 +29,9 @@ export function severityFromPenalty(tiers: PenaltyTier[] = []): Severity | undef
   )
 }
 
-// ── Instruments (parents) ───────────────────────────────────────────────────
+// ── Instruments (acts) ──────────────────────────────────────────────────────
 export const INSTRUMENTS: SourceInstrument[] = [
+  // PFRDA Investment Guidelines — a focus act (broken into clauses below).
   {
     id: 'INST-PFRDA-INV-2025',
     title: 'PFRDA Master Circular on Investment Guidelines for NPS Schemes',
@@ -55,6 +46,10 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceLink: 'https://www.pfrda.org.in/web/pfrda/regulatory-framework/master-circulars/active-master-circulars',
     attachedDocument: { filename: 'PFRDA-MC-Investment-Guidelines-10Dec2025.pdf', label: 'Master Circular (PDF)', capturedAt: d(2025, 12, 11), sizeLabel: '438 KB' },
     status: 'In force',
+    summary:
+      'PFRDA’s consolidated investment rulebook for NPS scheme portfolios — the approved investment universe, periodic review, single-issuer and group exposure limits, and the Investment Committee’s oversight and minuting.',
+    applicability:
+      'Applies to SPF as an NPS Pension Fund Manager investing Scheme E/C/G/A across Tier I & II — it governs every scheme portfolio SPF runs.',
   },
   {
     id: 'INST-PFRDA-INV-2025-MAR',
@@ -70,6 +65,7 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceLink: 'https://www.pfrda.org.in/web/pfrda/regulatory-framework/master-circulars',
     attachedDocument: { filename: 'PFRDA-MC-Investment-Guidelines-28Mar2025.pdf', label: 'Master Circular (PDF) — prior version', capturedAt: d(2025, 4, 2), sizeLabel: '402 KB' },
     status: 'Superseded',
+    summary: 'The prior version of the PFRDA investment guidelines, consolidated and superseded by the 10 December 2025 Master Circular.',
   },
   {
     id: 'INST-PFRDA-ICS-2024',
@@ -83,6 +79,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://www.pfrda.org.in/index1.cshtml?lsid=237',
     status: 'In force',
+    summary: 'PFRDA’s information & cyber-security baseline for intermediaries — a board-approved ICS policy aligned to ISO 27001 / NIST CSF and a cyber crisis-management plan.',
+    applicability: 'Applies to SPF as a PFRDA-registered intermediary handling subscriber data and fund-accounting systems.',
   },
   {
     id: 'INST-PFRDA-ICS-2025',
@@ -96,6 +94,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://www.pfrda.org.in/index1.cshtml?lsid=237',
     status: 'In force',
+    summary: 'Classifies cyber incidents and sets a 48-hour intimation clock for subscriber-impacting Critical/High incidents.',
+    applicability: 'Applies to SPF — it processes subscriber PRAN/KYC data and runs fund-accounting systems.',
   },
   {
     id: 'INST-CA-2013',
@@ -107,6 +107,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://www.mca.gov.in/content/mca/global/en/acts-rules/ebooks/acts.html',
     status: 'In force',
+    summary: 'The principal company-law statute — governs SPF’s annual return, financial-statement filing, board and committee governance, and the consequences of default.',
+    applicability: 'Applies to SPF as a company incorporated under the Act (a wholly-owned subsidiary of Sankalp Bank).',
   },
   {
     id: 'INST-CA-FEES-2014',
@@ -118,6 +120,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://www.mca.gov.in/content/mca/global/en/acts-rules/ebooks/rules.html',
     status: 'In force',
+    summary: 'Prescribes the filing fees and the additional fee payable on late ROC filings.',
+    applicability: 'Applies to SPF’s MGT-7 and AOC-4 filings with the Registrar of Companies.',
   },
   {
     id: 'INST-CGST-2017',
@@ -129,7 +133,10 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://cbic-gst.gov.in/CGST-bill-e.html',
     status: 'In force',
+    summary: 'The central GST statute — governs SPF’s monthly returns, the late fee on delay and interest on delayed tax.',
+    applicability: 'Applies to SPF as a GST-registered person charging management/advisory fees.',
   },
+  // CERT-In Directions — a focus act (broken into clauses below).
   {
     id: 'INST-CERTIN-2022',
     title: 'CERT-In Directions under Section 70B(6) of the IT Act, 2000',
@@ -142,6 +149,10 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://www.cert-in.org.in/Directions70B.jsp',
     status: 'In force',
+    summary:
+      'CERT-In’s binding directions for cyber-incident reporting and log hygiene — the six-hour reporting clock, 180-day in-India log retention, and NTP clock synchronisation.',
+    applicability:
+      'Applies to SPF as a body corporate operating ICT systems in India; the 6-hour clock and 180-day in-India log retention are the load-bearing duties.',
   },
   {
     id: 'INST-ITACT-2000',
@@ -152,6 +163,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://www.meity.gov.in/content/information-technology-act-2000',
     status: 'In force',
+    summary: 'The parent statute for CERT-In — Section 70B empowers the directions and sets the penalty for non-compliance.',
+    applicability: 'Applies to SPF as a body corporate; Section 70B underpins the CERT-In directions.',
   },
   {
     id: 'INST-EPF-1952',
@@ -163,6 +176,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://www.epfindia.gov.in/site_en/Acts.php',
     status: 'In force',
+    summary: 'The provident-fund statute — the 12% contribution base, the monthly ECR filing, and the damages and interest on default.',
+    applicability: 'Applies to SPF as a covered establishment employing salaried staff.',
   },
   {
     id: 'INST-PT-MAH-1975',
@@ -174,7 +189,10 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://mahagst.gov.in/en/acts',
     status: 'In force',
+    summary: 'The Maharashtra profession-tax statute — the levy on employees and the employer’s deduction and return.',
+    applicability: 'Applies to SPF as an employer of salaried staff in Maharashtra.',
   },
+  // DPDP Act & Rules — a focus act (broken into clauses below).
   {
     id: 'INST-DPDP-2025',
     title: 'Digital Personal Data Protection Act, 2023 & DPDP Rules, 2025',
@@ -186,6 +204,10 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://www.meity.gov.in/data-protection-framework',
     status: 'In force',
+    summary:
+      'India’s data-protection law. Governs how SPF, as a Data Fiduciary, gives notice, takes consent, secures personal data, and intimates a personal data breach to the Board and affected principals — backed by penalties up to ₹250 crore.',
+    applicability:
+      'Applies to SPF — it processes subscriber PRAN, KYC, nominee and bank data as a Data Fiduciary. The substantive obligations are phased in under the DPDP Rules, 2025; the security-safeguard and breach-intimation duties are the most material.',
   },
   {
     id: 'INST-ISO-37301',
@@ -197,6 +219,7 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://www.iso.org/standard/75080.html',
     status: 'In force',
+    summary: 'The compliance-management-system standard SPF’s GRC programme is structured against.',
   },
   {
     id: 'INST-ISO-27001',
@@ -209,6 +232,7 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceLink: 'https://www.iso.org/standard/27001',
     attachedDocument: { filename: 'ISO-IEC-27001-2022.pdf', label: 'Standard (licensed copy)', capturedAt: d(2025, 2, 18), sizeLabel: '1.2 MB' },
     status: 'In force',
+    summary: 'The information-security-management standard SPF’s security controls map to.',
   },
   {
     id: 'INST-NIST-CSF',
@@ -220,6 +244,7 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://www.nist.gov/cyberframework',
     status: 'In force',
+    summary: 'The cybersecurity framework SPF’s detection and response controls are organised around.',
   },
   {
     id: 'INST-PCI-DSS',
@@ -231,10 +256,9 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://www.pcisecuritystandards.org/document_library/',
     status: 'In force',
+    summary: 'The card-data-security standard, referenced where SPF touches payment flows.',
   },
-  // ── Compliance Intake — incoming circulars (Epic 14) ──────────────────────
-  // Arrived via intake, parsed onto this same model, awaiting triage. status is
-  // 'Draft' until accepted into the live register.
+  // ── Recently arrived acts — appear in the library as Processing / Recommended
   {
     id: 'INST-GST-3B-2026',
     title: 'CBIC — Revised GSTR-3B Table 4 (ITC) reporting format',
@@ -245,12 +269,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://cbic-gst.gov.in/',
     status: 'Draft',
-    intake: {
-      channel: 'Auto-pull',
-      receivedAt: t(2026, 6, 5, 8, 30),
-      parse: parse('Parsed one provision (revised Table 4 ITC reporting). Maps to the GSTR-3B obligation; late fee unchanged under s.47.', 92.7, 'CBIC notification text on the revised GSTR-3B Table 4 format.', t(2026, 6, 5, 8, 32)),
-      triageState: 'Parsed',
-    },
+    summary: 'A revision to the GSTR-3B Table 4 input-tax-credit reporting format, newly arrived and being processed.',
+    applicability: 'Applies to SPF as a GST-registered person filing GSTR-3B.',
   },
   {
     id: 'INST-EPFO-HP-2026',
@@ -262,12 +282,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Manual upload',
     sourceLink: 'https://www.epfindia.gov.in/site_en/index.php',
     status: 'Draft',
-    intake: {
-      channel: 'Manual upload',
-      receivedAt: t(2026, 6, 4, 10, 15),
-      parse: parse('Parsed revised ECR validation rules affecting the monthly challan. Damages (s.14B) and interest (s.7Q) consequences carry over.', 87.5, 'EPFO circular uploaded by the Labour & Secretarial team.', t(2026, 6, 4, 10, 18)),
-      triageState: 'Needs internal review',
-    },
+    summary: 'Revised ECR validations for higher-pension members, newly arrived and being processed.',
+    applicability: 'Applies to SPF as a covered establishment filing the monthly ECR.',
   },
   {
     id: 'INST-DPDP-OPS-2026',
@@ -279,12 +295,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://www.meity.gov.in/data-protection-framework',
     status: 'Draft',
-    intake: {
-      channel: 'Auto-pull',
-      receivedAt: t(2026, 6, 8, 9, 40),
-      parse: parse('Parsed a commencement-date provision for the breach-intimation duty. Severity auto-rated Critical from the ₹250 crore penalty; applicable date is ambiguous.', 79.3, 'MeitY commencement notice referencing the DPDP Rules, 2025.', t(2026, 6, 8, 9, 43)),
-      triageState: 'Needs external specialist',
-    },
+    summary: 'A notice setting the commencement date for the DPDP breach-intimation duty, newly arrived and under review.',
+    applicability: 'Applies to SPF as a Data Fiduciary; the applicable date needs confirmation.',
   },
   {
     id: 'INST-PFRDA-EXP-2026',
@@ -296,12 +308,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://www.pfrda.org.in/',
     status: 'Draft',
-    intake: {
-      channel: 'Auto-pull',
-      receivedAt: t(2026, 6, 9, 7, 20),
-      parse: parse('Parsed a revised single-issuer exposure-limit provision. Maps to the exposure-limit breach report obligation; severity High.', 90.8, 'PFRDA clarification circular on exposure norms.', t(2026, 6, 9, 7, 23)),
-      triageState: 'Under triage',
-    },
+    summary: 'A clarification on the single-issuer exposure ceiling, newly arrived and being processed.',
+    applicability: 'Applies to SPF as an NPS Pension Fund Manager.',
   },
   {
     id: 'INST-LABOUR-SS-2026',
@@ -313,13 +321,8 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Official Gazette',
     sourceLink: 'https://labour.gov.in/',
     status: 'Draft',
-    intake: {
-      channel: 'Auto-pull',
-      receivedAt: t(2026, 6, 3, 14, 5),
-      parse: parse('Parsed a draft social-security contribution-alignment provision. Not yet in force; final notification and State rules pending.', 71.4, 'Draft rules published under the Code on Social Security, 2020.', t(2026, 6, 3, 14, 8)),
-      triageState: 'Parked',
-      parkedReason: 'Draft only — awaiting final notification and the corresponding State rules before triage.',
-    },
+    summary: 'Draft rules aligning contributions to the Code’s wage definition — not yet in force.',
+    applicability: 'Will apply to SPF once the Code is notified; held pending final notification.',
   },
   {
     id: 'INST-CERTIN-ADV-2026',
@@ -331,21 +334,15 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Regulator site',
     sourceLink: 'https://www.cert-in.org.in/',
     status: 'In force',
-    intake: {
-      channel: 'Auto-pull',
-      receivedAt: t(2026, 6, 2, 11, 30),
-      parse: parse('Parsed an advisory reaffirming the 6-hour reporting timeline under Direction 20(3)/2022. Accepted into the register; no new obligation, reinforces the existing CERT-In duty.', 95.1, 'CERT-In advisory text reaffirming the 6-hour clock.', t(2026, 6, 2, 11, 33)),
-      triageState: 'Live',
-    },
+    summary: 'An advisory reaffirming the 6-hour ransomware-reporting clock under Direction 20(3)/2022.',
+    applicability: 'Reinforces SPF’s existing CERT-In reporting duty; no new obligation.',
   },
 ]
 
-// ── Provision builder ───────────────────────────────────────────────────────
-// recommendedObligationIds are filled in the world.ts provenance pass (they
-// reference generated obligation ids); severity is derived from the penalty.
-type ProvInput = Omit<SourceProvision, 'recommendedObligationIds' | 'severity'>
-function prov(p: ProvInput): SourceProvision {
-  return { ...p, severity: severityFromPenalty(p.penaltyTiers), recommendedObligationIds: [] }
+// ── Clause builders ─────────────────────────────────────────────────────────
+type ClauseInput = Omit<SourceProvision, 'severity'>
+function prov(p: ClauseInput): SourceProvision {
+  return { ...p, severity: severityFromPenalty(p.penaltyTiers) }
 }
 const ai = (recommendation: string, confidence: number, basis: string, at: string): AgentAction => ({
   agent: 'Ingestion Agent',
@@ -356,33 +353,264 @@ const ai = (recommendation: string, confidence: number, basis: string, at: strin
 })
 const tier = (trigger: string, consequence: string, severity: Severity, sourceRef: string): PenaltyTier => ({ trigger, consequence, severity, sourceRef })
 
-// ── Provisions (children) ───────────────────────────────────────────────────
+// ── Clauses (children) ──────────────────────────────────────────────────────
 export const SOURCES: SourceProvision[] = [
-  // PFRDA Investment Guidelines
+  // ════ DPDP Act & Rules — focus act ════
+  prov({
+    id: 'SRC-DPDP-5',
+    instrumentId: 'INST-DPDP-2025',
+    provision: 'Section 5 — Notice',
+    title: 'Section 5 — Notice to Data Principals',
+    nameOfCompliance: 'Notice to Data Principals',
+    briefDescription: 'Give subscribers an itemised notice at or before consent.',
+    whatItMeans:
+      'Before processing subscriber personal data, SPF must give a clear, itemised notice — what data is collected, the purpose, and how to withdraw consent or complain to the Board.',
+    keyParts: ['Itemised notice of the personal data and purpose', 'Plain language, in English and the scheduled languages', 'How to withdraw consent and how to complain'],
+    penaltyTiers: [tier('Processing without a compliant notice', 'Penalty as determined by the Board under the Schedule (s.33)', 'High', 'SRC-DPDP-33')],
+    frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF collects subscriber and employee personal data and must notice each purpose.',
+    citation: 'Section 5, Digital Personal Data Protection Act, 2023',
+    sourceExtract:
+      'Every request for consent shall be accompanied or preceded by a notice given by the Data Fiduciary to the Data Principal, informing her of the personal data proposed to be processed and the purpose, the manner of withdrawing consent, and the manner of making a complaint to the Board.',
+    aiRecommendation: ai('Map to a consent-notice control on the subscriber onboarding and CRM journey.', 88.6, 'Section 5 applies to every Data Fiduciary processing personal data.', t(2026, 6, 10, 9, 10)),
+    status: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-DPDP-6',
+    instrumentId: 'INST-DPDP-2025',
+    provision: 'Section 6 — Consent',
+    title: 'Section 6 — Consent',
+    nameOfCompliance: 'Consent management',
+    briefDescription: 'Obtain free, specific, informed, unambiguous consent; allow withdrawal.',
+    whatItMeans:
+      'SPF must obtain free, specific, informed and unambiguous consent for each processing purpose, keep consent records, and let subscribers withdraw consent as easily as they gave it.',
+    keyParts: ['Free, specific, informed, unambiguous consent per purpose', 'Withdrawable as easily as given', 'Maintain consent records and honour withdrawal'],
+    penaltyTiers: [tier('Processing without valid consent', 'Penalty as determined by the Board under the Schedule (s.33)', 'High', 'SRC-DPDP-33')],
+    frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF relies on consent to process subscriber personal data for NPS servicing.',
+    citation: 'Section 6, Digital Personal Data Protection Act, 2023',
+    sourceExtract:
+      'The consent given by the Data Principal shall be free, specific, informed, unconditional and unambiguous with a clear affirmative action, and shall signify agreement to the processing of her personal data for the specified purpose. The Data Principal shall have the right to withdraw her consent at any time, with the ease of doing so being comparable to that with which it was given.',
+    aiRecommendation: ai('Map to the consent-ledger control and the OneTrust DPDP spoke; reconcile consent quarterly.', 86.2, 'Section 6 applies wherever SPF processes personal data on consent.', t(2026, 6, 10, 9, 12)),
+    status: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-DPDP-8-5',
+    instrumentId: 'INST-DPDP-2025',
+    provision: 'Section 8(5) — Reasonable security safeguards',
+    title: 'Section 8(5) — Reasonable security safeguards',
+    nameOfCompliance: 'Reasonable security safeguards',
+    briefDescription: 'Protect personal data with reasonable security safeguards.',
+    whatItMeans:
+      'SPF must protect subscriber personal data with reasonable security safeguards — encryption, access control and monitoring — to prevent a personal data breach.',
+    keyParts: ['Reasonable security safeguards for personal data', 'Prevent a personal data breach', 'Encryption, access control and monitoring'],
+    penaltyTiers: [tier('Failure to take reasonable security safeguards resulting in a breach', 'Penalty up to ₹250 crore (Schedule, s.33)', 'Critical', 'SRC-DPDP-33')],
+    frequency: 'Continuous',
+    applicable: true,
+    applicabilityBasis: 'SPF stores subscriber PRAN/KYC/nominee/bank data and must safeguard it.',
+    citation: 'Section 8(5), Digital Personal Data Protection Act, 2023',
+    sourceExtract:
+      'A Data Fiduciary shall protect personal data in its possession or under its control, including in respect of any processing undertaken by it or on its behalf by a Data Processor, by taking reasonable security safeguards to prevent personal data breach.',
+    aiRecommendation: ai('Save to a personal-data security-safeguards control (encryption, access control, monitoring) on the CRA and KYC stores.', 93.4, 'Section 8(5) applies to every Data Fiduciary holding personal data.', t(2026, 6, 6, 10, 5)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-SEC-01',
+    reviewer: 'priya',
+    reviewedAt: t(2026, 6, 8, 14, 20),
+    rationale: 'Applicable and material; saved to the personal-data security-safeguards control.',
+  }),
+  prov({
+    id: 'SRC-DPDP-2025',
+    instrumentId: 'INST-DPDP-2025',
+    provision: 'Section 8(6) — Breach intimation',
+    title: 'Section 8(6) — Breach intimation',
+    nameOfCompliance: 'Personal data breach intimation',
+    briefDescription: 'Intimate the Board and affected principals on a breach.',
+    whatItMeans:
+      'On a personal data breach, SPF must notify the Data Protection Board and every affected subscriber, in the form and within the time the DPDP Rules prescribe.',
+    keyParts: ['Intimate the Board on a personal data breach', 'Intimate each affected Data Principal', 'Form and timing per the DPDP Rules, 2025'],
+    penaltyTiers: [tier('Failure to intimate a personal data breach', 'Penalty up to ₹200 crore (Schedule, s.33)', 'Critical', 'SRC-DPDP-33')],
+    frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF is a Data Fiduciary holding subscriber personal data; a breach triggers intimation.',
+    citation: 'Section 8(6), DPDP Act, 2023 r/w the DPDP Rules, 2025 (notified 13 Nov 2025)',
+    sourceExtract:
+      'In the event of a personal data breach, the Data Fiduciary shall give the Board and each affected Data Principal, intimation of such breach in such form and manner as may be prescribed. Substantive obligations are phased in, with the final compliance date set under the DPDP Rules, 2025.',
+    aiRecommendation: ai('Save to a shared breach detection & notification control; align the DPDP intimation with the CERT-In 6-hour reporting.', 79.3, 'Section 8(6) r/w DPDP Rules 2025; the commencement date is phased.', t(2026, 6, 7, 15, 0)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-DPB-01',
+    reviewer: 'priya',
+    reviewedAt: t(2026, 6, 12, 11, 30),
+    rationale: 'Sent to external privacy counsel on the phased commencement; on advice, saved to the shared breach control.',
+    specialistNote:
+      'External privacy counsel confirmed the breach-intimation duty applies from the notified commencement date; implement detection, a Board-intimation template and an affected-principal notification path, co-located with the CERT-In 6-hour report.',
+  }),
+  prov({
+    id: 'SRC-DPDP-33',
+    instrumentId: 'INST-DPDP-2025',
+    provision: 'Section 33 r/w the Schedule — Penalties',
+    title: 'Section 33 — Penalties (the Schedule)',
+    nameOfCompliance: 'DPDP financial penalties',
+    briefDescription: 'The penalties the Board may impose for breaches of the Act.',
+    whatItMeans:
+      'Sets the financial penalties the Data Protection Board can impose — up to ₹250 crore for failing to take reasonable security safeguards, and up to ₹200 crore for failing to notify a breach.',
+    keyParts: ['Up to ₹250 crore — failure of reasonable security safeguards', 'Up to ₹200 crore — failure to notify a breach', 'Determined by the Board after inquiry'],
+    penaltyTiers: [
+      tier('Failure of reasonable security safeguards', 'Up to ₹250 crore', 'Critical', 'SRC-DPDP-33'),
+      tier('Failure to notify a personal data breach', 'Up to ₹200 crore', 'Critical', 'SRC-DPDP-33'),
+    ],
+    frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'The penalty schedule SPF’s DPDP clauses are measured against.',
+    citation: 'Section 33 read with the Schedule, Digital Personal Data Protection Act, 2023',
+    sourceExtract:
+      'Where the Board determines on the conclusion of an inquiry that a person has failed to comply with the provisions of this Act, it may, after giving the person an opportunity of being heard, impose a financial penalty as specified in the Schedule, which provides for penalties up to two hundred and fifty crore rupees for failure to take reasonable security safeguards.',
+    aiRecommendation: ai('Reference clause — attach as the penalty source for the DPDP duties; no separate control.', 70.5, 'Section 33 r/w the Schedule is the DPDP penalty source.', t(2026, 6, 10, 9, 15)),
+    status: 'Recommended',
+  }),
+  // ════ PFRDA Investment Guidelines — focus act ════
   prov({
     id: 'SRC-PFRDA-INV-2025',
     instrumentId: 'INST-PFRDA-INV-2025',
     provision: 'Para 4 — approved investment universe & periodic review',
     title: 'Para 4 — Investment universe & review',
     nameOfCompliance: 'Investment universe & periodic review',
-    briefDescription: 'Invest only within the approved universe and minute the periodic review at the Investment Committee.',
-    keyParts: [
-      'Invest only in securities forming part of the approved investment universe',
-      'Review the actively invested portfolio at least twice a week',
-      'Review the full eligible universe at least once a year and minute it',
-    ],
-    penaltyTiers: [tier('Investing outside the approved universe or breaching exposure limits', 'Regulatory action by PFRDA and mandatory exposure-breach reporting', 'High', 'SRC-PFRDA-INV-2025')],
+    briefDescription: 'Invest only within the approved universe; review periodically.',
+    whatItMeans:
+      'SPF may invest only in the approved investment universe and must review the actively invested portfolio at least twice a week and the full universe at least once a year, minuting it at the Investment Committee.',
+    keyParts: ['Invest only in the approved investment universe', 'Review the portfolio at least twice a week', 'Review the full universe at least once a year and minute it'],
+    penaltyTiers: [tier('Investing outside the approved universe', 'Regulatory action by PFRDA and mandatory exposure-breach reporting', 'High', 'SRC-PFRDA-INV-2025')],
     frequency: 'Quarterly',
     nextDue: d(2026, 7, 15),
+    applicable: true,
+    applicabilityBasis: 'Governs SPF’s NPS scheme portfolios as a PFM.',
     citation: 'Master Circular on Investment Guidelines, dated 10 Dec 2025 (para 4 — universe & review)',
     sourceExtract:
-      'Pension Funds shall invest only in securities forming part of the approved investment universe, and shall review the actively invested portfolio at least twice a week and the full eligible universe at least once a year, recording the review in the minutes of the Investment Committee. This Master Circular consolidates and supersedes the earlier Master Circular dated 28 March 2025.',
-    aiRecommendation: ai('Save to controls and track as the Investment Committee minutes-filing obligation; the twice-weekly / annual universe review binds the PFM.', 96.4, 'Para 4 of the in-force PFRDA Master Circular (10 Dec 2025); SPF is an NPS PFM.', t(2025, 12, 12, 9, 40)),
-    reviewState: 'Approved and saved',
+      'Pension Funds shall invest only in securities forming part of the approved investment universe, and shall review the actively invested portfolio at least twice a week and the full eligible universe at least once a year, recording the review in the minutes of the Investment Committee.',
+    aiRecommendation: ai('Save to an investment universe & exposure monitoring control operated by the Investment Risk team.', 96.4, 'Para 4 of the in-force PFRDA Master Circular; SPF is an NPS PFM.', t(2025, 12, 12, 9, 40)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-INV-01',
     reviewer: 'arvind',
     reviewedAt: t(2025, 12, 15, 14, 12),
-    rationale: 'Directly governs SPF’s scheme portfolios; tracked via the Investment Committee minutes obligation.',
+    rationale: 'Directly governs the scheme portfolios; saved to the investment monitoring control.',
   }),
+  prov({
+    id: 'SRC-PFRDA-INV-EXP',
+    instrumentId: 'INST-PFRDA-INV-2025',
+    provision: 'Para 7 — single-issuer & group exposure limits',
+    title: 'Para 7 — Exposure limits',
+    nameOfCompliance: 'Single-issuer & group exposure limits',
+    briefDescription: 'Cap exposure to any single issuer or group; report breaches.',
+    whatItMeans:
+      'SPF must keep exposure to any single issuer or corporate group within the prescribed ceiling and report any breach to PFRDA.',
+    keyParts: ['Single-issuer exposure ceiling', 'Group exposure ceiling', 'Breaches reported to PFRDA'],
+    penaltyTiers: [tier('Breach of the single-issuer or group exposure limit', 'Regulatory action and mandatory exposure-breach reporting to PFRDA', 'High', 'SRC-PFRDA-INV-EXP')],
+    frequency: 'Quarterly',
+    nextDue: d(2026, 7, 15),
+    applicable: true,
+    applicabilityBasis: 'SPF’s scheme portfolios are bound by PFRDA exposure ceilings.',
+    citation: 'Master Circular on Investment Guidelines, dated 10 Dec 2025 (para 7 — exposure limits)',
+    sourceExtract:
+      'The exposure of a Pension Fund to any single issuer, and to a corporate group, shall not exceed the limits prescribed herein, monitored at the scheme-portfolio level, and any breach shall be reported to the Authority along with the corrective action taken.',
+    aiRecommendation: ai('Save to the investment universe & exposure monitoring control; add an exposure-limit threshold check.', 91.8, 'Para 7 exposure limits bind SPF’s scheme portfolios.', t(2026, 6, 9, 9, 30)),
+    status: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-PFRDA-INV-COMMITTEE',
+    instrumentId: 'INST-PFRDA-INV-2025',
+    provision: 'Para 9 — Investment Committee oversight & minutes',
+    title: 'Para 9 — Investment Committee oversight',
+    nameOfCompliance: 'Investment Committee oversight',
+    briefDescription: 'The Investment Committee reviews and minutes the portfolio.',
+    whatItMeans:
+      'The Investment Committee must review the portfolio and the approved universe and record the review in its minutes, evidencing oversight.',
+    keyParts: ['Investment Committee reviews the portfolio and universe', 'Records the review in its minutes', 'Evidences oversight to PFRDA'],
+    penaltyTiers: [tier('Inadequate Investment Committee oversight or missing minutes', 'Supervisory observation by PFRDA', 'Medium', 'SRC-PFRDA-INV-COMMITTEE')],
+    frequency: 'Quarterly',
+    nextDue: d(2026, 7, 15),
+    applicable: true,
+    applicabilityBasis: 'SPF must operate an Investment Committee and minute its review.',
+    citation: 'Master Circular on Investment Guidelines, dated 10 Dec 2025 (para 9 — committee oversight)',
+    sourceExtract:
+      'The Investment Committee shall review the actively invested portfolio and the approved universe at the prescribed frequency, and the proceedings, including the review and any deviations, shall be recorded in the minutes of the Committee.',
+    aiRecommendation: ai('Save to the same investment monitoring control; the IC minutes are its evidence.', 90.6, 'Para 9 requires Investment Committee oversight and minuting.', t(2025, 12, 12, 9, 42)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-INV-01',
+    reviewer: 'arvind',
+    reviewedAt: t(2025, 12, 15, 14, 18),
+    rationale: 'Oversight clause; saved to the investment monitoring control (its IC minutes are the evidence).',
+  }),
+  // ════ CERT-In Directions — focus act ════
+  prov({
+    id: 'SRC-CERTIN-2022',
+    instrumentId: 'INST-CERTIN-2022',
+    provision: 'Direction 20(3)/2022 — 6-hour incident reporting',
+    title: 'Direction 20(3)/2022 — 6-hour reporting',
+    nameOfCompliance: 'Cyber incident reporting (6 hours)',
+    briefDescription: 'Report cyber incidents to CERT-In within six hours.',
+    whatItMeans:
+      'SPF must report cyber incidents — including ransomware and data breaches — to CERT-In within six hours of noticing them.',
+    keyParts: ['Report within 6 hours of noticing', 'Covers ransomware, data breaches and other notified incidents', 'Use the CERT-In reporting format'],
+    penaltyTiers: [tier('Cyber incident not reported within 6 hours', 'Punishable under s.70B — imprisonment up to 1 year or fine up to ₹1 lakh', 'High', 'SRC-ITACT-70B')],
+    frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF operates ICT systems in India and is bound by Direction 20(3)/2022.',
+    citation: 'Direction No. 20(3)/2022-CERT-In, dated 28 Apr 2022 (6-hour reporting)',
+    sourceExtract:
+      'Any service provider, intermediary, data centre, body corporate and Government organisation shall mandatorily report cyber incidents to CERT-In within six hours of noticing such incidents or being brought to notice about such incidents.',
+    aiRecommendation: ai('Save to a shared breach detection & notification control, co-located with the DPDP §8(6) intimation.', 96.1, 'Direction 20(3)/2022 binds every body corporate operating ICT systems in India.', t(2026, 6, 3, 9, 55)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-DPB-01',
+    reviewer: 'rajesh',
+    reviewedAt: t(2026, 6, 4, 10, 30),
+    rationale: 'Operationalised on the CERT-In clock; saved to the shared breach control alongside DPDP §8(6).',
+  }),
+  prov({
+    id: 'SRC-CERTIN-LOGS',
+    instrumentId: 'INST-CERTIN-2022',
+    provision: 'Direction 20(4)/2022 — 180-day in-India log retention',
+    title: 'Direction — 180-day log retention',
+    nameOfCompliance: 'Log retention (180 days, in India)',
+    briefDescription: 'Keep logs 180 days within Indian jurisdiction.',
+    whatItMeans:
+      'SPF must securely keep system logs for a rolling 180 days within Indian jurisdiction and make them available to CERT-In on request.',
+    keyParts: ['Rolling 180-day retention', 'Within Indian jurisdiction', 'Available to CERT-In on request'],
+    penaltyTiers: [tier('Logs not retained 180 days within India', 'Punishable under s.70B', 'High', 'SRC-ITACT-70B')],
+    frequency: 'Continuous',
+    applicable: true,
+    applicabilityBasis: 'SPF must retain logs for forensic readiness under the CERT-In directions.',
+    citation: 'Direction No. 20(3)/2022-CERT-In, dated 28 Apr 2022 (log retention)',
+    sourceExtract:
+      'All service providers, intermediaries, data centres, body corporate and Government organisations shall mandatorily enable logs of all their ICT systems and maintain them securely for a rolling period of 180 days, and the same shall be maintained within the Indian jurisdiction.',
+    aiRecommendation: ai('Save to a log retention & time-sync control on the SIEM and EDR feeds.', 94.7, 'The 180-day in-India retention binds SPF’s ICT systems.', t(2026, 6, 3, 9, 58)),
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-LOG-01',
+    reviewer: 'karthik',
+    reviewedAt: t(2026, 6, 4, 11, 5),
+    rationale: 'Saved to the log retention & NTP control on Splunk SIEM and CrowdStrike EDR.',
+  }),
+  prov({
+    id: 'SRC-CERTIN-NTP',
+    instrumentId: 'INST-CERTIN-2022',
+    provision: 'Direction 20(5)/2022 — NTP clock synchronisation',
+    title: 'Direction — NTP synchronisation',
+    nameOfCompliance: 'NTP clock synchronisation',
+    briefDescription: 'Synchronise ICT clocks to NTP.',
+    whatItMeans:
+      'SPF must synchronise all ICT system clocks to NTP (NIC/NPL or traceable sources) so incident timelines are accurate and consistent.',
+    keyParts: ['Synchronise all ICT clocks to NTP', 'Use NIC / NPL or traceable sources', 'Keeps incident timestamps accurate'],
+    penaltyTiers: [tier('ICT clocks not NTP-synchronised', 'Punishable under s.70B', 'Medium', 'SRC-ITACT-70B')],
+    frequency: 'Continuous',
+    applicable: true,
+    applicabilityBasis: 'Accurate timestamps are required for the 6-hour reporting clock.',
+    citation: 'Direction No. 20(3)/2022-CERT-In, dated 28 Apr 2022 (NTP synchronisation)',
+    sourceExtract:
+      'All service providers, intermediaries, data centres, body corporate and Government organisations shall connect to the Network Time Protocol (NTP) Server of the National Informatics Centre or the National Physical Laboratory, or with NTP servers traceable to these, for synchronisation of all their ICT systems clocks.',
+    aiRecommendation: ai('Save to the same log retention & time-sync control; add an NTP-drift check.', 89.2, 'NTP synchronisation supports the 6-hour reporting accuracy.', t(2026, 6, 3, 10, 0)),
+    status: 'Recommended',
+  }),
+  // ════ Other statutory acts (kept; clauses Recommended in the library) ════
   prov({
     id: 'SRC-PFRDA-INV-2025-MAR',
     instrumentId: 'INST-PFRDA-INV-2025-MAR',
@@ -392,29 +620,24 @@ export const SOURCES: SourceProvision[] = [
     sourceExtract:
       'Pension Funds shall invest only in securities forming part of the approved investment universe and shall review the eligible universe at least once a year. (Superseded by the consolidated Master Circular dated 10 December 2025.)',
   }),
-  // PFRDA ICS
   prov({
     id: 'SRC-PFRDA-ICS-2024',
     instrumentId: 'INST-PFRDA-ICS-2024',
     provision: 'Policy clause — board-approved ICS policy & cyber crisis management plan',
     title: 'ICS policy & crisis-management plan',
     nameOfCompliance: 'Board-approved ICS policy',
-    briefDescription: 'Maintain a board-approved Information & Cyber Security policy aligned to ISO 27001 / NIST CSF with a cyber crisis plan.',
-    keyParts: [
-      'Board-approved ICS policy aligned to ISO/IEC 27001 and NIST CSF',
-      'Cyber crisis management plan with defined roles and escalation',
-      'Incident reporting to PFRDA',
-    ],
-    penaltyTiers: [tier('Absence of a board-approved ICS policy or crisis plan', 'Supervisory action by PFRDA on the intermediary', 'Medium', 'SRC-PFRDA-ICS-2024')],
+    briefDescription: 'Maintain a board-approved ICS policy and crisis plan.',
+    whatItMeans: 'SPF must keep a board-approved Information & Cyber Security policy aligned to ISO 27001 / NIST CSF, with a cyber crisis-management plan.',
+    keyParts: ['Board-approved ICS policy aligned to ISO 27001 / NIST CSF', 'Cyber crisis management plan', 'Incident reporting to PFRDA'],
+    penaltyTiers: [tier('Absence of a board-approved ICS policy', 'Supervisory action by PFRDA', 'Medium', 'SRC-PFRDA-ICS-2024')],
     frequency: 'Half-yearly',
+    applicable: true,
+    applicabilityBasis: 'SPF is a PFRDA-registered intermediary.',
     citation: 'PFRDA ICS Policy Guidelines, 2024',
     sourceExtract:
       'Every intermediary shall put in place a board-approved Information & Cyber Security policy aligned to ISO/IEC 27001 and the NIST Cybersecurity Framework, and shall maintain a cyber crisis management plan with defined roles, escalation and incident reporting to PFRDA.',
-    aiRecommendation: ai('Save to controls and track via the half-yearly ICS self-assessment and annual cyber-security audit obligations.', 88.3, 'PFRDA ICS Guidelines 2024 applicability to registered intermediaries.', t(2026, 6, 2, 10, 15)),
-    reviewState: 'Under review',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 6, 16, 30),
-    rationale: 'Scope confirmed; checking which controls evidence the board-approval clause before saving.',
+    aiRecommendation: ai('Map to the ICS policy and the half-yearly self-assessment control.', 88.3, 'PFRDA ICS Guidelines 2024 apply to registered intermediaries.', t(2026, 6, 2, 10, 15)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-PFRDA-ICS-2025',
@@ -422,47 +645,38 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Incident classification & 48-hour intimation',
     title: 'Incident classification & 48h intimation',
     nameOfCompliance: 'Cyber incident intimation (48h)',
-    briefDescription: 'Classify cyber incidents and intimate subscriber-impacting Critical/High incidents to PFRDA within 48 hours.',
-    keyParts: [
-      'Classify incidents as Critical / High / Medium / Low',
-      'Intimate subscriber-impacting Critical/High incidents within 48 hours',
-      'Follow with a detailed report',
-    ],
+    briefDescription: 'Classify incidents; intimate subscriber-impacting ones in 48h.',
+    whatItMeans: 'SPF must classify cyber incidents and intimate subscriber-impacting Critical/High incidents to PFRDA within 48 hours.',
+    keyParts: ['Classify incidents Critical / High / Medium / Low', 'Intimate subscriber-impacting Critical/High within 48 hours', 'Follow with a detailed report'],
     penaltyTiers: [tier('Subscriber-impacting incident not intimated within 48 hours', 'Regulatory action under the PFRDA ICS framework', 'High', 'SRC-PFRDA-ICS-2025')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF processes subscriber data and runs fund accounting.',
     citation: 'Circular PFRDA/2025/05/ICS/01, dated Sept 2025',
     sourceExtract:
       'Cyber security incidents shall be classified as Critical, High, Medium or Low. Subscriber-impacting or personal-data incidents classified Critical/High shall be intimated to the Authority within 48 hours of detection, followed by a detailed report.',
-    aiRecommendation: ai('Save to controls and track via the quarterly compliance return; the 48-hour clock binds subscriber-impacting incidents.', 94.1, 'Circular PFRDA/2025/05/ICS/01; SPF processes subscriber PRAN/KYC data.', t(2025, 9, 18, 11, 5)),
-    reviewState: 'Approved and saved',
-    reviewer: 'anjali',
-    reviewedAt: t(2025, 9, 22, 12, 40),
-    rationale: 'Operationalised on the marquee incident track; classification taxonomy adopted.',
+    aiRecommendation: ai('Map to the incident-management control and the quarterly compliance return.', 94.1, 'Circular PFRDA/2025/05/ICS/01 applies to SPF.', t(2025, 9, 18, 11, 5)),
+    status: 'Recommended',
   }),
-  // Companies Act, 2013
   prov({
     id: 'SRC-CA-92-5',
     instrumentId: 'INST-CA-2013',
     provision: 'Section 92(5)',
     title: 'Section 92(5) — Annual return default',
     nameOfCompliance: 'Annual return (MGT-7) filing',
-    briefDescription: 'File the annual return within the period specified; default carries a per-day penalty on the company and officers.',
+    briefDescription: 'File the annual return on time.',
+    whatItMeans: 'SPF must file its annual return (MGT-7) within the prescribed period; default carries a per-day penalty on the company and its officers.',
     keyParts: ['File the annual return (MGT-7) on time', 'Penalty on the company and every officer in default'],
-    penaltyTiers: [
-      tier('Failure to file the annual return (company)', '₹10,000 + ₹100 per day, max ₹2,00,000', 'Medium', 'SRC-CA-92-5'),
-      tier('Officer in default', '₹10,000 + ₹100 per day, max ₹50,000', 'Medium', 'SRC-CA-92-5'),
-      tier('Delay in filing', 'Additional fee of ₹100 per day under s.403', 'Low', 'SRC-CA-403'),
-    ],
+    penaltyTiers: [tier('Failure to file the annual return', '₹10,000 + ₹100 per day, max ₹2,00,000 (company)', 'Medium', 'SRC-CA-92-5')],
     frequency: 'Annual',
     nextDue: d(2026, 11, 29),
+    applicable: true,
+    applicabilityBasis: 'SPF is a company incorporated under the Act.',
     citation: 'Section 92(5), Companies Act, 2013 (as amended by the Companies (Amendment) Act, 2020)',
     sourceExtract:
       'If any company fails to file its annual return under sub-section (4) before the expiry of the period specified therein, such company and its every officer who is in default shall be liable to a penalty of ten thousand rupees and in case of continuing failure, with a further penalty of one hundred rupees for each day during which such failure continues, subject to a maximum of two lakh rupees in case of a company and fifty thousand rupees in case of an officer who is in default.',
-    aiRecommendation: ai('Save to controls and track as the annual return MGT-7 filing obligation; penalty accrues per day on default.', 95.7, 'Section 92(5) applies to every company; SPF is incorporated under the Act.', t(2026, 6, 1, 9, 10)),
-    reviewState: 'Approved and saved',
-    reviewer: 'vikram',
-    reviewedAt: t(2026, 6, 4, 11, 25),
-    rationale: 'Annual return is a standing Company Secretary obligation; tracked.',
+    aiRecommendation: ai('Map to the annual return MGT-7 filing control under the Company Secretary.', 95.7, 'Section 92(5) applies to every company.', t(2026, 6, 1, 9, 10)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-CA-137-3',
@@ -470,22 +684,19 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 137(3)',
     title: 'Section 137(3) — Financial statements default',
     nameOfCompliance: 'Financial statements (AOC-4) filing',
-    briefDescription: 'File the financial statements within the period specified; default carries a per-day penalty.',
+    briefDescription: 'File the financial statements on time.',
+    whatItMeans: 'SPF must file its financial statements (AOC-4) within the prescribed period; default carries a per-day penalty.',
     keyParts: ['File AOC-4 on time', 'Penalty on company, MD/CFO and directors'],
-    penaltyTiers: [
-      tier('Failure to file the financial statements', '₹10,000 + ₹100 per day, max ₹2,00,000', 'Medium', 'SRC-CA-137-3'),
-      tier('Delay in filing', 'Additional fee of ₹100 per day under s.403', 'Low', 'SRC-CA-403'),
-    ],
+    penaltyTiers: [tier('Failure to file the financial statements', '₹10,000 + ₹100 per day, max ₹2,00,000', 'Medium', 'SRC-CA-137-3')],
     frequency: 'Annual',
     nextDue: d(2026, 10, 30),
+    applicable: true,
+    applicabilityBasis: 'SPF files financial statements with the ROC.',
     citation: 'Section 137(3), Companies Act, 2013 (as amended)',
     sourceExtract:
       'If a company fails to file the copy of the financial statements before the expiry of the period specified therein, the company shall be liable to a penalty of ten thousand rupees and in case of continuing failure, with a further penalty of one hundred rupees for each day, subject to a maximum of two lakh rupees, and the managing director and the Chief Financial Officer, if any, and, in their absence, every director, shall be liable to a penalty of ten thousand rupees and in case of continuing failure, with a further penalty of one hundred rupees for each day, subject to a maximum of fifty thousand rupees.',
-    aiRecommendation: ai('Save to controls and track as the AOC-4 financial-statement filing obligation.', 94.8, 'Section 137(3) applies to every company filing financial statements.', t(2026, 6, 1, 9, 12)),
-    reviewState: 'Approved and saved',
-    reviewer: 'vikram',
-    reviewedAt: t(2026, 6, 4, 11, 30),
-    rationale: 'Standing filing duty; tracked against the board calendar.',
+    aiRecommendation: ai('Map to the AOC-4 financial-statement filing control.', 94.8, 'Section 137(3) applies to every company filing financial statements.', t(2026, 6, 1, 9, 12)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-CA-164-2',
@@ -493,37 +704,21 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 164(2)',
     title: 'Section 164(2) — Director disqualification',
     nameOfCompliance: 'Director disqualification on filing default',
-    briefDescription: 'A director of a company in continuous three-year filing default is disqualified for five years.',
+    briefDescription: 'A three-year filing default disqualifies directors.',
+    whatItMeans: 'If SPF were in continuous three-year filing default, its directors would be disqualified for five years — a consequence to monitor, not a filing.',
     keyParts: ['Triggered by a continuous three-year filing default', 'Disqualifies re-appointment for five years'],
     penaltyTiers: [tier('Continuous three-year default in filing returns/financials', 'Director disqualified for five years', 'High', 'SRC-CA-164-2')],
     frequency: 'Event-based',
+    applicable: false,
+    applicabilityBasis: 'SPF has filed all returns and financials; the three-year default trigger is not met.',
     citation: 'Section 164(2), Companies Act, 2013',
     sourceExtract:
       'No person who is or has been a director of a company which has not filed financial statements or annual returns for any continuous period of three financial years shall be eligible to be re-appointed as a director of that company or appointed in any other company for a period of five years from the date on which the said company fails to do so.',
-    aiRecommendation: ai('Track as a consequence of a three-year filing default; confirm whether a direct tracked obligation is warranted.', 61.3, 'Section 164(2) triggers only on a continuous three-year filing default.', t(2026, 6, 1, 9, 14)),
-    reviewState: 'Needs internal review',
+    aiRecommendation: ai('Consequence provision — monitor via the filing controls; no separate control needed.', 61.3, 'Section 164(2) triggers only on a continuous three-year default.', t(2026, 6, 1, 9, 14)),
+    status: 'Not applicable',
     reviewer: 'vikram',
     reviewedAt: t(2026, 6, 5, 10, 5),
-    rationale: 'Routed to the Secretarial team to confirm whether to track as a consequence control rather than a filing obligation.',
-  }),
-  prov({
-    id: 'SRC-CA-447',
-    instrumentId: 'INST-CA-2013',
-    provision: 'Section 447',
-    title: 'Section 447 — Punishment for fraud',
-    nameOfCompliance: 'Fraud — penal consequence',
-    briefDescription: 'Fraud above the statutory threshold is punishable with imprisonment and a fine up to three times the amount involved.',
-    keyParts: ['Applies to fraud ≥ ₹10 lakh or 1% of turnover', 'Imprisonment 6 months to 10 years', 'Fine up to three times the amount involved'],
-    penaltyTiers: [tier('Fraud involving ≥ ₹10 lakh or 1% of turnover', 'Imprisonment 6 months–10 years and fine up to 3× the amount', 'Critical', 'SRC-CA-447')],
-    frequency: 'Event-based',
-    citation: 'Section 447, Companies Act, 2013',
-    sourceExtract:
-      'Any person who is found to be guilty of fraud involving an amount of at least ten lakh rupees or one per cent of the turnover of the company, whichever is lower, shall be punishable with imprisonment for a term which shall not be less than six months but which may extend to ten years and shall also be liable to fine which shall not be less than the amount involved in the fraud, but which may extend to three times the amount involved in the fraud.',
-    aiRecommendation: ai('Treat as a fraud-risk consequence feeding the whistleblower / fraud-risk controls rather than a filing obligation.', 68.5, 'Section 447 is a penal consequence provision, not a periodic filing.', t(2026, 6, 2, 14, 40)),
-    reviewState: 'Under review',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 7, 9, 15),
-    rationale: 'Relevant to fraud-risk controls; confirming the mapping target before saving.',
+    rationale: 'SPF is current on all filings; the disqualification trigger is not met — marked not applicable.',
   }),
   prov({
     id: 'SRC-CA-403',
@@ -531,39 +726,38 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 403 r/w Rule 12 (additional fee)',
     title: 'Section 403 — Additional fee on delay',
     nameOfCompliance: 'Additional fee on late ROC filing',
-    briefDescription: 'Documents filed after the specified time attract an additional fee of ₹100 per day.',
-    keyParts: ['Applies to late MGT-7 and AOC-4 filings', 'Additional fee ₹100 per day until filed'],
-    penaltyTiers: [tier('Late filing of MGT-7 / AOC-4', 'Additional fee of ₹100 per day until the date of filing', 'Low', 'SRC-CA-403')],
+    briefDescription: 'Late ROC filings attract ₹100/day additional fee.',
+    whatItMeans: 'Any late MGT-7 or AOC-4 filing by SPF attracts an additional fee of ₹100 per day until filed.',
+    keyParts: ['Applies to late MGT-7 / AOC-4', 'Additional fee ₹100 per day until filed'],
+    penaltyTiers: [tier('Late filing of MGT-7 / AOC-4', 'Additional fee ₹100 per day until the date of filing', 'Low', 'SRC-CA-403')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'Attaches to SPF’s ROC filings on delay.',
     citation: 'Section 403 read with the Companies (Registration Offices and Fees) Rules, 2014',
     sourceExtract:
       'Any document required to be submitted, filed, registered or recorded may be so submitted after the time specified on payment of such additional fee as may be prescribed; in case of delay in filing of the annual return (MGT-7) and financial statements (AOC-4), additional fee of one hundred rupees per day is payable until the date of filing.',
-    aiRecommendation: ai('Attach to the MGT-7 and AOC-4 obligations as the additional-fee consequence on delay.', 90.2, 'Fees Rules 2014 apply to SPF’s ROC filings.', t(2026, 6, 1, 9, 16)),
-    reviewState: 'Approved and saved',
-    reviewer: 'vikram',
-    reviewedAt: t(2026, 6, 4, 11, 35),
-    rationale: 'Standard additional-fee rule; tracked alongside the annual filings.',
+    aiRecommendation: ai('Attach as the additional-fee consequence on the MGT-7 / AOC-4 filing controls.', 90.2, 'Fees Rules 2014 apply to SPF’s ROC filings.', t(2026, 6, 1, 9, 16)),
+    status: 'Recommended',
   }),
-  // GST / CGST Act, 2017
   prov({
     id: 'SRC-CGST-47',
     instrumentId: 'INST-CGST-2017',
     provision: 'Section 47',
     title: 'Section 47 — Late fee for returns',
     nameOfCompliance: 'GST return late fee',
-    briefDescription: 'Late furnishing of GST returns attracts a per-day late fee under each Act.',
-    keyParts: ['Applies to GSTR-3B and GSTR-1', 'Late fee ₹50/day (₹25 CGST + ₹25 SGST) for returns with liability'],
-    penaltyTiers: [tier('Late filing of GSTR-3B / GSTR-1', 'Late fee ₹50 per day (₹25 under each Act) for returns with tax liability', 'Low', 'SRC-CGST-47')],
+    briefDescription: 'Late GST returns attract a per-day late fee.',
+    whatItMeans: 'If SPF files GSTR-3B or GSTR-1 late, a per-day late fee applies under each Act.',
+    keyParts: ['Applies to GSTR-3B and GSTR-1', 'Late fee ₹50/day (₹25 under each Act) for returns with liability'],
+    penaltyTiers: [tier('Late filing of GSTR-3B / GSTR-1', 'Late fee ₹50 per day for returns with tax liability', 'Low', 'SRC-CGST-47')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 20),
+    applicable: true,
+    applicabilityBasis: 'SPF is a GST-registered person filing monthly returns.',
     citation: 'Section 47, CGST Act, 2017 (read with late-fee notifications under the GST Acts)',
     sourceExtract:
       'Any registered person who fails to furnish the returns required under section 39 by the due date shall pay a late fee of one hundred rupees for every day during which such failure continues, subject to a prescribed maximum — and an equal amount is payable under the SGST Act. For GSTR-3B and GSTR-1 this is reduced by notification to twenty-five rupees per day under each Act (fifty rupees per day in total) for returns with tax liability.',
-    aiRecommendation: ai('Save to controls and track as the GSTR-3B and GSTR-1 monthly return obligations; late fee accrues per day.', 93.6, 'Section 47 applies to every GST-registered person; SPF is registered.', t(2026, 6, 1, 8, 50)),
-    reviewState: 'Approved and saved',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 3, 15, 20),
-    rationale: 'GST returns are a standing monthly obligation; tracked.',
+    aiRecommendation: ai('Map to the GSTR-3B / GSTR-1 monthly return controls under the Tax team.', 93.6, 'Section 47 applies to every GST-registered person.', t(2026, 6, 1, 8, 50)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-CGST-50',
@@ -571,36 +765,19 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 50(1)',
     title: 'Section 50(1) — Interest on delayed tax',
     nameOfCompliance: 'Interest on delayed GST',
-    briefDescription: 'Tax not paid within the prescribed period attracts interest up to 18% per annum.',
-    keyParts: ['Applies to unpaid GST', 'Interest up to 18% p.a. on the unpaid amount'],
+    briefDescription: 'Delayed GST attracts up to 18% p.a. interest.',
+    whatItMeans: 'If SPF pays GST late, interest up to 18% per annum applies on the unpaid amount.',
+    keyParts: ['Applies to unpaid GST', 'Interest up to 18% p.a.'],
     penaltyTiers: [tier('Delayed payment of GST', 'Interest up to 18% per annum on the unpaid tax', 'Medium', 'SRC-CGST-50')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 20),
+    applicable: true,
+    applicabilityBasis: 'Attaches to SPF’s GST payments on delay.',
     citation: 'Section 50(1), CGST Act, 2017 (read with Notification 13/2017-Central Tax)',
     sourceExtract:
       'Every person who is liable to pay tax in accordance with the provisions of this Act or the rules made thereunder, but fails to pay the tax or any part thereof to the Government within the period prescribed, shall for the period for which the tax or any part thereof remains unpaid, pay, on his own, interest at such rate, not exceeding eighteen per cent, as may be notified by the Government.',
-    aiRecommendation: ai('Attach to the GSTR-3B obligation as the interest-on-delay consequence (18% p.a. notified).', 86.9, 'Section 50(1) r/w Notification 13/2017-Central Tax.', t(2026, 6, 8, 10, 30)),
-    reviewState: 'Recommended',
-  }),
-  // CERT-In
-  prov({
-    id: 'SRC-CERTIN-2022',
-    instrumentId: 'INST-CERTIN-2022',
-    provision: 'Direction No. 20(3)/2022 — 6-hour reporting, 180-day logs, NTP sync',
-    title: 'Direction 20(3)/2022 — 6-hour reporting',
-    nameOfCompliance: 'CERT-In incident reporting (6h)',
-    briefDescription: 'Report cyber incidents to CERT-In within six hours; retain logs 180 days in India; sync clocks to NTP.',
-    keyParts: ['Report cyber incidents within 6 hours of noticing', '180-day in-India log retention', 'NTP clock synchronisation'],
-    penaltyTiers: [tier('Cyber incident not reported within 6 hours', 'Non-compliance punishable under s.70B — imprisonment up to 1 year or fine up to ₹1 lakh', 'High', 'SRC-ITACT-70B')],
-    frequency: 'Event-based',
-    citation: 'Direction No. 20(3)/2022-CERT-In, dated 28 Apr 2022',
-    sourceExtract:
-      'Any service provider, intermediary, data centre, body corporate and Government organisation shall mandatorily report cyber incidents to CERT-In within six hours of noticing such incidents or being brought to notice about such incidents. Logs shall be securely maintained for a rolling period of 180 days within Indian jurisdiction, and ICT systems clocks shall be synchronised to NTP.',
-    aiRecommendation: ai('Save to controls and track via the cyber incident summary report and the log-retention / NTP-sync attestation obligations.', 96.1, 'Direction 20(3)/2022 binds every body corporate operating ICT systems in India.', t(2026, 6, 1, 8, 40)),
-    reviewState: 'Approved and saved',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 3, 9, 55),
-    rationale: 'Operationalised on the CERT-In clock; 180-day in-India retention evidenced.',
+    aiRecommendation: ai('Attach as the interest-on-delay consequence of the GSTR-3B control.', 86.9, 'Section 50(1) r/w Notification 13/2017-Central Tax.', t(2026, 6, 8, 10, 30)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-ITACT-70B',
@@ -608,36 +785,38 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 70B',
     title: 'Section 70B — CERT-In powers & penalty',
     nameOfCompliance: 'CERT-In enabling power & penalty',
-    briefDescription: 'The enabling provision for CERT-In; non-compliance with its directions is punishable.',
-    keyParts: ['CERT-In is the national incident-response agency', 'Non-compliance is punishable with imprisonment or fine'],
-    penaltyTiers: [tier('Failure to comply with CERT-In directions or provide information', 'Imprisonment up to 1 year or fine up to ₹1 lakh or both', 'High', 'SRC-ITACT-70B')],
+    briefDescription: 'The enabling power for CERT-In; non-compliance is punishable.',
+    whatItMeans: 'Section 70B empowers CERT-In’s directions; SPF’s failure to comply is punishable with imprisonment up to one year or a fine up to ₹1 lakh.',
+    keyParts: ['CERT-In is the national incident-response agency', 'Non-compliance punishable with imprisonment or fine'],
+    penaltyTiers: [tier('Failure to comply with CERT-In directions', 'Imprisonment up to 1 year or fine up to ₹1 lakh or both', 'High', 'SRC-ITACT-70B')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'The penalty source for SPF’s CERT-In duties.',
     citation: 'Section 70B, Information Technology Act, 2000',
     sourceExtract:
       'The Indian Computer Emergency Response Team shall serve as the national agency for incident response. Any service provider, intermediaries, data centres, body corporate or person who fails to provide the information called for or comply with the directions issued shall be punishable with imprisonment for a term which may extend to one year or with fine which may extend to one lakh rupees or with both.',
-    aiRecommendation: ai('Attach to the CERT-In reporting obligations as the parent power and the non-compliance penalty.', 84.6, 'Section 70B is the enabling provision for the CERT-In Directions.', t(2026, 6, 8, 10, 35)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Reference clause — the penalty source for the CERT-In directions; no separate control.', 84.6, 'Section 70B is the enabling provision for the CERT-In directions.', t(2026, 6, 8, 10, 35)),
+    status: 'Recommended',
   }),
-  // EPF & MP Act, 1952
   prov({
     id: 'SRC-EPF-6',
     instrumentId: 'INST-EPF-1952',
-    provision: 'Section 6 — Contributions and matters which may be provided for in Schemes',
+    provision: 'Section 6 — Contributions',
     title: 'Section 6 — Contributions',
     nameOfCompliance: 'PF contribution & monthly ECR',
-    briefDescription: 'Deposit employer/employee PF contributions (12%) and file the monthly Electronic Challan-cum-Return.',
-    keyParts: ['Employer contribution at 12% of basic wages, DA and retaining allowance', 'Equal employee contribution', 'Monthly ECR filing and deposit'],
-    penaltyTiers: [
-      tier('Default in depositing the PF contribution', 'Damages up to 100% of arrears under s.14B', 'High', 'SRC-EPF-14B'),
-      tier('Delay in deposit', 'Simple interest at 12% per annum under s.7Q', 'Medium', 'SRC-EPF-7Q'),
-    ],
+    briefDescription: 'Deposit 12% PF contributions; file the monthly ECR.',
+    whatItMeans: 'SPF must deposit employer/employee PF contributions (12% of the wage base) and file the monthly Electronic Challan-cum-Return.',
+    keyParts: ['12% employer contribution on the wage base', 'Equal employee contribution', 'Monthly ECR filing and deposit'],
+    penaltyTiers: [tier('Default in depositing the PF contribution', 'Damages up to 100% of arrears (s.14B) and interest at 12% p.a. (s.7Q)', 'High', 'SRC-EPF-14B')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 15),
+    applicable: true,
+    applicabilityBasis: 'SPF is a covered establishment with salaried staff.',
     citation: 'Section 6, Employees’ Provident Funds and Miscellaneous Provisions Act, 1952',
     sourceExtract:
       'The contribution which shall be paid by the employer to the Fund shall be ten per cent of the basic wages, dearness allowance and retaining allowance (if any) for the time being payable to each of the employees, and the employee’s contribution shall be equal to the contribution payable by the employer; provided that the Central Government may, by notification, substitute twelve per cent for ten per cent, as applies to the classes of establishments to which SPF belongs.',
-    aiRecommendation: ai('Save to controls and track as the monthly PF & ESI challan (ECR) obligation; defines the 12% contribution base.', 91.7, 'Section 6 r/w the contribution-rate notification for covered establishments.', t(2026, 6, 9, 9, 20)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Map to the monthly PF & ESI challan (ECR) control under the Labour team.', 91.7, 'Section 6 r/w the contribution-rate notification for covered establishments.', t(2026, 6, 9, 9, 20)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-EPF-14B',
@@ -645,18 +824,18 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 14B (r/w Para 32A of the Scheme)',
     title: 'Section 14B — Damages for default',
     nameOfCompliance: 'Damages on PF default',
-    briefDescription: 'Default in PF contribution lets the PF Commissioner recover damages up to the amount of arrears.',
-    keyParts: ['Triggered by default in contribution', 'Damages up to the amount of arrears', 'Recovered by the PF Commissioner'],
-    penaltyTiers: [tier('Default in payment of any contribution to the Fund', 'Damages by way of penalty, not exceeding the amount of arrears', 'High', 'SRC-EPF-14B')],
+    briefDescription: 'Default in PF contribution allows recovery of damages.',
+    whatItMeans: 'If SPF defaults on PF contributions, the PF Commissioner may recover damages up to the amount of arrears.',
+    keyParts: ['Triggered by default in contribution', 'Damages up to the amount of arrears'],
+    penaltyTiers: [tier('Default in payment of any contribution', 'Damages by way of penalty, up to the amount of arrears', 'High', 'SRC-EPF-14B')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'The damages consequence of SPF’s PF deposits.',
     citation: 'Section 14B, Employees’ Provident Funds and Miscellaneous Provisions Act, 1952 (r/w Para 32A of the Scheme)',
     sourceExtract:
       'Where an employer makes default in the payment of any contribution to the Fund, the Central Provident Fund Commissioner or such other officer as may be authorised may recover from the employer by way of penalty such damages, not exceeding the amount of arrears, as may be specified in the Scheme.',
-    aiRecommendation: ai('Save to controls and track as the damages-on-default consequence of the monthly PF challan obligation.', 92.8, 'Section 14B applies to SPF as a covered establishment defaulting on contributions.', t(2026, 6, 2, 9, 5)),
-    reviewState: 'Approved and saved',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 5, 13, 45),
-    rationale: 'Damages clause tracked against the PF challan obligation; payroll deposits are timely.',
+    aiRecommendation: ai('Attach as the damages consequence of the monthly PF challan control.', 92.8, 'Section 14B applies to a covered establishment in default.', t(2026, 6, 2, 9, 5)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-EPF-7Q',
@@ -664,36 +843,38 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 7Q',
     title: 'Section 7Q — Interest on arrears',
     nameOfCompliance: 'Interest on PF arrears',
-    briefDescription: 'Any amount due from the employer carries simple interest at 12% per annum until paid.',
-    keyParts: ['Applies to any amount due under the Act', 'Simple interest at 12% per annum until payment'],
-    penaltyTiers: [tier('Amount due from the employer not paid', 'Simple interest at 12% per annum until actual payment', 'Medium', 'SRC-EPF-7Q')],
+    briefDescription: 'Amounts due carry 12% p.a. interest.',
+    whatItMeans: 'Any amount due from SPF under the Act carries simple interest at 12% per annum until paid.',
+    keyParts: ['Applies to any amount due', 'Simple interest at 12% per annum'],
+    penaltyTiers: [tier('Amount due not paid', 'Simple interest at 12% per annum until payment', 'Medium', 'SRC-EPF-7Q')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'The interest consequence of SPF’s PF deposits.',
     citation: 'Section 7Q, Employees’ Provident Funds and Miscellaneous Provisions Act, 1952',
     sourceExtract:
       'The employer shall be liable to pay simple interest at the rate of twelve per cent per annum or at such higher rate as may be specified in the Scheme on any amount due from him under this Act from the date on which the amount has become so due till the date of its actual payment.',
-    aiRecommendation: ai('Save to controls and track as the 12% p.a. interest-on-arrears consequence of the PF challan obligation.', 92.1, 'Section 7Q applies to any amount due from the employer under the Act.', t(2026, 6, 2, 9, 7)),
-    reviewState: 'Approved and saved',
-    reviewer: 'anjali',
-    reviewedAt: t(2026, 6, 5, 13, 48),
-    rationale: 'Interest clause tracked alongside Section 14B for the PF challan.',
+    aiRecommendation: ai('Attach as the interest consequence of the monthly PF challan control.', 92.1, 'Section 7Q applies to any amount due from the employer.', t(2026, 6, 2, 9, 7)),
+    status: 'Recommended',
   }),
-  // Maharashtra Professional Tax Act, 1975 (corrects the earlier mislink to the EPF Act)
   prov({
     id: 'SRC-PT-3',
     instrumentId: 'INST-PT-MAH-1975',
     provision: 'Section 3 — Levy and charge of tax',
     title: 'Section 3 — Levy of profession tax',
     nameOfCompliance: 'Profession tax levy & deduction',
-    briefDescription: 'Deduct profession tax from employee salaries, up to ₹2,500 per annum per person, per Schedule I.',
-    keyParts: ['Levied on professions, trades, callings and employments', 'Up to ₹2,500 per annum per person', 'Rates per Schedule I'],
+    briefDescription: 'Deduct profession tax up to ₹2,500 per annum.',
+    whatItMeans: 'SPF must deduct profession tax from employee salaries in Maharashtra, up to ₹2,500 per annum per person, per Schedule I.',
+    keyParts: ['Levied on professions and employments', 'Up to ₹2,500 per annum per person', 'Rates per Schedule I'],
     penaltyTiers: [tier('Engaging staff liable to profession tax', 'Profession tax up to ₹2,500 per annum per person', 'Low', 'SRC-PT-3')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 30),
+    applicable: true,
+    applicabilityBasis: 'SPF employs salaried staff in Maharashtra.',
     citation: 'Section 3, Maharashtra State Tax on Professions, Trades, Callings and Employments Act, 1975',
     sourceExtract:
       'There shall be levied and collected a tax on professions, trades, callings and employments in accordance with the provisions of this Act. Every person engaged in any profession, trade, calling or employment and falling under one or more of the entries in Schedule I shall be liable to pay the tax at the rate mentioned against the class of such persons, subject to the maximum of two thousand five hundred rupees per annum.',
-    aiRecommendation: ai('Save to controls and track as the professional tax remittance obligation; deduct PT from employee salaries up to ₹2,500 p.a.', 89.4, 'Section 3 r/w Schedule I; SPF employs salaried staff in Maharashtra.', t(2026, 6, 9, 9, 25)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Map to the profession-tax deduction control under the Labour team.', 89.4, 'Section 3 r/w Schedule I; SPF employs staff in Maharashtra.', t(2026, 6, 9, 9, 25)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-PT-6',
@@ -701,41 +882,24 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Section 6 — Returns and payment of tax by employers',
     title: 'Section 6 — Returns & payment',
     nameOfCompliance: 'Profession tax employer return',
-    briefDescription: 'Registered employers furnish the prescribed PT return and pay the tax deducted; cadence is state-specific.',
-    keyParts: ['Furnish PT return in the prescribed form and period', 'Pay the full tax due per the return'],
+    briefDescription: 'Furnish the PT return and pay the tax deducted.',
+    whatItMeans: 'SPF, as a registered employer, must furnish the prescribed profession-tax return and pay the tax deducted; the cadence is state-specific.',
+    keyParts: ['Furnish the PT return in the prescribed form', 'Pay the full tax due per the return'],
     penaltyTiers: [tier('Failure to furnish the PT return or pay', 'Interest and penalty as prescribed under the Act', 'Medium', 'SRC-PT-6')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 30),
+    applicable: true,
+    applicabilityBasis: 'SPF is a registered PT employer with multi-state staff.',
     citation: 'Section 6, Maharashtra State Tax on Professions, Trades, Callings and Employments Act, 1975',
     sourceExtract:
       'Every employer registered under this Act shall furnish to the prescribed authority a return in such form, for such periods and by such dates as may be prescribed, showing therein the salaries and wages paid by him and the amount of tax deducted by him in respect thereof, and shall pay the full amount of tax due according to such return.',
-    aiRecommendation: ai('Save to controls and track as the professional tax return obligation; confirm the per-state filing cadence first.', 73.8, 'Section 6 prescribes employer PT returns; periodicity is state-specific.', t(2026, 6, 9, 9, 27)),
-    reviewState: 'Needs specialist',
+    aiRecommendation: ai('Map to the profession-tax return control; confirm the per-state cadence first.', 73.8, 'Section 6 prescribes employer PT returns; periodicity is state-specific.', t(2026, 6, 9, 9, 27)),
+    status: 'Specialist review',
     reviewer: 'farhan',
     reviewedAt: t(2026, 6, 12, 11, 10),
-    rationale: 'SPF has staff across multiple states; engaged external counsel to confirm per-state PT return cadence before saving.',
+    rationale: 'SPF has staff across multiple states; engaged external counsel to confirm the per-state PT return cadence before saving.',
   }),
-  // DPDP
-  prov({
-    id: 'SRC-DPDP-2025',
-    instrumentId: 'INST-DPDP-2025',
-    provision: 'Section 8(6) r/w DPDP Rules, 2025 (breach intimation)',
-    title: 'Section 8(6) — Breach intimation',
-    nameOfCompliance: 'Personal data breach intimation',
-    briefDescription: 'On a personal data breach, intimate the Data Protection Board and each affected Data Principal.',
-    keyParts: ['Intimate the Board on a personal data breach', 'Intimate each affected Data Principal', 'Form and manner per the DPDP Rules, 2025'],
-    penaltyTiers: [tier('Failure to intimate a personal data breach', 'Penalty up to ₹250 crore as determined by the Data Protection Board', 'Critical', 'SRC-DPDP-2025')],
-    frequency: 'Event-based',
-    citation: 'Section 8(6), DPDP Act, 2023 r/w the DPDP Rules, 2025 (notified 13 Nov 2025)',
-    sourceExtract:
-      'In the event of a personal data breach, the Data Fiduciary shall give the Board and each affected Data Principal, intimation of such breach in such form and manner as may be prescribed. Substantive obligations are phased in, with the final compliance date set under the DPDP Rules, 2025.',
-    aiRecommendation: ai('Save to controls and track via the consent-reconciliation and DSAR obligations; breach-intimation timing depends on the phased commencement.', 71.2, 'Section 8(6) r/w DPDP Rules 2025; phased compliance dates.', t(2026, 6, 7, 15, 0)),
-    reviewState: 'Needs specialist',
-    reviewer: 'priya',
-    reviewedAt: t(2026, 6, 11, 10, 20),
-    rationale: 'Commencement of substantive obligations is phased; external privacy counsel engaged to confirm the applicable date for SPF.',
-  }),
-  // Standards (referenced by controls, not obligations — no compliance review)
+  // ════ Framework standards — reference-only (no status/applicability) ════
   prov({
     id: 'SRC-ISO-37301',
     instrumentId: 'INST-ISO-37301',
@@ -772,23 +936,26 @@ export const SOURCES: SourceProvision[] = [
     sourceExtract:
       'PCI DSS is a global standard that provides a baseline of technical and operational requirements designed to protect account data. PCI DSS comprises a minimum set of requirements for protecting account data, and may be enhanced by additional controls.',
   }),
-  // ── Compliance Intake — parsed provisions of the incoming circulars (Epic 14)
+  // ════ Recently arrived clauses — Processing / Recommended ════
   prov({
     id: 'SRC-GST-3B-T4',
     instrumentId: 'INST-GST-3B-2026',
     provision: 'Revised Table 4 — input tax credit (ITC) reporting',
     title: 'Table 4 — Revised ITC reporting',
     nameOfCompliance: 'GSTR-3B Table 4 (ITC) reporting',
-    briefDescription: 'Report eligible, reversed and reclaimed ITC in the revised Table 4 of GSTR-3B.',
-    keyParts: ['Bifurcate ITC into eligible, reversed and reclaimed', 'Report net ITC availed in the revised Table 4', 'Applies from the notified return period'],
-    penaltyTiers: [tier('Incorrect or late ITC reporting in GSTR-3B', 'Late fee under s.47 and interest on wrongly availed ITC under s.50', 'Low', 'SRC-CGST-47')],
+    briefDescription: 'Report ITC in the revised Table 4 format.',
+    whatItMeans: 'SPF must report eligible, reversed and reclaimed input tax credit in the revised Table 4 of GSTR-3B from the notified period.',
+    keyParts: ['Bifurcate ITC into eligible, reversed and reclaimed', 'Report net ITC availed in the revised Table 4'],
+    penaltyTiers: [tier('Incorrect or late ITC reporting', 'Late fee under s.47 and interest on wrongly availed ITC under s.50', 'Low', 'SRC-CGST-47')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 20),
+    applicable: true,
+    applicabilityBasis: 'SPF files GSTR-3B and must adopt the revised format.',
     citation: 'CBIC notification revising the GSTR-3B Table 4 (ITC) reporting format',
     sourceExtract:
       'Registered persons shall report input tax credit in the revised Table 4 of FORM GSTR-3B, separately disclosing ITC available, ITC reversed and reclaimed, and the net ITC availed, with effect from the notified return period.',
-    aiRecommendation: ai('Update the GSTR-3B monthly return obligation to the revised Table 4 format; late-fee consequence unchanged.', 92.7, 'Revised GSTR-3B Table 4 reporting format; SPF is GST-registered.', t(2026, 6, 5, 8, 35)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Update the GSTR-3B control to the revised Table 4 format.', 92.7, 'Revised GSTR-3B Table 4 format; SPF is GST-registered.', t(2026, 6, 5, 8, 35)),
+    status: 'Processing',
   }),
   prov({
     id: 'SRC-EPFO-ECR-2026',
@@ -796,19 +963,19 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Revised ECR validations for higher-pension members',
     title: 'Revised ECR validations',
     nameOfCompliance: 'Monthly ECR filing (revised validations)',
-    briefDescription: 'File the monthly ECR with the revised validations for higher-pension members.',
-    keyParts: ['Apply revised ECR validations from the notified wage month', 'Reflect higher-pension member contributions', 'Default still attracts damages and interest'],
-    penaltyTiers: [
-      tier('Default in depositing the revised PF contribution', 'Damages up to 100% of arrears under s.14B', 'High', 'SRC-EPF-14B'),
-      tier('Delay in deposit', 'Interest at 12% per annum under s.7Q', 'Medium', 'SRC-EPF-7Q'),
-    ],
+    briefDescription: 'File the ECR with revised higher-pension validations.',
+    whatItMeans: 'SPF must apply the revised ECR validations for higher-pension members from the notified wage month.',
+    keyParts: ['Apply revised ECR validations', 'Reflect higher-pension member contributions'],
+    penaltyTiers: [tier('Default in the revised PF contribution', 'Damages (s.14B) and interest (s.7Q)', 'High', 'SRC-EPF-14B')],
     frequency: 'Monthly',
     nextDue: d(2026, 6, 15),
+    applicable: true,
+    applicabilityBasis: 'SPF files the monthly ECR as a covered establishment.',
     citation: 'EPFO circular on revised ECR validations and higher-pension processing',
     sourceExtract:
       'Employers shall file the Electronic Challan-cum-Return with the revised validations for higher-pension members from the notified wage month, ensuring contributions are computed on the applicable wage base.',
-    aiRecommendation: ai('Update the monthly PF & ESI challan obligation for the revised ECR validations; the s.14B / s.7Q consequences carry over.', 87.5, 'EPFO ECR revision; SPF is a covered establishment.', t(2026, 6, 4, 10, 20)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Update the monthly PF challan control for the revised ECR validations.', 87.5, 'EPFO ECR revision; SPF is a covered establishment.', t(2026, 6, 4, 10, 20)),
+    status: 'Processing',
   }),
   prov({
     id: 'SRC-DPDP-OPS-2026',
@@ -816,32 +983,38 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Commencement date for the breach-intimation duty',
     title: 'Commencement — breach intimation',
     nameOfCompliance: 'DPDP breach-intimation commencement',
-    briefDescription: 'Sets the date from which the Section 8(6) breach-intimation duty becomes enforceable.',
-    keyParts: ['Notifies the commencement date for the breach-intimation duty', 'Reads with Section 8(6) of the DPDP Act', 'Penalty determined by the Data Protection Board'],
-    penaltyTiers: [tier('Failure to intimate a breach once commenced', 'Penalty up to ₹250 crore as determined by the Data Protection Board', 'Critical', 'SRC-DPDP-2025')],
+    briefDescription: 'Sets when the breach-intimation duty becomes enforceable.',
+    whatItMeans: 'Sets the date from which SPF’s Section 8(6) breach-intimation duty becomes enforceable.',
+    keyParts: ['Notifies the commencement date', 'Reads with Section 8(6)'],
+    penaltyTiers: [tier('Failure to intimate once commenced', 'Penalty up to ₹200 crore (Schedule, s.33)', 'Critical', 'SRC-DPDP-33')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'SPF is a Data Fiduciary; the applicable date needs confirmation.',
     citation: 'MeitY notice on the phased commencement of the DPDP Rules, 2025',
     sourceExtract:
       'The provisions relating to intimation of a personal data breach under section 8(6) shall come into force on the date notified, from which Data Fiduciaries shall intimate the Board and affected Data Principals in the prescribed manner.',
-    aiRecommendation: ai('Tie to the DSAR and consent obligations; confirm the applicable commencement date for SPF before tracking.', 79.3, 'Commencement notice r/w Section 8(6) of the DPDP Act, 2023.', t(2026, 6, 8, 9, 45)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Confirm the commencement date, then fold into the shared breach control.', 79.3, 'Commencement notice r/w Section 8(6).', t(2026, 6, 8, 9, 45)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-PFRDA-EXP-2026',
     instrumentId: 'INST-PFRDA-EXP-2026',
     provision: 'Revised single-issuer exposure limit',
     title: 'Revised single-issuer exposure limit',
-    nameOfCompliance: 'Single-issuer exposure limit',
-    briefDescription: 'Clarifies the revised single-issuer exposure ceiling for pension-fund portfolios.',
-    keyParts: ['Revised single-issuer exposure ceiling', 'Monitor at the scheme-portfolio level', 'Breaches are reportable to PFRDA'],
-    penaltyTiers: [tier('Breach of the revised single-issuer exposure limit', 'Regulatory action and mandatory exposure-breach reporting to PFRDA', 'High', 'SRC-PFRDA-EXP-2026')],
+    nameOfCompliance: 'Single-issuer exposure limit (revised)',
+    briefDescription: 'Clarifies the revised single-issuer exposure ceiling.',
+    whatItMeans: 'Clarifies the revised single-issuer exposure ceiling SPF must monitor at the scheme-portfolio level.',
+    keyParts: ['Revised single-issuer ceiling', 'Monitor at the scheme-portfolio level'],
+    penaltyTiers: [tier('Breach of the revised exposure limit', 'Regulatory action and exposure-breach reporting to PFRDA', 'High', 'SRC-PFRDA-INV-EXP')],
     frequency: 'Quarterly',
     nextDue: d(2026, 7, 15),
+    applicable: true,
+    applicabilityBasis: 'SPF manages NPS scheme portfolios.',
     citation: 'PFRDA clarification circular on single-issuer exposure and prudential norms',
     sourceExtract:
       'The single-issuer exposure of a Pension Fund shall not exceed the revised ceiling clarified herein, to be monitored at the scheme-portfolio level, with any breach reported to the Authority.',
-    aiRecommendation: ai('Update the exposure-limit breach report obligation to the revised ceiling; monitor at the scheme level.', 90.8, 'PFRDA exposure-norms clarification; SPF manages NPS scheme portfolios.', t(2026, 6, 9, 7, 25)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Update the investment exposure-monitoring control to the revised ceiling.', 90.8, 'PFRDA exposure-norms clarification.', t(2026, 6, 9, 7, 25)),
+    status: 'Processing',
   }),
   prov({
     id: 'SRC-SS-CODE-2026',
@@ -849,15 +1022,18 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Social security contribution alignment (draft)',
     title: 'Contribution alignment (draft)',
     nameOfCompliance: 'Social Security Code contribution alignment',
-    briefDescription: 'Draft alignment of provident-fund and social-security contributions under the new wage definition.',
-    keyParts: ['Aligns contributions to the Code’s wage definition', 'Draft — not yet in force', 'Final notification and State rules pending'],
-    penaltyTiers: [tier('Non-alignment once the Code is notified', 'Contribution shortfall recovery and penalty as prescribed under the Code', 'Medium', 'SRC-SS-CODE-2026')],
+    briefDescription: 'Draft alignment of contributions to the Code’s wage definition.',
+    whatItMeans: 'Draft rules would align SPF’s provident-fund contributions to the new wage definition once the Code is notified.',
+    keyParts: ['Aligns contributions to the Code’s wage definition', 'Draft — not yet in force'],
+    penaltyTiers: [tier('Non-alignment once notified', 'Contribution shortfall recovery and penalty as prescribed', 'Medium', 'SRC-SS-CODE-2026')],
     frequency: 'Monthly',
+    applicable: true,
+    applicabilityBasis: 'Will apply once the Code is notified; held pending.',
     citation: 'Draft rules under the Code on Social Security, 2020',
     sourceExtract:
       'Contributions shall be computed on wages as defined under the Code on Social Security, 2020. These draft rules are open for comment and are not yet in force; the date of commencement shall be notified separately.',
-    aiRecommendation: ai('Hold pending final notification; on commencement, align the PF challan obligation to the new wage definition.', 71.4, 'Draft rules under the Code on Social Security, 2020.', t(2026, 6, 3, 14, 10)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('Hold pending final notification; on commencement, align the PF challan control.', 71.4, 'Draft rules under the Code on Social Security, 2020.', t(2026, 6, 3, 14, 10)),
+    status: 'Recommended',
   }),
   prov({
     id: 'SRC-CERTIN-ADV-2026',
@@ -865,15 +1041,18 @@ export const SOURCES: SourceProvision[] = [
     provision: 'Reaffirmed 6-hour ransomware reporting',
     title: 'Reaffirmed 6-hour reporting',
     nameOfCompliance: 'Ransomware incident reporting (6h)',
-    briefDescription: 'Reaffirms the 6-hour reporting timeline for ransomware incidents under Direction 20(3)/2022.',
-    keyParts: ['Reaffirms reporting within 6 hours of noticing', 'Specific emphasis on ransomware incidents', 'No change to the underlying direction'],
-    penaltyTiers: [tier('Ransomware incident not reported within 6 hours', 'Non-compliance punishable under s.70B — imprisonment up to 1 year or fine up to ₹1 lakh', 'High', 'SRC-ITACT-70B')],
+    briefDescription: 'Reaffirms the 6-hour ransomware reporting clock.',
+    whatItMeans: 'Reaffirms SPF’s duty to report ransomware incidents within six hours under Direction 20(3)/2022 — no new duty.',
+    keyParts: ['Reaffirms reporting within 6 hours', 'Specific emphasis on ransomware'],
+    penaltyTiers: [tier('Ransomware incident not reported within 6 hours', 'Punishable under s.70B', 'High', 'SRC-ITACT-70B')],
     frequency: 'Event-based',
+    applicable: true,
+    applicabilityBasis: 'Reinforces SPF’s existing CERT-In reporting duty.',
     citation: 'CERT-In advisory reaffirming the 6-hour ransomware reporting timeline',
     sourceExtract:
       'Entities are reminded that ransomware and other cyber incidents must be reported to CERT-In within six hours of noticing, in line with Direction 20(3)/2022; logs are to be retained for 180 days within India.',
-    aiRecommendation: ai('No new obligation — reinforces the existing CERT-In incident-reporting duty and its 6-hour clock.', 95.1, 'CERT-In advisory reaffirming Direction 20(3)/2022.', t(2026, 6, 2, 11, 35)),
-    reviewState: 'Recommended',
+    aiRecommendation: ai('No new control — reinforces the existing 6-hour reporting control.', 95.1, 'CERT-In advisory reaffirming Direction 20(3)/2022.', t(2026, 6, 2, 11, 35)),
+    status: 'Recommended',
   }),
 ]
 
@@ -885,7 +1064,7 @@ export const SOURCES_BY_ID: Record<string, SourceProvision> = Object.fromEntries
   SOURCES.map((s) => [s.id, s]),
 )
 
-/** Default provision for an obligation's regulator (overridable with specifics). */
+/** Default clause for an obligation's regulator (overridable with specifics). */
 export function sourceForRegulator(reg: Regulator): string {
   switch (reg) {
     case 'PFRDA':

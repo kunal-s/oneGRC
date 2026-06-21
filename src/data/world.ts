@@ -20,7 +20,6 @@ import type {
   RegulatorTrack,
   TimelineEvent,
   RoleKey,
-  SourceProvision,
 } from '@/types'
 import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
@@ -904,6 +903,93 @@ function buildDsars(): Dsar[] {
 
 // ── exported world ──────────────────────────────────────────────────────────
 const controls = buildControls()
+
+// ── Compliance controls (Sources pipeline) — tracked controls that satisfy
+// statutory clauses saved from the Source Library. CTRL-COMP-DPB-01 is shared:
+// it satisfies clauses from two acts (DPDP §8(6) + CERT-In 6-hour reporting).
+const COMPLIANCE_CONTROLS: Control[] = [
+  {
+    id: 'CTRL-COMP-DPB-01',
+    title: 'Personal-data-breach detection & notification',
+    frameworks: ['ISO 27001', 'NIST CSF'],
+    mappedFrameworkRefs: [
+      { framework: 'ISO 27001', ref: 'A.5.24 (incident management)' },
+      { framework: 'NIST CSF', ref: 'RS.CO (Respond — Communications)' },
+    ],
+    owner: 'priya',
+    type: 'Detective',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 12 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 9,
+    linkedRisks: [],
+    linkedIssues: [],
+    description:
+      'Detect a personal-data breach and run one notification runbook to two regulators — intimate the Data Protection Board and affected subscribers within the DPDP window, and report to CERT-In within six hours.',
+    frequency: 'Continuous',
+    nextDue: ist(2026, 6, 30).toISOString(),
+    sourceRefs: ['SRC-DPDP-2025', 'SRC-CERTIN-2022'],
+  },
+  {
+    id: 'CTRL-COMP-SEC-01',
+    title: 'Personal-data security safeguards',
+    frameworks: ['ISO 27001'],
+    mappedFrameworkRefs: [{ framework: 'ISO 27001', ref: 'A.8.24 (cryptography) / A.5.15 (access control)' }],
+    owner: 'priya',
+    type: 'Preventive',
+    automation: 'CCM',
+    lastTested: iso(new Date(NOW_MS - 4 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 14,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: 'Encryption, access control and continuous monitoring over subscriber personal data on the CRA and KYC stores.',
+    frequency: 'Continuous',
+    nextDue: ist(2026, 6, 30).toISOString(),
+    sourceRefs: ['SRC-DPDP-8-5'],
+  },
+  {
+    id: 'CTRL-COMP-INV-01',
+    title: 'Investment universe & exposure monitoring',
+    frameworks: ['PFRDA ICS'],
+    mappedFrameworkRefs: [{ framework: 'PFRDA ICS', ref: 'Investment guidelines — universe & exposure' }],
+    owner: 'arvind',
+    type: 'Preventive',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 6 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 7,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: 'Pre-trade approved-universe check and single-issuer / group exposure-limit monitoring on the NPS scheme portfolios, minuted at the Investment Committee.',
+    frequency: 'Weekly',
+    nextDue: ist(2026, 6, 26).toISOString(),
+    sourceRefs: ['SRC-PFRDA-INV-2025', 'SRC-PFRDA-INV-COMMITTEE'],
+  },
+  {
+    id: 'CTRL-COMP-LOG-01',
+    title: 'Log retention & NTP time-sync',
+    frameworks: ['NIST CSF', 'ISO 27001'],
+    mappedFrameworkRefs: [
+      { framework: 'NIST CSF', ref: 'PR.PS (Platform Security — logging)' },
+      { framework: 'ISO 27001', ref: 'A.8.15 (logging)' },
+    ],
+    owner: 'karthik',
+    type: 'Detective',
+    automation: 'CCM',
+    lastTested: iso(new Date(NOW_MS - 3 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 11,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: '180-day in-India log retention across Splunk SIEM and CrowdStrike EDR, with NTP clock synchronisation to NIC/NPL sources.',
+    frequency: 'Continuous',
+    nextDue: ist(2026, 6, 30).toISOString(),
+    sourceRefs: ['SRC-CERTIN-LOGS'],
+  },
+]
+controls.push(...COMPLIANCE_CONTROLS)
+
 const risks = buildRisks(controls)
 const incidents = buildIncidents()
 const obligations = buildObligations()
@@ -1065,25 +1151,8 @@ function linkSources() {
     o.sourceRefs = uniq(refs)
   }
 
-  // Provision reviews — the obligations the ingestion mapped to each provision
-  // are the reverse of o.sourceRefs (computed from real generated ids). For
-  // provisions already approved in the seed, wire the tracked obligation +
-  // control they produced (Story 15.6 — "in action for tracking").
-  const pickControl = (s: SourceProvision): string | undefined => {
-    if (s.instrumentId.includes('PFRDA')) return controls.find((c) => c.frameworks.includes('PFRDA ICS'))?.id
-    if (s.instrumentId.includes('CERTIN') || s.instrumentId.includes('ITACT')) return controls.find((c) => c.frameworks.includes('NIST CSF'))?.id
-    return controls.find((c) => c.frameworks.includes('ISO 27001'))?.id
-  }
-  for (const s of SOURCES) {
-    if (!s.reviewState) continue
-    s.recommendedObligationIds = obligations
-      .filter((o) => o.sourceRefs?.includes(s.id))
-      .map((o) => o.id)
-    if (s.reviewState === 'Approved and saved') {
-      s.linkedObligationId = s.recommendedObligationIds[0]
-      s.linkedControlId = pickControl(s) ?? controls[0]?.id
-    }
-  }
+  // Sources pipeline: the clause→control link (linkedControlId) is seed-driven on
+  // the clause itself (src/data/sources.ts) — no obligation linkage here.
 
   // Policies: by category, leading with the closest instrument/standard.
   const byCat: Record<string, string[]> = {

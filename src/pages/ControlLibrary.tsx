@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { WORLD } from '@/data'
+import { clausesForControl } from '@/lib/sources'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative } from '@/lib/time'
 import { useApp } from '@/store'
@@ -19,13 +20,27 @@ const FRAMEWORK_OPTIONS = ['ISO 27001', 'NIST CSF', 'PCI DSS', 'PFRDA ICS']
 export function ControlLibrary() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
+  const sessionControls = useApp((s) => s.sessionControls)
+  const clauseOverrides = useApp((s) => s.clauseOverrides)
+
+  const allControls = React.useMemo(() => [...WORLD.controls, ...sessionControls], [sessionControls])
+
+  // How many clauses / acts each control satisfies (Sources pipeline).
+  const satisfies = React.useMemo(() => {
+    const m = new Map<string, { clauses: number; acts: number }>()
+    for (const c of allControls) {
+      const cl = clausesForControl(c.id, clauseOverrides)
+      if (cl.length) m.set(c.id, { clauses: cl.length, acts: new Set(cl.map((p) => p.instrumentId)).size })
+    }
+    return m
+  }, [allControls, clauseOverrides])
 
   const owners = React.useMemo(
-    () => Array.from(new Set(WORLD.controls.map((c) => personName(c.owner)))).sort(),
-    [],
+    () => Array.from(new Set(allControls.map((c) => personName(c.owner)))).sort(),
+    [allControls],
   )
-  const ccmCount = WORLD.controls.filter((c) => c.automation === 'CCM').length
-  const multiMapped = WORLD.controls.filter((c) => c.frameworks.length >= 2).length
+  const ccmCount = allControls.filter((c) => c.automation === 'CCM').length
+  const multiMapped = allControls.filter((c) => c.frameworks.length >= 2).length
   const avgFrameworks = (WORLD.controls.reduce((s, c) => s + c.frameworks.length, 0) / WORLD.controls.length).toFixed(1)
 
   const columns: Column<Control>[] = [
@@ -46,7 +61,22 @@ export function ControlLibrary() {
       key: 'frameworks',
       header: 'Frameworks satisfied',
       sortValue: (c) => c.frameworks.length,
-      render: (c) => <FrameworkPills frameworks={c.frameworks} />,
+      render: (c) => (c.frameworks.length ? <FrameworkPills frameworks={c.frameworks} /> : <span className="text-2xs text-muted-foreground">—</span>),
+    },
+    {
+      key: 'satisfies',
+      header: 'Satisfies clauses',
+      sortValue: (c) => satisfies.get(c.id)?.clauses ?? 0,
+      render: (c) => {
+        const s = satisfies.get(c.id)
+        return s ? (
+          <span className="inline-flex items-center gap-1 rounded bg-info-soft px-1.5 py-0.5 text-2xs font-medium text-info" title={`${s.clauses} clause(s) across ${s.acts} act(s)`}>
+            {s.clauses} clause{s.clauses === 1 ? '' : 's'} · {s.acts} act{s.acts === 1 ? '' : 's'}
+          </span>
+        ) : (
+          <span className="text-2xs text-muted-foreground">—</span>
+        )
+      },
     },
     {
       key: 'owner',
@@ -138,7 +168,7 @@ export function ControlLibrary() {
       </div>
 
       <DataTable
-        data={WORLD.controls}
+        data={allControls}
         columns={columns}
         searchKeys={['id', 'title', (c) => personName(c.owner)]}
         searchPlaceholder="Search control id, title or owner…"

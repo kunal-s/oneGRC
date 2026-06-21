@@ -1,10 +1,10 @@
-// Source & Provenance helpers (Epic 1; normalized + enriched in Epic 15).
-// Forward: a record's instrument sources. Reverse (Story 1.2): a source resolves
-// to the records that cite it. Epic 15 adds instrument/provision navigation, the
-// severity-from-penalty, and the review/approve merge with session overrides.
+// Source & Provenance helpers (Sources pipeline: act → clause → control).
+// Forward: a record's instrument sources. Reverse: a source resolves to the
+// records that cite it. Plus the clause-pipeline status/applicability merge with
+// session overrides, and the control "Satisfies" lookup (clauses across acts).
 import { WORLD, getSource, getInstrument } from '@/data'
 import { severityFromPenalty } from '@/data/sources'
-import type { ReviewState, SourceInstrument, SourceProvision, TriageState } from '@/types'
+import type { ClauseStatus, SourceInstrument, SourceProvision } from '@/types'
 
 export { getSource, getInstrument, severityFromPenalty }
 
@@ -16,18 +16,18 @@ export function allInstruments(): SourceInstrument[] {
   return WORLD.instruments
 }
 
-/** The parent instrument of a provision (by id or object). */
+/** The parent act/instrument of a clause (by id or object). */
 export function instrumentForRef(ref: string | SourceProvision): SourceInstrument | undefined {
   const r = typeof ref === 'string' ? getSource(ref) : ref
   return r ? getInstrument(r.instrumentId) : undefined
 }
 
-/** Every provision belonging to an instrument, in seed order. */
+/** Every clause belonging to an act, in seed order. */
 export function provisionsForInstrument(instrumentId: string): SourceProvision[] {
   return WORLD.sources.filter((s) => s.instrumentId === instrumentId)
 }
 
-/** A display title for a provision: instrument title + provision title. */
+/** A display title for a clause: act title + clause title. */
 export function refDisplayTitle(ref: string | SourceProvision): string {
   const r = typeof ref === 'string' ? getSource(ref) : ref
   if (!r) return typeof ref === 'string' ? ref : ''
@@ -36,7 +36,7 @@ export function refDisplayTitle(ref: string | SourceProvision): string {
 }
 
 /**
- * Reverse lookup — every obligation, policy and control that cites this source.
+ * Reverse lookup — every obligation, policy and control that cites this clause.
  * Used by the source viewer's "What this source produced" section.
  */
 export function citingRecords(srcId: string): string[] {
@@ -55,112 +55,87 @@ export function citingRecords(srcId: string): string[] {
   return ids
 }
 
-// ── Review / approve lifecycle (Epic 15) ────────────────────────────────────
-// Session overrides from the Compliance review actions (save-to-controls /
-// internal review / specialist). Kept out of the seed so reloads reset (A10).
-export interface ProvisionOverride {
-  reviewState: ReviewState
+// ── Clause pipeline (act → clause → control) ────────────────────────────────
+// Session overrides from the Save / Engage-specialist actions (reset on reload).
+export interface ClauseOverride {
+  status?: ClauseStatus
+  applicable?: boolean
+  applicabilityBasis?: string
+  linkedControlId?: string
   reviewer?: string
   reviewedAt?: string
   rationale?: string
-  linkedObligationId?: string
-  linkedControlId?: string
+  specialistNote?: string
 }
+export type ClauseOverrides = Record<string, ClauseOverride>
 
-export type ReviewOverrides = Record<string, ProvisionOverride>
-
-/** A provision merged with any session override. */
-export function effectiveProvision(p: SourceProvision, overrides: ReviewOverrides): SourceProvision {
+/** A clause merged with any session override. */
+export function effectiveClause(p: SourceProvision, overrides: ClauseOverrides): SourceProvision {
   const o = overrides[p.id]
   return o ? { ...p, ...o } : p
 }
 
-/** True when a reviewable provision still needs Compliance attention. */
-export function needsAttention(state?: ReviewState): boolean {
-  return state !== undefined && state !== 'Approved and saved'
+/** A clause still awaiting a Save / specialist decision. */
+export function awaitingDecision(status?: ClauseStatus): boolean {
+  return status === 'Recommended' || status === 'Processing' || status === 'Specialist review'
 }
 
-/** StatusChip tone for a review state — one consistent chip everywhere. */
-export function reviewTone(state: ReviewState): 'ok' | 'warn' | 'danger' | 'info' | 'progress' {
-  switch (state) {
-    case 'Approved and saved':
+/** StatusChip tone for a clause status — one consistent chip everywhere. */
+export function statusTone(status: ClauseStatus): 'ok' | 'warn' | 'danger' | 'info' | 'progress' | 'neutral' {
+  switch (status) {
+    case 'Saved':
       return 'ok'
     case 'Recommended':
       return 'info'
-    case 'Under review':
+    case 'Processing':
       return 'progress'
-    case 'Needs internal review':
+    case 'Specialist review':
       return 'warn'
-    case 'Needs specialist':
-      return 'danger'
+    case 'Not applicable':
+      return 'neutral'
   }
 }
 
 export interface InstrumentSummary {
-  provisions: number // sections in the instrument
-  reviewable: number // sections that carry an applicability review
-  needsReview: number // sections still awaiting an approval decision
-  approved: number // sections approved and in action
+  clauses: number // sections/clauses in the act
+  reviewable: number // clauses that carry a pipeline status (statutory)
+  applicable: number // clauses applicable to SPF
+  saved: number // clauses saved to a control
+  awaiting: number // clauses still awaiting a decision
 }
 
-/** Per-instrument rollup for the Source Library list, honouring overrides. */
-export function instrumentSummary(instrumentId: string, overrides: ReviewOverrides): InstrumentSummary {
+/** Per-act rollup for the Source Library list, honouring overrides. */
+export function instrumentSummary(instrumentId: string, overrides: ClauseOverrides): InstrumentSummary {
   const provisions = provisionsForInstrument(instrumentId)
   let reviewable = 0
-  let needsReview = 0
-  let approved = 0
-  for (const p of provisions) {
-    const eff = effectiveProvision(p, overrides)
-    if (!eff.reviewState) continue
+  let applicable = 0
+  let saved = 0
+  let awaiting = 0
+  for (const p0 of provisions) {
+    const p = effectiveClause(p0, overrides)
+    if (!p.status) continue
     reviewable++
-    if (eff.reviewState === 'Approved and saved') approved++
-    else if (needsAttention(eff.reviewState)) needsReview++
+    if (p.applicable) applicable++
+    if (p.status === 'Saved') saved++
+    else if (awaitingDecision(p.status)) awaiting++
   }
-  return { provisions: provisions.length, reviewable, needsReview, approved }
+  return { clauses: provisions.length, reviewable, applicable, saved, awaiting }
 }
 
-// ── Compliance Intake (Epic 14) ─────────────────────────────────────────────
-// Session overrides on a circular's triage state (reset on reload, A10).
-export type IntakeOverrides = Record<string, { triageState: TriageState; parkedReason?: string }>
-
-/** Every instrument that arrived via Compliance Intake (has inflow metadata). */
-export function intakeInstruments(): SourceInstrument[] {
-  return WORLD.instruments.filter((i) => i.intake)
+/** A single act-level status chip for the list: Processing / In review / Tracked. */
+export function actStatus(instrumentId: string, overrides: ClauseOverrides): 'Processing' | 'In review' | 'Tracked' | undefined {
+  const provisions = provisionsForInstrument(instrumentId).map((p) => effectiveClause(p, overrides))
+  const withStatus = provisions.filter((p) => p.status)
+  if (withStatus.length === 0) return undefined // reference-only act (standards)
+  if (withStatus.some((p) => p.status === 'Processing')) return 'Processing'
+  if (withStatus.some((p) => awaitingDecision(p.status))) return 'In review'
+  return 'Tracked'
 }
 
-/** A circular's triage state merged with any session override. */
-export function effectiveTriage(inst: SourceInstrument, overrides: IntakeOverrides): TriageState | undefined {
-  if (!inst.intake) return undefined
-  return overrides[inst.id]?.triageState ?? inst.intake.triageState
-}
-
-/** Accepted into the live register — triage done. */
-export function isResolvedTriage(state?: TriageState): boolean {
-  return state === 'Accepted' || state === 'Live'
-}
-
-/** Still awaiting a triage decision (not resolved, not parked). */
-export function awaitingTriage(state?: TriageState): boolean {
-  return state !== undefined && !isResolvedTriage(state) && state !== 'Parked'
-}
-
-/** StatusChip tone for a triage state. */
-export function triageTone(state: TriageState): 'ok' | 'warn' | 'danger' | 'info' | 'progress' | 'neutral' {
-  switch (state) {
-    case 'Accepted':
-    case 'Live':
-      return 'ok'
-    case 'Parsed':
-      return 'info'
-    case 'Pulled':
-    case 'Uploaded':
-    case 'Under triage':
-      return 'progress'
-    case 'Needs internal review':
-      return 'warn'
-    case 'Needs external specialist':
-      return 'danger'
-    case 'Parked':
-      return 'neutral'
-  }
+/** Every clause saved to a control (effective linkedControlId === controlId),
+ *  for the Control "Satisfies — clauses across acts" panel. */
+export function clausesForControl(controlId: string, overrides: ClauseOverrides): SourceProvision[] {
+  return WORLD.sources
+    .map((p) => effectiveClause(p, overrides))
+    .filter((p) => p.linkedControlId === controlId)
 }

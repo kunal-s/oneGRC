@@ -1,12 +1,13 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scale, ScrollText, AlertTriangle, CheckCircle2, Download, History, Plus } from 'lucide-react'
+import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { KpiTile } from '@/components/KpiTile'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
+import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
 import { WORLD } from '@/data'
-import { instrumentSummary, type InstrumentSummary } from '@/lib/sources'
+import { instrumentSummary, actStatus, type InstrumentSummary } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
 import type { SourceInstrument } from '@/types'
@@ -15,13 +16,16 @@ interface Row {
   id: string
   inst: SourceInstrument
   summary: InstrumentSummary
+  act?: 'Processing' | 'In review' | 'Tracked'
   updated: number
 }
+
+const ACT_TONE = { Processing: 'progress', 'In review': 'warn', Tracked: 'ok' } as const
 
 export function Sources() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const overrides = useApp((s) => s.reviewOverrides)
+  const overrides = useApp((s) => s.clauseOverrides)
 
   const rows: Row[] = React.useMemo(
     () =>
@@ -29,6 +33,7 @@ export function Sources() {
         id: inst.id,
         inst,
         summary: instrumentSummary(inst.id, overrides),
+        act: actStatus(inst.id, overrides),
         updated: new Date(inst.dateOfIssue).getTime(),
       })),
     [overrides],
@@ -37,16 +42,16 @@ export function Sources() {
   const authorities = React.useMemo(() => Array.from(new Set(WORLD.instruments.map((i) => i.authority))).sort(), [])
   const types = React.useMemo(() => Array.from(new Set(WORLD.instruments.map((i) => i.instrumentType))).sort(), [])
 
-  const totalSections = WORLD.sources.length
-  const needsReview = rows.reduce((n, r) => n + r.summary.needsReview, 0)
-  const approved = rows.reduce((n, r) => n + r.summary.approved, 0)
+  const totalClauses = WORLD.sources.length
+  const awaiting = rows.reduce((n, r) => n + r.summary.awaiting, 0)
+  const saved = rows.reduce((n, r) => n + r.summary.saved, 0)
 
   const columns: Column<Row>[] = [
     {
       key: 'instrument',
-      header: 'Instrument',
+      header: 'Act / instrument',
       sortValue: (r) => r.inst.title,
-      className: 'max-w-[340px]',
+      className: 'max-w-[360px]',
       render: (r) => (
         <span className="block">
           <span className="block truncate text-sm font-medium text-foreground">{r.inst.title}</span>
@@ -61,39 +66,26 @@ export function Sources() {
       sortValue: (r) => r.inst.instrumentType,
       render: (r) => <span className="rounded bg-info-soft px-1.5 py-0.5 text-2xs font-medium text-info">{r.inst.instrumentType}</span>,
     },
+    { key: 'clauses', header: 'Clauses', align: 'right', sortValue: (r) => r.summary.clauses, render: (r) => <span className="text-xs tnum text-foreground">{r.summary.clauses}</span> },
     {
-      key: 'version',
-      header: 'Version',
-      sortValue: (r) => r.inst.version ?? '',
-      render: (r) => (
-        <span className="inline-flex items-center gap-1.5">
-          <span className="text-xs tnum text-foreground">{r.inst.version ?? '—'}</span>
-          {r.inst.status === 'Superseded' ? (
-            <span className="inline-flex items-center gap-0.5 rounded bg-medium-soft px-1 py-0.5 text-2xs font-medium text-medium">
-              <History className="size-2.5" /> superseded
-            </span>
-          ) : (
-            r.inst.supersedesId && (
-              <span className="rounded bg-ok-soft px-1 py-0.5 text-2xs font-medium text-ok" title="Newest version">current</span>
-            )
-          )}
-        </span>
-      ),
-    },
-    { key: 'sections', header: 'Sections', align: 'right', sortValue: (r) => r.summary.provisions, render: (r) => <span className="text-xs tnum text-foreground">{r.summary.provisions}</span> },
-    {
-      key: 'review',
-      header: 'Needs review',
+      key: 'awaiting',
+      header: 'Awaiting',
       align: 'right',
-      sortValue: (r) => r.summary.needsReview,
+      sortValue: (r) => r.summary.awaiting,
       render: (r) =>
-        r.summary.needsReview > 0 ? (
-          <span className="rounded bg-medium-soft px-1.5 py-0.5 text-2xs font-semibold text-medium">{r.summary.needsReview}</span>
-        ) : r.summary.approved > 0 ? (
+        r.summary.awaiting > 0 ? (
+          <span className="rounded bg-medium-soft px-1.5 py-0.5 text-2xs font-semibold text-medium">{r.summary.awaiting}</span>
+        ) : r.summary.saved > 0 ? (
           <span className="inline-flex items-center gap-0.5 text-2xs text-ok"><CheckCircle2 className="size-3" /> tracked</span>
         ) : (
           <span className="text-2xs text-muted-foreground">—</span>
         ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (r) => r.act ?? 'zz',
+      render: (r) => (r.act ? <StatusChip status={r.act} tone={ACT_TONE[r.act]} /> : <span className="text-2xs text-muted-foreground">Reference</span>),
     },
     { key: 'updated', header: 'Last updated', sortValue: (r) => r.updated, render: (r) => <span className="text-xs tnum text-muted-foreground">{fmtDate(r.inst.dateOfIssue)}</span> },
   ]
@@ -101,7 +93,7 @@ export function Sources() {
   const filters: TableFilter<Row>[] = [
     { key: 'authority', label: 'Authority', options: authorities, predicate: (r, v) => r.inst.authority === v },
     { key: 'type', label: 'Type', options: types, predicate: (r, v) => r.inst.instrumentType === v },
-    { key: 'status', label: 'Status', options: ['In force', 'Superseded', 'Draft', 'Repealed'], predicate: (r, v) => r.inst.status === v },
+    { key: 'status', label: 'Status', options: ['Processing', 'In review', 'Tracked'], predicate: (r, v) => r.act === v },
   ]
 
   return (
@@ -111,28 +103,23 @@ export function Sources() {
         title="Source Library"
         description={
           <>
-            <span className="font-medium text-foreground">The instruments behind the obligations.</span>{' '}
-            {WORLD.instruments.length} legal instruments broken into {totalSections} sections — each section carries its
-            compliance fields and a review-to-track lifecycle.
+            <span className="font-medium text-foreground">The acts behind the controls.</span> {WORLD.instruments.length}{' '}
+            instruments broken into {totalClauses} clauses — open an act to read what it covers, how it affects SPF, and
+            save each clause to a control.
           </>
         }
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Add instrument', description: 'New instrument added to the register (session). The backend auto-pull is a pending item.', variant: 'success' })}>
-              <Plus className="size-4" /> Add instrument
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Source register exported', description: 'source-library-register.csv.', variant: 'success' })}>
-              <Download className="size-4" /> Export
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Source register exported', description: 'source-library-register.csv.', variant: 'success' })}>
+            <Download className="size-4" /> Export
+          </Button>
         }
       />
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiTile label="Instruments" value={WORLD.instruments.length} icon={<Scale className="size-4" />} tone="info" />
-        <KpiTile label="Sections" value={totalSections} icon={<ScrollText className="size-4" />} />
-        <KpiTile label="Needs review" value={needsReview} icon={<AlertTriangle className="size-4" />} tone={needsReview > 0 ? 'warn' : 'neutral'} />
-        <KpiTile label="Approved & tracked" value={approved} icon={<CheckCircle2 className="size-4" />} tone="ok" />
+        <KpiTile label="Acts" value={WORLD.instruments.length} icon={<Scale className="size-4" />} tone="info" />
+        <KpiTile label="Clauses" value={totalClauses} icon={<ScrollText className="size-4" />} />
+        <KpiTile label="Awaiting decision" value={awaiting} icon={<AlertTriangle className="size-4" />} tone={awaiting > 0 ? 'warn' : 'neutral'} />
+        <KpiTile label="Saved to controls" value={saved} icon={<CheckCircle2 className="size-4" />} tone="ok" />
       </div>
 
       <DataTable
@@ -140,9 +127,9 @@ export function Sources() {
         columns={columns}
         rowKey={(r) => r.inst.id}
         searchKeys={[(r) => r.inst.title, (r) => r.inst.id, (r) => r.inst.authority]}
-        searchPlaceholder="Search instrument, id or authority…"
+        searchPlaceholder="Search act, id or authority…"
         filters={filters}
-        initialSort={{ key: 'review', dir: 'desc' }}
+        initialSort={{ key: 'awaiting', dir: 'desc' }}
         onRowClick={(r) => navigate(`/sources/${r.inst.id}`)}
       />
     </div>

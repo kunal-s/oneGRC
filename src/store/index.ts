@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import type { ReviewState, RoleKey, TriageState } from '@/types'
+import type { Control, RoleKey } from '@/types'
 import { ROLES } from '@/data/people'
 import { getSource } from '@/data'
-import type { IntakeOverrides, ProvisionOverride, ReviewOverrides } from '@/lib/sources'
+import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
 import { NOW } from '@/lib/time'
 
 export interface Toast {
@@ -52,23 +52,26 @@ interface AppState {
   addArtifact: (a: Omit<Artifact, 'id'>) => string
   getArtifact: (id: string) => Artifact | undefined
 
-  // Source Library review/approve lifecycle (Epic 15) — session overrides on a
-  // provision's review state and the tracked records an approval produced.
-  reviewOverrides: ReviewOverrides
-  // Route a section to internal review / specialist (no records produced).
-  reviewProvision: (provisionId: string, state: ReviewState, rationale?: string) => void
-  // Save to controls — approve and track: creates the tracked obligation +
-  // Control Library entry, returns their ids for the toast/navigation.
-  approveProvision: (provisionId: string, rationale?: string) => { obligationId?: string; controlId: string }
-
-  // Compliance Intake (Epic 14) — session overrides on a circular's triage state.
-  intakeOverrides: IntakeOverrides
-  triageIntake: (instrumentId: string, state: TriageState, parkedReason?: string) => void
+  // Sources pipeline (act → clause → control) — session overrides on a clause's
+  // status/applicability, and the session controls minted by "create new".
+  clauseOverrides: ClauseOverrides
+  sessionControls: Control[]
+  getSessionControl: (id: string) => Control | undefined
+  // Save a clause to an existing control — adds it to that control's Satisfies.
+  saveClauseToControl: (provisionId: string, controlId: string) => void
+  // Create a new control from a clause and save the clause to it. Returns the id.
+  createControlForClause: (provisionId: string, c: { title: string; owner: string; frequency: string; nextDue?: string; description?: string }) => string
+  // Engage a specialist (mocked workflow) for an unclear clause.
+  engageSpecialist: (provisionId: string) => void
+  // Record the specialist's outcome so Save is enabled (mocked).
+  completeSpecialist: (provisionId: string, note: string) => void
+  // Officer override of applicability (applicable / not applicable).
+  setClauseApplicability: (provisionId: string, applicable: boolean, basis?: string) => void
 }
 
 let toastSeq = 0
 let artifactSeq = 0
-let savedControlSeq = 0
+let sessionControlSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'CRO',
@@ -100,33 +103,53 @@ export const useApp = create<AppState>((set, get) => ({
   },
   getArtifact: (id) => get().artifacts.find((x) => x.id === id),
 
-  reviewOverrides: {},
-  reviewProvision: (provisionId, state, rationale) => {
-    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
-    const override: ProvisionOverride = { reviewState: state, reviewer, reviewedAt: NOW.toISOString(), rationale }
-    set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: { ...s.reviewOverrides[provisionId], ...override } } }))
-  },
-  approveProvision: (provisionId, rationale) => {
-    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
-    const prov = getSource(provisionId)
-    // The tracked obligation is the one the ingestion recommended; the control
-    // is a new Control Library entry (session-held, A10).
-    const obligationId = prov?.linkedObligationId ?? prov?.recommendedObligationIds?.[0]
-    const controlId = prov?.linkedControlId ?? `CTRL-NEW-${String(++savedControlSeq).padStart(3, '0')}`
-    const override: ProvisionOverride = {
-      reviewState: 'Approved and saved',
-      reviewer,
-      reviewedAt: NOW.toISOString(),
-      rationale: rationale ?? 'Approved and saved to controls; tracked obligation created.',
-      linkedObligationId: obligationId,
-      linkedControlId: controlId,
-    }
-    set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: override } }))
-    return { obligationId, controlId }
-  },
+  clauseOverrides: {},
+  sessionControls: [],
+  getSessionControl: (id) => get().sessionControls.find((c) => c.id === id),
 
-  intakeOverrides: {},
-  triageIntake: (instrumentId, state, parkedReason) => {
-    set((s) => ({ intakeOverrides: { ...s.intakeOverrides, [instrumentId]: { triageState: state, parkedReason } } }))
+  saveClauseToControl: (provisionId, controlId) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = { ...prev, status: 'Saved', linkedControlId: controlId, reviewer, reviewedAt: NOW.toISOString() }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+  },
+  createControlForClause: (provisionId, c) => {
+    const id = `CTRL-COMP-NEW-${String(++sessionControlSeq).padStart(3, '0')}`
+    const control: Control = {
+      id,
+      title: c.title,
+      frameworks: [],
+      mappedFrameworkRefs: [],
+      owner: c.owner,
+      type: 'Preventive',
+      automation: 'Manual',
+      lastTested: NOW.toISOString(),
+      result: 'Pass',
+      evidenceCount: 0,
+      linkedRisks: [],
+      linkedIssues: [],
+      description: c.description ?? c.title,
+      frequency: c.frequency,
+      nextDue: c.nextDue,
+      sourceRefs: getSource(provisionId) ? [provisionId] : [],
+    }
+    set((s) => ({ sessionControls: [...s.sessionControls, control] }))
+    get().saveClauseToControl(provisionId, id)
+    return id
+  },
+  engageSpecialist: (provisionId) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = { ...prev, status: 'Specialist review', reviewer, reviewedAt: NOW.toISOString() }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+  },
+  completeSpecialist: (provisionId, note) => {
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: { ...prev, specialistNote: note } } }))
+  },
+  setClauseApplicability: (provisionId, applicable, basis) => {
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = { ...prev, applicable, applicabilityBasis: basis, status: applicable ? prev.status : 'Not applicable' }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
   },
 }))

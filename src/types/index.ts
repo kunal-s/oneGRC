@@ -73,38 +73,14 @@ export interface SourceInstrument {
   sourceLink: string // URL
   attachedDocument?: AttachedDocument
   status: InstrumentStatus
-  intake?: IntakeMeta // Compliance Intake (Epic 14) — inflow metadata, when this arrived via intake
-}
-
-// ── Compliance Intake (Epic 14 — inflow only; reuses the Epic 15 model) ──────
-// An incoming circular is parsed into a SourceInstrument + its SourceProvisions;
-// intake adds ONLY the inflow metadata. No separate record model.
-export type IntakeChannel = 'Auto-pull' | 'Manual upload'
-
-// The triage lifecycle: Pulled/Uploaded → Parsed → Under triage → one of
-// {Accepted, Needs internal review, Needs external specialist, Parked} → Live.
-export type TriageState =
-  | 'Pulled'
-  | 'Uploaded'
-  | 'Parsed'
-  | 'Under triage'
-  | 'Accepted'
-  | 'Needs internal review'
-  | 'Needs external specialist'
-  | 'Parked'
-  | 'Live'
-
-export interface IntakeMeta {
-  channel: IntakeChannel
-  receivedAt: string // ISO
-  parse: AgentAction // the regulatory-change agent's parse (provenance + confidence)
-  triageState: TriageState
-  parkedReason?: string
+  // Act-level overview shown at the top of the act detail (Sources pipeline).
+  summary?: string // plain "what this act covers"
+  applicability?: string // plain "how it affects SPF" — the applicability overview
 }
 
 // A scripted, deterministic action from an agent (here, the ingestion agent).
-// Carries provenance + confidence; never a model API call. The minimal Epic 7
-// slice — the fuller agentic workflow comes later.
+// Carries provenance + confidence; never a model API call. The applicability
+// recommendation slice — the fuller agentic workflow comes later.
 export interface AgentAction {
   agent: string // 'Ingestion Agent'
   recommendation: string // the proposed outcome, plain English
@@ -113,8 +89,8 @@ export interface AgentAction {
   basis: string // provenance — what the recommendation was derived from
 }
 
-// One penalty/consequence tier of a provision, each sourced. Its severity feeds
-// the deterministic severity-from-penalty (the minimal Epic 4 slice).
+// One penalty/consequence tier of a clause, each sourced. Its severity feeds
+// the deterministic severity-from-penalty.
 export interface PenaltyTier {
   trigger: string // 'Late filing of the annual return'
   consequence: string // '₹100 per day, max ₹2,00,000'
@@ -122,47 +98,48 @@ export interface PenaltyTier {
   sourceRef: string // SourceProvision id stating this penalty
 }
 
-// The per-provision review lifecycle (Story 15.6): the ingestion recommends,
-// Compliance reviews, then it is approved-and-tracked, routed for internal
-// review, or sent to a specialist.
-export type ReviewState =
+// The clause pipeline status (Sources pipeline): a new clause is Processing /
+// Recommended, then it is Saved (mapped to a control and tracked), sent to a
+// specialist, or marked Not applicable.
+export type ClauseStatus =
+  | 'Processing'
   | 'Recommended'
-  | 'Under review'
-  | 'Approved and saved'
-  | 'Needs internal review'
-  | 'Needs specialist'
+  | 'Saved'
+  | 'Specialist review'
+  | 'Not applicable'
 
-// Child — a section/clause of one instrument (the renamed, enriched Epic 1
-// SourceReference). Owns the per-section structured compliance fields and the
-// review-to-track lifecycle. One model, reused by Epic 14 intake.
+// Child — a clause/section of one instrument (act). Owns the per-clause
+// structured compliance fields and the act → clause → control pipeline.
 export interface SourceProvision {
   id: string // 'SRC-EPF-14B' — keeps the SRC- prefix; cited by obligations/policies/controls
   instrumentId: string // parent SourceInstrument
   provision: string // PINNED — the exact section, rule, clause or paragraph
-  title: string // short provision title, e.g. 'Section 14B — Damages for default'
+  title: string // short clause title, e.g. 'Section 14B — Damages for default'
   citation: string // formal full citation line
-  sourceExtract: string // short real excerpt of the cited provision
-  sourceLink?: string // optional per-provision deep link (else the instrument's)
-  attachedDocument?: AttachedDocument // optional per provision
-  // Structured compliance fields (set on statutory provisions; absent on pure
+  sourceExtract: string // short real excerpt of the cited clause
+  sourceLink?: string // optional per-clause deep link (else the instrument's)
+  attachedDocument?: AttachedDocument // optional per clause
+  // Structured compliance fields (set on statutory clauses; absent on pure
   // framework-standard references).
   nameOfCompliance?: string // 'PF contribution — damages on default'
-  briefDescription?: string // one-line plain-English description
-  keyParts?: string[] // the key obligations/parts of the section
+  briefDescription?: string // one-line description
+  whatItMeans?: string // plain-English explanation of what the clause requires in practice
+  keyParts?: string[] // the key obligations/parts of the clause
   penaltyTiers?: PenaltyTier[] // consequence tiers, each sourced
   severity?: Severity // derived from the penalty tiers (severity-from-penalty)
   frequency?: string // 'Monthly' | 'Quarterly' | 'Annual' | 'Event-based'
-  nextDue?: string // ISO — next due date of the return, where applicable
-  // Ingestion recommendation + review record (the maker-checker over the AI).
+  nextDue?: string // ISO — next due date, where applicable
+  // Applicability to SPF + the scripted recommendation (no model call).
+  applicable?: boolean // applicable / not applicable to SPF
+  applicabilityBasis?: string // why it applies (or not)
   aiRecommendation?: AgentAction
-  recommendedObligationIds: string[] // obligations the ingestion mapped here (filled in world.ts)
-  reviewState?: ReviewState
-  reviewer?: string // person id (the checker — Compliance / Company Secretary)
+  // The act → clause → control pipeline.
+  status?: ClauseStatus
+  reviewer?: string // person id (Compliance / Company Secretary) who acted
   reviewedAt?: string // ISO
   rationale?: string // the reviewer's reason
-  // On approval (Save to controls) — the tracked records this section produced.
-  linkedObligationId?: string
-  linkedControlId?: string
+  specialistNote?: string // mocked specialist outcome (what to implement), set on completion
+  linkedControlId?: string // the control this clause is saved to (Save → Control Library)
 }
 
 export interface Person {
@@ -216,8 +193,9 @@ export interface Control {
   linkedRisks: string[]
   linkedIssues: string[]
   ccmRuleId?: string
-  description: string
-  frequency: string
+  description: string // the control activity — what must be done
+  frequency: string // the cadence
+  nextDue?: string // ISO — the "by when", for tracked compliance controls
   sourceRefs?: string[] // SourceProvision ids — provenance for this control
 }
 

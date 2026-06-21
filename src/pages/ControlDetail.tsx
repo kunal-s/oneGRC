@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText } from 'lucide-react'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPill } from '@/components/FrameworkPill'
@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { SourceList, SourceChip } from '@/components/SourceRef'
-import { getControl, getIssue, WORLD } from '@/data'
+import { getControl, getIssue, getInstrument, WORLD } from '@/data'
+import { clausesForControl } from '@/lib/sources'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
 import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
 import { ComingSoon } from './ComingSoon'
-import type { Control } from '@/types'
+import type { Control, SourceProvision } from '@/types'
 
 const RESULT_ICON = {
   Pass: <CheckCircle2 className="size-4 text-ok" />,
@@ -23,12 +24,28 @@ const RESULT_ICON = {
   Partial: <MinusCircle className="size-4 text-medium" />,
 }
 
+/** Group satisfied clauses by their act, preserving first-seen order. */
+function groupByAct(clauses: SourceProvision[]): { instrumentId: string; clauses: SourceProvision[] }[] {
+  const order: string[] = []
+  const map = new Map<string, SourceProvision[]>()
+  for (const c of clauses) {
+    if (!map.has(c.instrumentId)) {
+      map.set(c.instrumentId, [])
+      order.push(c.instrumentId)
+    }
+    map.get(c.instrumentId)!.push(c)
+  }
+  return order.map((instrumentId) => ({ instrumentId, clauses: map.get(instrumentId)! }))
+}
+
 export function ControlDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
-  const control = id ? getControl(id) : undefined
+  const getSessionControl = useApp((s) => s.getSessionControl)
+  const clauseOverrides = useApp((s) => s.clauseOverrides)
+  const control = id ? getControl(id) ?? getSessionControl(id) : undefined
   const [tab, setTab] = React.useState('overview')
 
   if (!control) return <ComingSoon title="Control not found" />
@@ -37,6 +54,9 @@ export function ControlDetail() {
   const issues = control.linkedIssues.map((i) => getIssue(i)).filter(Boolean)
   const owner = PEOPLE_BY_ID[control.owner]
   const testHistory = buildTestHistory(control)
+  // Sources pipeline — the clauses (across acts) this control satisfies.
+  const satisfied = clausesForControl(control.id, clauseOverrides)
+  const satisfiedByAct = groupByAct(satisfied)
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -120,13 +140,17 @@ export function ControlDetail() {
               <Attr label="Line of defence">{owner.lod}</Attr>
               <Attr label="Type">{control.type}</Attr>
               <Attr label="Automation">{control.automation === 'CCM' ? 'Continuous (CCM)' : 'Manual'}</Attr>
-              <Attr label="Frequency">{control.frequency}</Attr>
+              <Attr label="Cadence">{control.frequency}</Attr>
+              <Attr label="Next due">{control.nextDue ? fmtDate(control.nextDue) : '—'}</Attr>
               <Attr label="Last tested">{fmtDate(control.lastTested)}</Attr>
               <Attr label="Result">
                 <StatusChip status={control.result} />
               </Attr>
               <Attr label="Evidence items">{evidence.length}</Attr>
-              <Attr label="Frameworks">{control.frameworks.length}</Attr>
+            </div>
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">Control activity — what must be done</div>
+              <p className="mt-1 text-sm text-foreground">{control.description}</p>
             </div>
           </div>
           <div className="card-surface p-4">
@@ -160,6 +184,41 @@ export function ControlDetail() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'overview' && satisfied.length > 0 && (
+        <div className="card-surface mt-4 p-4">
+          <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Layers className="size-4 text-info" /> Satisfies — clauses across acts
+          </h3>
+          <p className="mb-3 text-2xs text-muted-foreground">
+            {satisfied.length} clause{satisfied.length === 1 ? '' : 's'} from {satisfiedByAct.length} act{satisfiedByAct.length === 1 ? '' : 's'} are
+            saved to this control — one control, many clauses across acts.
+          </p>
+          <div className="space-y-3">
+            {satisfiedByAct.map(({ instrumentId, clauses }) => {
+              const inst = getInstrument(instrumentId)
+              return (
+                <div key={instrumentId}>
+                  <button onClick={() => inst && navigate(`/sources/${inst.id}`)} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-info">
+                    <Scale className="size-3.5 text-info" /> {inst?.title ?? instrumentId}
+                    <span className="rounded bg-muted px-1 py-0 text-2xs font-medium text-muted-foreground">{inst?.authority}</span>
+                  </button>
+                  <div className="space-y-1">
+                    {clauses.map((c) => (
+                      <button key={c.id} onClick={() => navigate(`/sources/section/${c.id}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+                        <span className="font-mono text-2xs font-semibold text-info">{c.id}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-foreground">{c.nameOfCompliance ?? c.title}</span>
+                        {c.severity && <SeverityBadge severity={c.severity} dense />}
+                        <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
