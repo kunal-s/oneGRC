@@ -4,7 +4,7 @@
 // severity-from-penalty, and the review/approve merge with session overrides.
 import { WORLD, getSource, getInstrument } from '@/data'
 import { severityFromPenalty } from '@/data/sources'
-import type { ReviewState, SourceInstrument, SourceProvision } from '@/types'
+import type { ReviewState, SourceInstrument, SourceProvision, TriageState } from '@/types'
 
 export { getSource, getInstrument, severityFromPenalty }
 
@@ -117,4 +117,50 @@ export function instrumentSummary(instrumentId: string, overrides: ReviewOverrid
     else if (needsAttention(eff.reviewState)) needsReview++
   }
   return { provisions: provisions.length, reviewable, needsReview, approved }
+}
+
+// ── Compliance Intake (Epic 14) ─────────────────────────────────────────────
+// Session overrides on a circular's triage state (reset on reload, A10).
+export type IntakeOverrides = Record<string, { triageState: TriageState; parkedReason?: string }>
+
+/** Every instrument that arrived via Compliance Intake (has inflow metadata). */
+export function intakeInstruments(): SourceInstrument[] {
+  return WORLD.instruments.filter((i) => i.intake)
+}
+
+/** A circular's triage state merged with any session override. */
+export function effectiveTriage(inst: SourceInstrument, overrides: IntakeOverrides): TriageState | undefined {
+  if (!inst.intake) return undefined
+  return overrides[inst.id]?.triageState ?? inst.intake.triageState
+}
+
+/** Accepted into the live register — triage done. */
+export function isResolvedTriage(state?: TriageState): boolean {
+  return state === 'Accepted' || state === 'Live'
+}
+
+/** Still awaiting a triage decision (not resolved, not parked). */
+export function awaitingTriage(state?: TriageState): boolean {
+  return state !== undefined && !isResolvedTriage(state) && state !== 'Parked'
+}
+
+/** StatusChip tone for a triage state. */
+export function triageTone(state: TriageState): 'ok' | 'warn' | 'danger' | 'info' | 'progress' | 'neutral' {
+  switch (state) {
+    case 'Accepted':
+    case 'Live':
+      return 'ok'
+    case 'Parsed':
+      return 'info'
+    case 'Pulled':
+    case 'Uploaded':
+    case 'Under triage':
+      return 'progress'
+    case 'Needs internal review':
+      return 'warn'
+    case 'Needs external specialist':
+      return 'danger'
+    case 'Parked':
+      return 'neutral'
+  }
 }

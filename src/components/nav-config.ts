@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   LayoutDashboard, Inbox, ShieldAlert, Library, Activity, FileText,
   Siren, Timer, CalendarClock, GitPullRequestArrow, Landmark, DatabaseZap,
-  ClipboardCheck, Wrench, FolderArchive, Plug, Settings, Scale,
+  ClipboardCheck, Wrench, FolderArchive, Plug, Settings, Scale, FileInput,
 } from 'lucide-react'
 
 export interface NavItem {
@@ -45,6 +45,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/obligations', label: 'Obligations & Calendar', icon: CalendarClock },
       { to: '/reg-change', label: 'Regulatory Change', icon: GitPullRequestArrow },
+      { to: '/intake', label: 'Compliance Intake', icon: FileInput },
       { to: '/sources', label: 'Source Library', icon: Scale },
       { to: '/pfrda', label: 'PFRDA Pack', icon: Landmark },
       { to: '/dpdp', label: 'DPDP / Data Governance', icon: DatabaseZap },

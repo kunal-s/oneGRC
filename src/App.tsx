@@ -17,6 +17,7 @@ import { Obligations } from '@/pages/Obligations'
 import { ObligationDetail } from '@/pages/ObligationDetail'
 import { RegChange } from '@/pages/RegChange'
 import { RegChangeDetail } from '@/pages/RegChangeDetail'
+import { Intake } from '@/pages/Intake'
 import { Sources } from '@/pages/Sources'
 import { SourceInstrumentDetail } from '@/pages/SourceInstrumentDetail'
 import { SourceSectionDetail } from '@/pages/SourceSectionDetail'
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/obligations/:id" element={<ObligationDetail />} />
         <Route path="/reg-change" element={<RegChange />} />
         <Route path="/reg-change/:id" element={<RegChangeDetail />} />
+        <Route path="/intake" element={<Intake />} />
         <Route path="/sources" element={<Sources />} />
         <Route path="/sources/section/:id" element={<SourceSectionDetail />} />
         <Route path="/sources/:id" element={<SourceInstrumentDetail />} />

@@ -73,6 +73,33 @@ export interface SourceInstrument {
   sourceLink: string // URL
   attachedDocument?: AttachedDocument
   status: InstrumentStatus
+  intake?: IntakeMeta // Compliance Intake (Epic 14) — inflow metadata, when this arrived via intake
+}
+
+// ── Compliance Intake (Epic 14 — inflow only; reuses the Epic 15 model) ──────
+// An incoming circular is parsed into a SourceInstrument + its SourceProvisions;
+// intake adds ONLY the inflow metadata. No separate record model.
+export type IntakeChannel = 'Auto-pull' | 'Manual upload'
+
+// The triage lifecycle: Pulled/Uploaded → Parsed → Under triage → one of
+// {Accepted, Needs internal review, Needs external specialist, Parked} → Live.
+export type TriageState =
+  | 'Pulled'
+  | 'Uploaded'
+  | 'Parsed'
+  | 'Under triage'
+  | 'Accepted'
+  | 'Needs internal review'
+  | 'Needs external specialist'
+  | 'Parked'
+  | 'Live'
+
+export interface IntakeMeta {
+  channel: IntakeChannel
+  receivedAt: string // ISO
+  parse: AgentAction // the regulatory-change agent's parse (provenance + confidence)
+  triageState: TriageState
+  parkedReason?: string
 }
 
 // A scripted, deterministic action from an agent (here, the ingestion agent).

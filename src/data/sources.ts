@@ -18,6 +18,17 @@ import { ist } from '@/lib/time'
 const d = (y: number, m: number, day: number) => ist(y, m, day).toISOString()
 const t = (y: number, m: number, day: number, h: number, mi: number) => ist(y, m, day, h, mi).toISOString()
 
+// The Regulatory-Change Agent parse (Epic 14, Story 14.2) — scripted, with
+// provenance + confidence; severity is then auto-rated from the penalty. Defined
+// here because the intake instruments below reference it.
+const parse = (recommendation: string, confidence: number, basis: string, at: string): AgentAction => ({
+  agent: 'Regulatory-Change Agent',
+  recommendation,
+  confidence,
+  at,
+  basis,
+})
+
 // ── Severity from penalty (the minimal Epic 4 slice) ────────────────────────
 const SEV_ORDER: Severity[] = ['Low', 'Medium', 'High', 'Critical']
 export function severityFromPenalty(tiers: PenaltyTier[] = []): Severity | undefined {
@@ -220,6 +231,112 @@ export const INSTRUMENTS: SourceInstrument[] = [
     sourceChannel: 'Content feed',
     sourceLink: 'https://www.pcisecuritystandards.org/document_library/',
     status: 'In force',
+  },
+  // ── Compliance Intake — incoming circulars (Epic 14) ──────────────────────
+  // Arrived via intake, parsed onto this same model, awaiting triage. status is
+  // 'Draft' until accepted into the live register.
+  {
+    id: 'INST-GST-3B-2026',
+    title: 'CBIC — Revised GSTR-3B Table 4 (ITC) reporting format',
+    authority: 'CBIC',
+    regulator: 'GST',
+    instrumentType: 'Notification',
+    dateOfIssue: d(2026, 6, 4),
+    sourceChannel: 'Content feed',
+    sourceLink: 'https://cbic-gst.gov.in/',
+    status: 'Draft',
+    intake: {
+      channel: 'Auto-pull',
+      receivedAt: t(2026, 6, 5, 8, 30),
+      parse: parse('Parsed one provision (revised Table 4 ITC reporting). Maps to the GSTR-3B obligation; late fee unchanged under s.47.', 92.7, 'CBIC notification text on the revised GSTR-3B Table 4 format.', t(2026, 6, 5, 8, 32)),
+      triageState: 'Parsed',
+    },
+  },
+  {
+    id: 'INST-EPFO-HP-2026',
+    title: 'EPFO — Revised ECR validations & higher-pension processing',
+    authority: 'EPFO',
+    regulator: 'Labour',
+    instrumentType: 'Circular',
+    dateOfIssue: d(2026, 6, 3),
+    sourceChannel: 'Manual upload',
+    sourceLink: 'https://www.epfindia.gov.in/site_en/index.php',
+    status: 'Draft',
+    intake: {
+      channel: 'Manual upload',
+      receivedAt: t(2026, 6, 4, 10, 15),
+      parse: parse('Parsed revised ECR validation rules affecting the monthly challan. Damages (s.14B) and interest (s.7Q) consequences carry over.', 87.5, 'EPFO circular uploaded by the Labour & Secretarial team.', t(2026, 6, 4, 10, 18)),
+      triageState: 'Needs internal review',
+    },
+  },
+  {
+    id: 'INST-DPDP-OPS-2026',
+    title: 'MeitY — Notice on phased commencement of the DPDP Rules, 2025',
+    authority: 'MeitY',
+    regulator: 'DPDP',
+    instrumentType: 'Notification',
+    dateOfIssue: d(2026, 6, 7),
+    sourceChannel: 'Content feed',
+    sourceLink: 'https://www.meity.gov.in/data-protection-framework',
+    status: 'Draft',
+    intake: {
+      channel: 'Auto-pull',
+      receivedAt: t(2026, 6, 8, 9, 40),
+      parse: parse('Parsed a commencement-date provision for the breach-intimation duty. Severity auto-rated Critical from the ₹250 crore penalty; applicable date is ambiguous.', 79.3, 'MeitY commencement notice referencing the DPDP Rules, 2025.', t(2026, 6, 8, 9, 43)),
+      triageState: 'Needs external specialist',
+    },
+  },
+  {
+    id: 'INST-PFRDA-EXP-2026',
+    title: 'PFRDA — Clarification on single-issuer exposure & prudential norms',
+    authority: 'PFRDA',
+    regulator: 'PFRDA',
+    instrumentType: 'Circular',
+    dateOfIssue: d(2026, 6, 8),
+    sourceChannel: 'Regulator site',
+    sourceLink: 'https://www.pfrda.org.in/',
+    status: 'Draft',
+    intake: {
+      channel: 'Auto-pull',
+      receivedAt: t(2026, 6, 9, 7, 20),
+      parse: parse('Parsed a revised single-issuer exposure-limit provision. Maps to the exposure-limit breach report obligation; severity High.', 90.8, 'PFRDA clarification circular on exposure norms.', t(2026, 6, 9, 7, 23)),
+      triageState: 'Under triage',
+    },
+  },
+  {
+    id: 'INST-LABOUR-SS-2026',
+    title: 'Ministry of Labour & Employment — Draft rules under the Code on Social Security, 2020',
+    authority: 'Ministry of Labour & Employment',
+    regulator: 'Labour',
+    instrumentType: 'Rules',
+    dateOfIssue: d(2026, 5, 30),
+    sourceChannel: 'Official Gazette',
+    sourceLink: 'https://labour.gov.in/',
+    status: 'Draft',
+    intake: {
+      channel: 'Auto-pull',
+      receivedAt: t(2026, 6, 3, 14, 5),
+      parse: parse('Parsed a draft social-security contribution-alignment provision. Not yet in force; final notification and State rules pending.', 71.4, 'Draft rules published under the Code on Social Security, 2020.', t(2026, 6, 3, 14, 8)),
+      triageState: 'Parked',
+      parkedReason: 'Draft only — awaiting final notification and the corresponding State rules before triage.',
+    },
+  },
+  {
+    id: 'INST-CERTIN-ADV-2026',
+    title: 'CERT-In — Advisory reaffirming 6-hour ransomware reporting timelines',
+    authority: 'CERT-In',
+    regulator: 'CERT-In',
+    instrumentType: 'Direction',
+    dateOfIssue: d(2026, 6, 1),
+    sourceChannel: 'Regulator site',
+    sourceLink: 'https://www.cert-in.org.in/',
+    status: 'In force',
+    intake: {
+      channel: 'Auto-pull',
+      receivedAt: t(2026, 6, 2, 11, 30),
+      parse: parse('Parsed an advisory reaffirming the 6-hour reporting timeline under Direction 20(3)/2022. Accepted into the register; no new obligation, reinforces the existing CERT-In duty.', 95.1, 'CERT-In advisory text reaffirming the 6-hour clock.', t(2026, 6, 2, 11, 33)),
+      triageState: 'Live',
+    },
   },
 ]
 
@@ -654,6 +771,109 @@ export const SOURCES: SourceProvision[] = [
     citation: 'PCI DSS v4.0, Overview',
     sourceExtract:
       'PCI DSS is a global standard that provides a baseline of technical and operational requirements designed to protect account data. PCI DSS comprises a minimum set of requirements for protecting account data, and may be enhanced by additional controls.',
+  }),
+  // ── Compliance Intake — parsed provisions of the incoming circulars (Epic 14)
+  prov({
+    id: 'SRC-GST-3B-T4',
+    instrumentId: 'INST-GST-3B-2026',
+    provision: 'Revised Table 4 — input tax credit (ITC) reporting',
+    title: 'Table 4 — Revised ITC reporting',
+    nameOfCompliance: 'GSTR-3B Table 4 (ITC) reporting',
+    briefDescription: 'Report eligible, reversed and reclaimed ITC in the revised Table 4 of GSTR-3B.',
+    keyParts: ['Bifurcate ITC into eligible, reversed and reclaimed', 'Report net ITC availed in the revised Table 4', 'Applies from the notified return period'],
+    penaltyTiers: [tier('Incorrect or late ITC reporting in GSTR-3B', 'Late fee under s.47 and interest on wrongly availed ITC under s.50', 'Low', 'SRC-CGST-47')],
+    frequency: 'Monthly',
+    nextDue: d(2026, 6, 20),
+    citation: 'CBIC notification revising the GSTR-3B Table 4 (ITC) reporting format',
+    sourceExtract:
+      'Registered persons shall report input tax credit in the revised Table 4 of FORM GSTR-3B, separately disclosing ITC available, ITC reversed and reclaimed, and the net ITC availed, with effect from the notified return period.',
+    aiRecommendation: ai('Update the GSTR-3B monthly return obligation to the revised Table 4 format; late-fee consequence unchanged.', 92.7, 'Revised GSTR-3B Table 4 reporting format; SPF is GST-registered.', t(2026, 6, 5, 8, 35)),
+    reviewState: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-EPFO-ECR-2026',
+    instrumentId: 'INST-EPFO-HP-2026',
+    provision: 'Revised ECR validations for higher-pension members',
+    title: 'Revised ECR validations',
+    nameOfCompliance: 'Monthly ECR filing (revised validations)',
+    briefDescription: 'File the monthly ECR with the revised validations for higher-pension members.',
+    keyParts: ['Apply revised ECR validations from the notified wage month', 'Reflect higher-pension member contributions', 'Default still attracts damages and interest'],
+    penaltyTiers: [
+      tier('Default in depositing the revised PF contribution', 'Damages up to 100% of arrears under s.14B', 'High', 'SRC-EPF-14B'),
+      tier('Delay in deposit', 'Interest at 12% per annum under s.7Q', 'Medium', 'SRC-EPF-7Q'),
+    ],
+    frequency: 'Monthly',
+    nextDue: d(2026, 6, 15),
+    citation: 'EPFO circular on revised ECR validations and higher-pension processing',
+    sourceExtract:
+      'Employers shall file the Electronic Challan-cum-Return with the revised validations for higher-pension members from the notified wage month, ensuring contributions are computed on the applicable wage base.',
+    aiRecommendation: ai('Update the monthly PF & ESI challan obligation for the revised ECR validations; the s.14B / s.7Q consequences carry over.', 87.5, 'EPFO ECR revision; SPF is a covered establishment.', t(2026, 6, 4, 10, 20)),
+    reviewState: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-DPDP-OPS-2026',
+    instrumentId: 'INST-DPDP-OPS-2026',
+    provision: 'Commencement date for the breach-intimation duty',
+    title: 'Commencement — breach intimation',
+    nameOfCompliance: 'DPDP breach-intimation commencement',
+    briefDescription: 'Sets the date from which the Section 8(6) breach-intimation duty becomes enforceable.',
+    keyParts: ['Notifies the commencement date for the breach-intimation duty', 'Reads with Section 8(6) of the DPDP Act', 'Penalty determined by the Data Protection Board'],
+    penaltyTiers: [tier('Failure to intimate a breach once commenced', 'Penalty up to ₹250 crore as determined by the Data Protection Board', 'Critical', 'SRC-DPDP-2025')],
+    frequency: 'Event-based',
+    citation: 'MeitY notice on the phased commencement of the DPDP Rules, 2025',
+    sourceExtract:
+      'The provisions relating to intimation of a personal data breach under section 8(6) shall come into force on the date notified, from which Data Fiduciaries shall intimate the Board and affected Data Principals in the prescribed manner.',
+    aiRecommendation: ai('Tie to the DSAR and consent obligations; confirm the applicable commencement date for SPF before tracking.', 79.3, 'Commencement notice r/w Section 8(6) of the DPDP Act, 2023.', t(2026, 6, 8, 9, 45)),
+    reviewState: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-PFRDA-EXP-2026',
+    instrumentId: 'INST-PFRDA-EXP-2026',
+    provision: 'Revised single-issuer exposure limit',
+    title: 'Revised single-issuer exposure limit',
+    nameOfCompliance: 'Single-issuer exposure limit',
+    briefDescription: 'Clarifies the revised single-issuer exposure ceiling for pension-fund portfolios.',
+    keyParts: ['Revised single-issuer exposure ceiling', 'Monitor at the scheme-portfolio level', 'Breaches are reportable to PFRDA'],
+    penaltyTiers: [tier('Breach of the revised single-issuer exposure limit', 'Regulatory action and mandatory exposure-breach reporting to PFRDA', 'High', 'SRC-PFRDA-EXP-2026')],
+    frequency: 'Quarterly',
+    nextDue: d(2026, 7, 15),
+    citation: 'PFRDA clarification circular on single-issuer exposure and prudential norms',
+    sourceExtract:
+      'The single-issuer exposure of a Pension Fund shall not exceed the revised ceiling clarified herein, to be monitored at the scheme-portfolio level, with any breach reported to the Authority.',
+    aiRecommendation: ai('Update the exposure-limit breach report obligation to the revised ceiling; monitor at the scheme level.', 90.8, 'PFRDA exposure-norms clarification; SPF manages NPS scheme portfolios.', t(2026, 6, 9, 7, 25)),
+    reviewState: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-SS-CODE-2026',
+    instrumentId: 'INST-LABOUR-SS-2026',
+    provision: 'Social security contribution alignment (draft)',
+    title: 'Contribution alignment (draft)',
+    nameOfCompliance: 'Social Security Code contribution alignment',
+    briefDescription: 'Draft alignment of provident-fund and social-security contributions under the new wage definition.',
+    keyParts: ['Aligns contributions to the Code’s wage definition', 'Draft — not yet in force', 'Final notification and State rules pending'],
+    penaltyTiers: [tier('Non-alignment once the Code is notified', 'Contribution shortfall recovery and penalty as prescribed under the Code', 'Medium', 'SRC-SS-CODE-2026')],
+    frequency: 'Monthly',
+    citation: 'Draft rules under the Code on Social Security, 2020',
+    sourceExtract:
+      'Contributions shall be computed on wages as defined under the Code on Social Security, 2020. These draft rules are open for comment and are not yet in force; the date of commencement shall be notified separately.',
+    aiRecommendation: ai('Hold pending final notification; on commencement, align the PF challan obligation to the new wage definition.', 71.4, 'Draft rules under the Code on Social Security, 2020.', t(2026, 6, 3, 14, 10)),
+    reviewState: 'Recommended',
+  }),
+  prov({
+    id: 'SRC-CERTIN-ADV-2026',
+    instrumentId: 'INST-CERTIN-ADV-2026',
+    provision: 'Reaffirmed 6-hour ransomware reporting',
+    title: 'Reaffirmed 6-hour reporting',
+    nameOfCompliance: 'Ransomware incident reporting (6h)',
+    briefDescription: 'Reaffirms the 6-hour reporting timeline for ransomware incidents under Direction 20(3)/2022.',
+    keyParts: ['Reaffirms reporting within 6 hours of noticing', 'Specific emphasis on ransomware incidents', 'No change to the underlying direction'],
+    penaltyTiers: [tier('Ransomware incident not reported within 6 hours', 'Non-compliance punishable under s.70B — imprisonment up to 1 year or fine up to ₹1 lakh', 'High', 'SRC-ITACT-70B')],
+    frequency: 'Event-based',
+    citation: 'CERT-In advisory reaffirming the 6-hour ransomware reporting timeline',
+    sourceExtract:
+      'Entities are reminded that ransomware and other cyber incidents must be reported to CERT-In within six hours of noticing, in line with Direction 20(3)/2022; logs are to be retained for 180 days within India.',
+    aiRecommendation: ai('No new obligation — reinforces the existing CERT-In incident-reporting duty and its 6-hour clock.', 95.1, 'CERT-In advisory reaffirming Direction 20(3)/2022.', t(2026, 6, 2, 11, 35)),
+    reviewState: 'Recommended',
   }),
 ]
 

@@ -1,12 +1,12 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ArrowUpRight, Scale, Paperclip, Upload, ExternalLink, History, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Scale, Paperclip, Upload, ExternalLink, History, ChevronRight, FileInput } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { Button } from '@/components/ui/Button'
 import { getInstrument } from '@/data'
-import { provisionsForInstrument, effectiveProvision, reviewTone } from '@/lib/sources'
-import { fmtDate } from '@/lib/time'
+import { provisionsForInstrument, effectiveProvision, reviewTone, effectiveTriage, triageTone } from '@/lib/sources'
+import { fmtDate, fmtIST } from '@/lib/time'
 import { useApp } from '@/store'
 import { ComingSoon } from './ComingSoon'
 
@@ -16,12 +16,14 @@ export function SourceInstrumentDetail() {
   const inst = id ? getInstrument(id) : undefined
   const pushToast = useApp((s) => s.pushToast)
   const overrides = useApp((s) => s.reviewOverrides)
+  const intakeOverrides = useApp((s) => s.intakeOverrides)
 
   if (!inst) return <ComingSoon title="Instrument not found" />
 
   const provisions = provisionsForInstrument(inst.id)
   const supersedes = inst.supersedesId ? getInstrument(inst.supersedesId) : undefined
   const supersededBy = inst.supersededById ? getInstrument(inst.supersededById) : undefined
+  const triage = inst.intake ? effectiveTriage(inst, intakeOverrides) : undefined
 
   return (
     <div>
@@ -58,6 +60,20 @@ export function SourceInstrumentDetail() {
           <span className="min-w-0 flex-1 text-sm text-foreground">
             Superseded by the newer version ({supersededBy.version} · {fmtDate(supersededBy.dateOfIssue)})
           </span>
+          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      )}
+
+      {inst.intake && triage && (
+        <button
+          onClick={() => navigate('/intake')}
+          className="mb-4 flex w-full flex-wrap items-center gap-2 rounded-lg border border-info/30 bg-info-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-info-soft/70"
+        >
+          <FileInput className="size-4 shrink-0 text-info" />
+          <span className="min-w-0 flex-1 text-xs text-foreground">
+            Arrived via Compliance Intake · {inst.intake.channel} · received {fmtIST(inst.intake.receivedAt)}
+          </span>
+          <StatusChip status={triage} tone={triageTone(triage)} />
           <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
         </button>
       )}

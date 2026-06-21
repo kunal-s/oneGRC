@@ -1,8 +1,8 @@
 import { create } from 'zustand'
-import type { ReviewState, RoleKey } from '@/types'
+import type { ReviewState, RoleKey, TriageState } from '@/types'
 import { ROLES } from '@/data/people'
 import { getSource } from '@/data'
-import type { ProvisionOverride, ReviewOverrides } from '@/lib/sources'
+import type { IntakeOverrides, ProvisionOverride, ReviewOverrides } from '@/lib/sources'
 import { NOW } from '@/lib/time'
 
 export interface Toast {
@@ -60,6 +60,10 @@ interface AppState {
   // Save to controls — approve and track: creates the tracked obligation +
   // Control Library entry, returns their ids for the toast/navigation.
   approveProvision: (provisionId: string, rationale?: string) => { obligationId?: string; controlId: string }
+
+  // Compliance Intake (Epic 14) — session overrides on a circular's triage state.
+  intakeOverrides: IntakeOverrides
+  triageIntake: (instrumentId: string, state: TriageState, parkedReason?: string) => void
 }
 
 let toastSeq = 0
@@ -119,5 +123,10 @@ export const useApp = create<AppState>((set, get) => ({
     }
     set((s) => ({ reviewOverrides: { ...s.reviewOverrides, [provisionId]: override } }))
     return { obligationId, controlId }
+  },
+
+  intakeOverrides: {},
+  triageIntake: (instrumentId, state, parkedReason) => {
+    set((s) => ({ intakeOverrides: { ...s.intakeOverrides, [instrumentId]: { triageState: state, parkedReason } } }))
   },
 }))
