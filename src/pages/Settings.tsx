@@ -182,8 +182,8 @@ function UsersRolesSection() {
 
       <Card title="Platform roles">
         <p className="mb-3 text-2xs text-muted-foreground">
-          Access is role-based across the three lines of defence. The six roles marked <span className="font-medium text-foreground">role switcher</span> are
-          selectable from the top bar and change My Queue and which approvals appear.
+          Access is role-based across the three lines of defence. The seven personas marked <span className="font-medium text-foreground">persona switcher</span> are
+          selectable from the top bar and change the landing dashboard, My Queue, the visible navigation and which approvals appear.
         </p>
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {ROLE_DEFS.map((r) => (
@@ -191,7 +191,7 @@ function UsersRolesSection() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{r.label}</span>
                 <span className="rounded bg-muted px-1.5 py-0 text-2xs text-muted-foreground">{r.lod}</span>
-                {r.switcher && <span className="rounded bg-info-soft px-1.5 py-0 text-2xs font-medium text-info">role switcher</span>}
+                {r.switcher && <span className="rounded bg-info-soft px-1.5 py-0 text-2xs font-medium text-info">persona switcher</span>}
                 <span className="ml-auto text-2xs text-muted-foreground">{r.members} {r.members === 1 ? 'member' : 'members'}</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">{r.summary}</p>

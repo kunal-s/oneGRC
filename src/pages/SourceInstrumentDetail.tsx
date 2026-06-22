@@ -13,6 +13,7 @@ import { getInstrument, getControl } from '@/data'
 import { provisionsForInstrument, effectiveClause, statusTone, awaitingDecision } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { useCanAct } from '@/lib/gating'
 import type { SourceProvision } from '@/types'
 import { ComingSoon } from './ComingSoon'
 
@@ -20,7 +21,6 @@ export function SourceInstrumentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const inst = id ? getInstrument(id) : undefined
-  const role = useApp((s) => s.role)
   const overrides = useApp((s) => s.clauseOverrides)
   const engageSpecialist = useApp((s) => s.engageSpecialist)
   const pushToast = useApp((s) => s.pushToast)
@@ -31,7 +31,7 @@ export function SourceInstrumentDetail() {
   const clauses = provisionsForInstrument(inst.id).map((p) => effectiveClause(p, overrides))
   const supersedes = inst.supersedesId ? getInstrument(inst.supersedesId) : undefined
   const supersededBy = inst.supersededById ? getInstrument(inst.supersededById) : undefined
-  const canAct = role === 'COMPLIANCE' || role === 'COSEC'
+  const canAct = useCanAct({ kind: 'clause.save' })
 
   return (
     <div>

@@ -15,6 +15,7 @@ import { effectiveClause, statusTone } from '@/lib/sources'
 import { personName } from '@/data/people'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 
 const fmtPct = (n: number) => `${n.toFixed(1)}%`
@@ -23,7 +24,6 @@ export function SourceSectionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const base = id ? getSource(id) : undefined
-  const role = useApp((s) => s.role)
   const overrides = useApp((s) => s.clauseOverrides)
   const getSessionControl = useApp((s) => s.getSessionControl)
   const engageSpecialist = useApp((s) => s.engageSpecialist)
@@ -35,7 +35,7 @@ export function SourceSectionDetail() {
 
   const p = effectiveClause(base, overrides)
   const inst = getInstrument(p.instrumentId)
-  const canAct = role === 'COMPLIANCE' || role === 'COSEC'
+  const canAct = useCanAct({ kind: 'clause.save' })
   const reviewable = Boolean(p.status)
   const saved = p.status === 'Saved'
   const inSpecialist = p.status === 'Specialist review'

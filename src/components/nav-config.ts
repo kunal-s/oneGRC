@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import type { RoleKey } from '@/types'
 import {
   LayoutDashboard, Inbox, ShieldAlert, Library, Activity, FileText,
   Siren, Timer, CalendarClock, GitPullRequestArrow, Landmark, DatabaseZap,
@@ -20,7 +21,7 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { to: '/', label: 'Home — Board Cockpit', icon: LayoutDashboard, end: true },
+      { to: '/', label: 'Home', icon: LayoutDashboard, end: true },
       { to: '/queue', label: 'My Queue', icon: Inbox },
     ],
   },
@@ -69,3 +70,47 @@ export const NAV_ITEMS: NavItem[] = [
   ...NAV_GROUPS.flatMap((g) => g.items),
   ...NAV_BOTTOM,
 ]
+
+// Persona-aware navigation. A route is listed against the personas for whom it is
+// primary or secondary (the role-relevance matrix in docs/onegrc-ux-audit.md).
+// Personas not listed have the item hard-hidden from their sidebar (still reachable
+// via command search + deep links). Routes absent from this map are visible to all.
+const ALL: RoleKey[] = ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR', 'ADMIN']
+
+export const NAV_VISIBILITY: Record<string, RoleKey[]> = {
+  '/': ALL,
+  '/queue': ALL,
+  '/risks': ['EXEC', 'RISK', 'CCO', 'CTRLOWNER', 'AUDITOR'],
+  '/controls': ['EXEC', 'RISK', 'CCO', 'CTRLOWNER', 'AUDITOR'],
+  '/ccm': ['EXEC', 'CTRLOWNER', 'AUDITOR'],
+  '/policies': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/incidents': ['EXEC', 'RISK', 'CCO', 'CTRLOWNER', 'AUDITOR'],
+  '/clocks': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/obligations': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/reg-change': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'AUDITOR'],
+  '/sources': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'AUDITOR'],
+  '/pfrda': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/dpdp': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/audits': ['EXEC', 'RISK', 'CCO', 'CTRLOWNER', 'AUDITOR'],
+  '/issues': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/evidence': ['EXEC', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
+  '/integrations': ['EXEC', 'ADMIN'],
+  '/settings': ['CCO', 'ADMIN'],
+}
+
+function visibleTo(to: string, role: RoleKey): boolean {
+  const v = NAV_VISIBILITY[to]
+  return v ? v.includes(role) : true
+}
+
+/** Sidebar groups filtered to a persona; groups with no visible item are dropped. */
+export function navGroupsForRole(role: RoleKey): NavGroup[] {
+  return NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((i) => visibleTo(i.to, role)) }))
+    .filter((g) => g.items.length > 0)
+}
+
+/** Bottom-pinned items filtered to a persona. */
+export function navBottomForRole(role: RoleKey): NavItem[] {
+  return NAV_BOTTOM.filter((i) => visibleTo(i.to, role))
+}

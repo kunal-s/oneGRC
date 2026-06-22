@@ -29,25 +29,26 @@ export interface RoleDef {
   summary: string
 }
 
+// The 7 functional personas, each a switcher entry. `members` counts roster
+// people mapped to that persona (see data/people.ts).
 export const ROLE_DEFS: RoleDef[] = [
-  { key: 'CRO', label: 'Chief Risk Officer', lod: '2nd line', members: 1, switcher: true, summary: 'Full enterprise read; approves risk treatment, board pack, overdue-obligation remediation.' },
-  { key: 'CISO', label: 'CISO', lod: '2nd line', members: 1, switcher: true, summary: 'Security risk & controls; signs off CERT-In submissions; manages incidents and CCM.' },
-  { key: 'COMPLIANCE', label: 'Head of Compliance', lod: '2nd line', members: 1, switcher: true, summary: 'Obligations, regulatory change, DPDP; checker on filings and consent.' },
-  { key: 'COSEC', label: 'Company Secretary', lod: '2nd line', members: 1, switcher: true, summary: 'Companies Act filings, committee cadence, board minutes and secretarial returns.' },
-  { key: 'AUDIT', label: 'Head of Internal Audit', lod: '3rd line', members: 1, switcher: true, summary: 'Independent assurance; audits, findings and issue verification. Read-mostly elsewhere.' },
-  { key: 'INVCOMP', label: 'Head of Investment Compliance', lod: '2nd line', members: 1, switcher: true, summary: 'Exposure limits, NAV integrity, PFRDA investment returns and committee evidence.' },
-  { key: 'SECOPS', label: 'SecOps', lod: '1st line', members: 1, switcher: false, summary: 'Detect, triage and contain incidents; operate detective controls and evidence capture.' },
-  { key: 'DPO', label: 'Data Protection Officer', lod: '2nd line', members: 1, switcher: false, summary: 'DPDP data inventory, consent ledger and DSAR handling; breach intimation owner.' },
-  { key: 'ADMIN', label: 'Platform Administrator', lod: '2nd line', members: 2, switcher: false, summary: 'Configure frameworks, integrations, maker-checker policy and user access. No filing rights.' },
+  { key: 'EXEC', label: 'Executive', lod: 'Board / 2nd line', members: 1, switcher: true, summary: 'Board roll-up and exceptions; approves risk treatment, incident sign-off, overdue-obligation remediation, board pack.' },
+  { key: 'RISK', label: 'Risk Manager', lod: '2nd line', members: 1, switcher: true, summary: 'Risk register, heat map and treatment; ratings grounded in consequence; drills into the controls and obligations behind each risk.' },
+  { key: 'CCO', label: 'Compliance Manager', lod: '2nd line', members: 4, switcher: true, summary: 'Obligations, regulatory change, DPDP and the source-to-action pipeline; the only persona that may accept a clause or engage a specialist; checker on filings.' },
+  { key: 'ANALYST', label: 'Compliance Analyst', lod: '1st line', members: 2, switcher: true, summary: 'First-line filings (tax, EPF, professional tax), clause-pipeline work and evidence capture. Maker, not checker.' },
+  { key: 'CTRLOWNER', label: 'Control Owner', lod: '1st / 2nd line', members: 4, switcher: true, summary: 'Owns and operates controls; records tests and re-tests, runs CCM, signs off security incident reports, captures control evidence.' },
+  { key: 'AUDITOR', label: 'Auditor', lod: '3rd line', members: 2, switcher: true, summary: 'Independent assurance; audits, findings and issue verification, pulling evidence from the connected model. Read-mostly elsewhere.' },
+  { key: 'ADMIN', label: 'Administrator', lod: 'Platform', members: 1, switcher: true, summary: 'Configure org, users and roles, frameworks, integrations, maker-checker policy and retention; reviews the audit log. No filing rights.' },
 ]
 
 export const ROLE_LABEL: Record<RoleKey, string> = {
-  CRO: 'CRO',
-  CISO: 'CISO',
-  COMPLIANCE: 'Compliance',
-  COSEC: 'Company Secretary',
-  AUDIT: 'Internal Audit',
-  INVCOMP: 'Investment Compliance',
+  EXEC: 'Executive',
+  RISK: 'Risk Manager',
+  CCO: 'Compliance Manager',
+  ANALYST: 'Compliance Analyst',
+  CTRLOWNER: 'Control Owner',
+  AUDITOR: 'Auditor',
+  ADMIN: 'Administrator',
 }
 
 // ── Per-user admin metadata (status + last active) ──────────────────────────
@@ -144,13 +145,13 @@ export interface McRow {
 }
 
 export const MC_ROWS: McRow[] = [
-  { object: 'Obligations & regulatory filings', required: true, approver: 'Head of Compliance', sla: '24h before due' },
-  { object: 'Policy changes', required: true, approver: 'CRO', sla: '5 business days' },
-  { object: 'Control re-tests (manual)', required: true, approver: 'Control owner (2nd line)', sla: '3 business days' },
-  { object: 'Incident regulator submissions', required: true, approver: 'CISO', sla: 'Within clock window' },
-  { object: 'Risk acceptance', required: true, approver: 'CRO', sla: '7 business days' },
-  { object: 'DSAR erasure decisions', required: true, approver: 'DPO + Head of Compliance', sla: 'Within DPDP window' },
-  { object: 'Bulk issue closure', required: false, approver: 'Internal Audit (sample check)', sla: 'Post-hoc' },
+  { object: 'Obligations & regulatory filings', required: true, approver: 'Compliance Manager', sla: '24h before due' },
+  { object: 'Policy changes', required: true, approver: 'Executive', sla: '5 business days' },
+  { object: 'Control re-tests (manual)', required: true, approver: 'Control Owner', sla: '3 business days' },
+  { object: 'Incident regulator submissions', required: true, approver: 'Executive + Control Owner', sla: 'Within clock window' },
+  { object: 'Risk acceptance', required: true, approver: 'Risk Manager + Executive', sla: '7 business days' },
+  { object: 'DSAR erasure decisions', required: true, approver: 'Compliance Manager', sla: 'Within DPDP window' },
+  { object: 'Bulk issue closure', required: false, approver: 'Auditor (sample check)', sla: 'Post-hoc' },
 ]
 
 // ── Integrations summary (mirrors /integrations) ────────────────────────────

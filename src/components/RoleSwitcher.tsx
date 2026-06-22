@@ -30,15 +30,15 @@ export function RoleSwitcher() {
       >
         <Avatar id={current.person} size={26} />
         <span className="hidden text-left lg:block">
-          <span className="block text-xs font-semibold leading-tight text-foreground">{person.name}</span>
-          <span className="block text-2xs leading-tight text-muted-foreground">{current.label}</span>
+          <span className="block text-xs font-semibold leading-tight text-foreground">{current.label}</span>
+          <span className="block text-2xs leading-tight text-muted-foreground">{person.name}</span>
         </span>
         <ChevronDown className="size-3.5 text-muted-foreground" />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-background p-1 shadow-lg animate-slide-up">
           <div className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Switch role — three lines of defence
+            Switch persona
           </div>
           {ROLES.map((r) => {
             const p = PEOPLE_BY_ID[r.person]
@@ -57,9 +57,9 @@ export function RoleSwitcher() {
               >
                 <Avatar id={r.person} size={28} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-foreground">{p.name}</div>
+                  <div className="text-xs font-medium text-foreground">{r.label}</div>
                   <div className="text-2xs text-muted-foreground">
-                    {p.title} · {p.lod}
+                    {p.name} · {p.lod}
                   </div>
                 </div>
                 {active && <Check className="size-4 text-info" />}

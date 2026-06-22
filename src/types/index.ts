@@ -152,13 +152,16 @@ export interface Person {
   email: string
 }
 
+// The 7 functional personas the app is organised around. The switcher selects a
+// persona; each is backed by a representative roster person (see data/people.ts).
 export type RoleKey =
-  | 'CRO'
-  | 'CISO'
-  | 'COMPLIANCE'
-  | 'COSEC'
-  | 'AUDIT'
-  | 'INVCOMP'
+  | 'EXEC' // Executive (board roll-up + exceptions)
+  | 'RISK' // Risk Manager (register, heat map, treatment)
+  | 'CCO' // Compliance Manager (obligations, approvals, clause decisions)
+  | 'ANALYST' // Compliance Analyst (first-line filings + clause-pipeline work)
+  | 'CTRLOWNER' // Control Owner (controls, tests, CCM, evidence)
+  | 'AUDITOR' // Auditor (audits, findings, remediation, evidence trail)
+  | 'ADMIN' // Administrator (org/users/roles/config, audit log)
 
 export interface Risk {
   id: string

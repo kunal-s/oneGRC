@@ -74,7 +74,7 @@ let artifactSeq = 0
 let sessionControlSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
-  role: 'CRO',
+  role: 'EXEC',
   setRole: (role) => set({ role }),
   currentPersonId: () => ROLES.find((r) => r.key === get().role)?.person ?? 'meera',
 
