@@ -1128,10 +1128,19 @@ function crossLink() {
     pfrdaChange.impactedObligations = obligations.filter((o) => o.regulator === 'PFRDA').slice(0, 2).map((o) => o.id)
     pfrdaChange.impactedControls = controls.filter((c) => /exposure|investment limit/i.test(c.title)).slice(0, 2).map((c) => c.id)
   }
-  // generic linkage for the rest
-  for (const ch of regChanges) {
+  // generic linkage for the rest - every change shows a real (if modest) impact
+  // picture on both obligations and controls (Epic 3.1).
+  const fwForReg: Record<string, string> = { PFRDA: 'PFRDA ICS', 'CERT-In': 'NIST CSF', DPDP: 'ISO 27001', GST: 'ISO 27001', Labour: 'ISO 27001', 'Companies Act': 'ISO 27001' }
+  for (let i = 0; i < regChanges.length; i++) {
+    const ch = regChanges[i]
     if (ch.impactedObligations.length === 0)
-      ch.impactedObligations = obligations.filter((o) => o.regulator === ch.regulator).slice(0, 1).map((o) => o.id)
+      ch.impactedObligations = obligations.filter((o) => o.regulator === ch.regulator && o.origin !== 'Internal').slice(0, 2).map((o) => o.id)
+    if (ch.impactedControls.length === 0) {
+      const fw = fwForReg[ch.regulator]
+      const pool = controls.filter((c) => c.frameworks.includes(fw as Control['frameworks'][number]))
+      // deterministic, varied pick per change so impacts are not all identical
+      ch.impactedControls = (pool.length ? pool : controls).slice(i % 7, (i % 7) + 1).map((c) => c.id)
+    }
   }
 
   // link obligations back to reg-change

@@ -6,11 +6,12 @@ import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { RegulatorChip, REGULATOR_ORDER } from '@/lib/regulators'
-import { WORLD, METRICS } from '@/data'
+import { METRICS } from '@/data'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative } from '@/lib/time'
 import { inGroup } from '@/lib/format'
 import { useApp } from '@/store'
+import { useEffectiveRegChanges } from '@/lib/effective'
 import type { RegulatoryChange } from '@/types'
 
 const SOURCES = ['TeamLease RegTech', 'Lexplosion Komrisk', 'PFRDA circular']
@@ -18,8 +19,9 @@ const SOURCES = ['TeamLease RegTech', 'Lexplosion Komrisk', 'PFRDA circular']
 export function RegChange() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
+  const regChanges = useEffectiveRegChanges()
 
-  const open = WORLD.regChanges.filter((c) => c.status !== 'Closed').length
+  const open = regChanges.filter((c) => c.status !== 'Closed').length
   const featured = ['RCM-2026-118', 'RCM-2026-117']
 
   const columns: Column<RegulatoryChange>[] = [
@@ -104,14 +106,14 @@ export function RegChange() {
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs">
           <span className="rounded-md border border-border bg-background px-2 py-1">Open <span className="font-semibold tnum text-info">{open}</span></span>
-          <span className="rounded-md border border-border bg-background px-2 py-1">Total <span className="font-semibold tnum text-foreground">{WORLD.regChanges.length}</span></span>
+          <span className="rounded-md border border-border bg-background px-2 py-1">Total <span className="font-semibold tnum text-foreground">{regChanges.length}</span></span>
         </div>
       </div>
 
       {/* featured worked items */}
       <div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         {featured.map((fid) => {
-          const c = WORLD.regChanges.find((x) => x.id === fid)!
+          const c = regChanges.find((x) => x.id === fid)!
           return (
             <button
               key={fid}
@@ -137,7 +139,7 @@ export function RegChange() {
       </div>
 
       <DataTable
-        data={WORLD.regChanges}
+        data={regChanges}
         columns={columns}
         searchKeys={['id', 'summary', 'source']}
         searchPlaceholder="Search change id, summary or source…"

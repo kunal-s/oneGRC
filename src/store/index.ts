@@ -3,7 +3,8 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource, getObligation, getControl } from '@/data'
+import { getSource, getObligation, getControl, getRegChange } from '@/data'
+import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
 
 /** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
@@ -155,6 +156,9 @@ interface AppState {
   // ── Control test/re-test (Epic 2.3) ─────────────────────────────────────────
   controlTests: Record<string, TestRun[]>
   retestControl: (id: string, opts?: { result?: TestRun['result']; method?: string; note?: string }) => void
+
+  // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
+  acknowledgeRegChange: (id: string) => void
 }
 
 let toastSeq = 0
@@ -328,5 +332,14 @@ export const useApp = create<AppState>((set, get) => ({
     get().patchControl(id, { result, lastTested: run.at })
     get().recordAction({ action: `Re-tested control ${id} - ${result}`, entityId: id, route: `/controls/${id}`, detail: base.title })
     get().notify({ title: 'Control re-tested', body: `${id} - ${base.title}: ${result}.`, severity: result === 'Pass' ? 'info' : 'warn', entityId: id, route: `/controls/${id}` })
+  },
+
+  // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
+  acknowledgeRegChange: (id) => {
+    const c = getRegChange(id)
+    if (!c) return
+    get().patchRegChange(id, { status: 'Closed' })
+    get().recordAction({ action: `Acknowledged regulatory change ${id}`, entityId: id, route: `/reg-change/${id}`, detail: c.summary })
+    get().notify({ title: 'Regulatory change acknowledged', body: `${id} - ${personName(c.owner)} alerted; ${c.impactedObligations.length} obligation(s) and ${c.impactedControls.length} control(s) updated.`, severity: 'info', entityId: id, route: `/reg-change/${id}` })
   },
 }))
