@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import type { Control, RoleKey } from '@/types'
+import type {
+  Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
+} from '@/types'
 import { ROLES } from '@/data/people'
 import { getSource } from '@/data'
 import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
@@ -67,6 +69,28 @@ interface AppState {
   completeSpecialist: (provisionId: string, note: string) => void
   // Officer override of applicability (applicable / not applicable).
   setClauseApplicability: (provisionId: string, applicable: boolean, basis?: string) => void
+
+  // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
+  // Each slice holds per-id partial overrides merged over the seed on read via
+  // src/lib/effective.ts. Pipeline/workflow actions write here only; the seed is
+  // never mutated, so a reload restores the pristine demo. Typed workflow actions
+  // (submit/approve/re-test/...) live in their epics and call these patchers.
+  obligationOverrides: Record<string, Partial<Obligation>>
+  controlOverrides: Record<string, Partial<Control>>
+  issueOverrides: Record<string, Partial<Issue>>
+  incidentOverrides: Record<string, Partial<Incident>>
+  regChangeOverrides: Record<string, Partial<RegulatoryChange>>
+  dsarOverrides: Record<string, Partial<Dsar>>
+  // Session-appended recurring obligation instances (Epic 2.2 schedules these).
+  sessionObligations: Obligation[]
+
+  patchObligation: (id: string, patch: Partial<Obligation>) => void
+  patchControl: (id: string, patch: Partial<Control>) => void
+  patchIssue: (id: string, patch: Partial<Issue>) => void
+  patchIncident: (id: string, patch: Partial<Incident>) => void
+  patchRegChange: (id: string, patch: Partial<RegulatoryChange>) => void
+  patchDsar: (id: string, patch: Partial<Dsar>) => void
+  addSessionObligation: (o: Obligation) => void
 }
 
 let toastSeq = 0
@@ -152,4 +176,27 @@ export const useApp = create<AppState>((set, get) => ({
     const merged: ClauseOverride = { ...prev, applicable, applicabilityBasis: basis, status: applicable ? prev.status : 'Not applicable' }
     set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
   },
+
+  // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
+  obligationOverrides: {},
+  controlOverrides: {},
+  issueOverrides: {},
+  incidentOverrides: {},
+  regChangeOverrides: {},
+  dsarOverrides: {},
+  sessionObligations: [],
+
+  patchObligation: (id, patch) =>
+    set((s) => ({ obligationOverrides: { ...s.obligationOverrides, [id]: { ...s.obligationOverrides[id], ...patch } } })),
+  patchControl: (id, patch) =>
+    set((s) => ({ controlOverrides: { ...s.controlOverrides, [id]: { ...s.controlOverrides[id], ...patch } } })),
+  patchIssue: (id, patch) =>
+    set((s) => ({ issueOverrides: { ...s.issueOverrides, [id]: { ...s.issueOverrides[id], ...patch } } })),
+  patchIncident: (id, patch) =>
+    set((s) => ({ incidentOverrides: { ...s.incidentOverrides, [id]: { ...s.incidentOverrides[id], ...patch } } })),
+  patchRegChange: (id, patch) =>
+    set((s) => ({ regChangeOverrides: { ...s.regChangeOverrides, [id]: { ...s.regChangeOverrides[id], ...patch } } })),
+  patchDsar: (id, patch) =>
+    set((s) => ({ dsarOverrides: { ...s.dsarOverrides, [id]: { ...s.dsarOverrides[id], ...patch } } })),
+  addSessionObligation: (o) => set((s) => ({ sessionObligations: [...s.sessionObligations, o] })),
 }))
