@@ -5,7 +5,43 @@ import type {
 import { ROLES } from '@/data/people'
 import { getSource } from '@/data'
 import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
-import { NOW } from '@/lib/time'
+import { NOW, minsFromNow } from '@/lib/time'
+
+/**
+ * Tamper-evident session audit log entry (Epic 1.3). Every typed workflow action
+ * appends one via recordAction; the Settings audit log shows these alongside the
+ * seeded history. Append-only; resets on reload.
+ */
+export interface AuditEntry {
+  id: string
+  at: string // ISO
+  actor: string // person id or 'system'
+  action: string
+  entityId?: string
+  route?: string
+  detail?: string
+}
+
+/** A user notification (Epic 1.3). Seeded baseline + session appends. */
+export interface NotificationItem {
+  id: string
+  at: string // ISO
+  title: string
+  body?: string
+  severity: 'info' | 'warn' | 'critical'
+  entityId?: string
+  route?: string
+  read: boolean
+}
+
+// A small seeded baseline so the notification bell is never empty (no empty
+// states). Timestamps derive from the frozen NOW. Session events prepend.
+const SEED_NOTIFICATIONS: NotificationItem[] = [
+  { id: 'NTF-seed-1', at: minsFromNow(-8), title: 'CERT-In 6-hour clock at risk', body: 'INC-2026-0411 Annexure I awaiting sign-off.', severity: 'critical', entityId: 'INC-2026-0411', route: '/incidents/INC-2026-0411', read: false },
+  { id: 'NTF-seed-2', at: minsFromNow(-41), title: 'Patch-SLA CCM rule failing', body: '3 critical CVEs past the 14-day window.', severity: 'warn', entityId: 'CTRL-PCI-6.3.3', route: '/ccm', read: false },
+  { id: 'NTF-seed-3', at: minsFromNow(-126), title: 'GSTR-3B Table 4 change ingested', body: 'Reg-change RCM-2026-118 impacts the monthly GST return.', severity: 'warn', entityId: 'RCM-2026-118', route: '/reg-change/RCM-2026-118', read: false },
+  { id: 'NTF-seed-4', at: minsFromNow(-205), title: '9 obligations overdue', body: 'Remediation plan pending approval.', severity: 'info', entityId: undefined, route: '/obligations', read: true },
+]
 
 export interface Toast {
   id: string
@@ -91,11 +127,20 @@ interface AppState {
   patchRegChange: (id: string, patch: Partial<RegulatoryChange>) => void
   patchDsar: (id: string, patch: Partial<Dsar>) => void
   addSessionObligation: (o: Obligation) => void
+
+  // ── Governance primitives (Epic 1.3) ────────────────────────────────────────
+  auditLog: AuditEntry[]
+  notifications: NotificationItem[]
+  recordAction: (e: Omit<AuditEntry, 'id' | 'at' | 'actor'> & { actor?: string }) => void
+  notify: (n: Omit<NotificationItem, 'id' | 'at' | 'read'>) => void
+  markNotificationsRead: () => void
 }
 
 let toastSeq = 0
 let artifactSeq = 0
 let sessionControlSeq = 0
+let auditSeq = 0
+let notifSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'EXEC',
@@ -199,4 +244,18 @@ export const useApp = create<AppState>((set, get) => ({
   patchDsar: (id, patch) =>
     set((s) => ({ dsarOverrides: { ...s.dsarOverrides, [id]: { ...s.dsarOverrides[id], ...patch } } })),
   addSessionObligation: (o) => set((s) => ({ sessionObligations: [...s.sessionObligations, o] })),
+
+  // ── Governance primitives (Epic 1.3) ────────────────────────────────────────
+  auditLog: [],
+  notifications: SEED_NOTIFICATIONS,
+  recordAction: (e) => {
+    const actor = e.actor ?? get().currentPersonId()
+    const entry: AuditEntry = { ...e, actor, id: `ALOG-S-${++auditSeq}`, at: NOW.toISOString() }
+    set((s) => ({ auditLog: [entry, ...s.auditLog] }))
+  },
+  notify: (n) => {
+    const item: NotificationItem = { ...n, id: `NTF-${++notifSeq}`, at: NOW.toISOString(), read: false }
+    set((s) => ({ notifications: [item, ...s.notifications] }))
+  },
+  markNotificationsRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
 }))

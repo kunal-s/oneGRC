@@ -417,6 +417,16 @@ function NotificationsSection() {
 const AUDIT_LOG = buildAuditLog()
 function AuditLogSection() {
   const navigate = useNavigate()
+  // Session events (Epic 1.3) appear above the seeded history - the audit log is
+  // append-on-action, not a static fixture.
+  const sessionLog = useApp((s) => s.auditLog)
+  const rows: AuditLogRow[] = React.useMemo(
+    () => [
+      ...sessionLog.map((e) => ({ id: e.id, at: e.at, actor: e.actor, action: e.action, object: e.entityId ?? 'SYSTEM', detail: e.detail ?? '' })),
+      ...AUDIT_LOG,
+    ],
+    [sessionLog],
+  )
   const columns: Column<AuditLogRow>[] = [
     { key: 'at', header: 'When (IST)', sortValue: (r) => new Date(r.at).getTime(), render: (r) => <span className="text-xs text-muted-foreground" title={fmtRelative(r.at)}>{fmtIST(r.at)}</span> },
     { key: 'actor', header: 'Actor', sortValue: (r) => personName(r.actor), render: (r) => <span className="inline-flex items-center gap-1.5"><Avatar id={r.actor} size={20} /><span className="text-xs text-foreground">{personName(r.actor)}</span></span> },
@@ -427,7 +437,7 @@ function AuditLogSection() {
   return (
     <Card title="System audit log" action={<span className="text-2xs text-muted-foreground">tamper-evident · every change is evidence</span>}>
       <DataTable
-        data={AUDIT_LOG}
+        data={rows}
         columns={columns}
         searchKeys={['action', 'object', 'detail', (r) => personName(r.actor)]}
         searchPlaceholder="Search audit log…"

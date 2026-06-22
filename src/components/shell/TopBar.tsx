@@ -1,11 +1,86 @@
+import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronsUpDown, Building2 } from 'lucide-react'
+import { Search, Bell, ChevronsUpDown, Building2, AlertTriangle, Info, Siren } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
+import { fmtRelative } from '@/lib/time'
 import { RoleSwitcher } from '../RoleSwitcher'
+
+function NotificationsBell() {
+  const navigate = useNavigate()
+  const notifications = useApp((s) => s.notifications)
+  const markRead = useApp((s) => s.markNotificationsRead)
+  const [open, setOpen] = React.useState(false)
+  const ref = React.useRef<HTMLDivElement>(null)
+  const unread = notifications.filter((n) => !n.read).length
+
+  React.useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+
+  const toggle = () => {
+    setOpen((o) => {
+      if (!o && unread > 0) markRead()
+      return !o
+    })
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={toggle}
+        className="relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Bell className="size-4.5" />
+        {unread > 0 && (
+          <span className="absolute right-0.5 top-0.5 flex min-w-3.5 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-semibold leading-none text-white" style={{ height: 14 }}>
+            {unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-96 rounded-lg border border-border bg-background p-1 shadow-lg animate-slide-up">
+          <div className="flex items-center justify-between px-2 py-1.5">
+            <span className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Notifications</span>
+            <span className="text-2xs text-muted-foreground">{notifications.length} recent</span>
+          </div>
+          <div className="scrollbar-thin max-h-96 space-y-0.5 overflow-y-auto">
+            {notifications.map((n) => {
+              const Icon = n.severity === 'critical' ? Siren : n.severity === 'warn' ? AlertTriangle : Info
+              const tone = n.severity === 'critical' ? 'text-critical' : n.severity === 'warn' ? 'text-medium' : 'text-info'
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => {
+                    if (n.route) navigate(n.route)
+                    setOpen(false)
+                  }}
+                  className="flex w-full items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                >
+                  <Icon className={cn('mt-0.5 size-4 shrink-0', tone)} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-medium text-foreground">{n.title}</span>
+                      <span className="ml-auto shrink-0 text-2xs text-muted-foreground">{fmtRelative(n.at)}</span>
+                    </div>
+                    {n.body && <div className="mt-0.5 text-2xs text-muted-foreground">{n.body}</div>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function TopBar() {
   const setCommandOpen = useApp((s) => s.setCommandOpen)
-  const pushToast = useApp((s) => s.pushToast)
   const navigate = useNavigate()
 
   return (
@@ -33,19 +108,7 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
-        <button
-          onClick={() =>
-            pushToast({
-              title: '3 notifications',
-              description: 'CERT-In clock at 03:11 · GSTR-3B reg-change ingested · CCM rule failing',
-              variant: 'info',
-            })
-          }
-          className="relative rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <Bell className="size-4.5" />
-          <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-critical" />
-        </button>
+        <NotificationsBell />
         <button
           onClick={() => navigate('/incidents/INC-2026-0411')}
           className="hidden items-center gap-1.5 rounded-md border border-critical/30 bg-critical-soft px-2.5 py-1.5 text-xs font-medium text-critical transition-colors hover:bg-critical-soft/70 xl:flex"
