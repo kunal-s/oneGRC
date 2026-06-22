@@ -1,99 +1,83 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download } from 'lucide-react'
+import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download, Search, ChevronRight } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
-import { KpiTile } from '@/components/KpiTile'
-import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
+import { StatGroup, SavedViews, GroupedList, type Stat, type SavedView, type ListGroup } from '@/components/kit'
 import { WORLD } from '@/data'
 import { instrumentSummary, actStatus, type InstrumentSummary } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { cn } from '@/lib/utils'
 import type { SourceInstrument } from '@/types'
 
+type Bucket = 'needs' | 'tracked' | 'reference'
 interface Row {
-  id: string
   inst: SourceInstrument
   summary: InstrumentSummary
   act?: 'Processing' | 'In review' | 'Tracked'
-  updated: number
+  bucket: Bucket
 }
 
 const ACT_TONE = { Processing: 'progress', 'In review': 'warn', Tracked: 'ok' } as const
+
+function bucketOf(r: Omit<Row, 'bucket'>): Bucket {
+  if (!r.act) return 'reference'
+  return r.summary.awaiting > 0 ? 'needs' : 'tracked'
+}
 
 export function Sources() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const overrides = useApp((s) => s.clauseOverrides)
+  const [view, setView] = React.useState<'all' | Bucket>('all')
+  const [q, setQ] = React.useState('')
 
   const rows: Row[] = React.useMemo(
     () =>
-      WORLD.instruments.map((inst) => ({
-        id: inst.id,
-        inst,
-        summary: instrumentSummary(inst.id, overrides),
-        act: actStatus(inst.id, overrides),
-        updated: new Date(inst.dateOfIssue).getTime(),
-      })),
+      WORLD.instruments.map((inst) => {
+        const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
+        return { ...base, bucket: bucketOf(base) }
+      }),
     [overrides],
   )
-
-  const authorities = React.useMemo(() => Array.from(new Set(WORLD.instruments.map((i) => i.authority))).sort(), [])
-  const types = React.useMemo(() => Array.from(new Set(WORLD.instruments.map((i) => i.instrumentType))).sort(), [])
 
   const totalClauses = WORLD.sources.length
   const awaiting = rows.reduce((n, r) => n + r.summary.awaiting, 0)
   const saved = rows.reduce((n, r) => n + r.summary.saved, 0)
+  const counts = {
+    needs: rows.filter((r) => r.bucket === 'needs').length,
+    tracked: rows.filter((r) => r.bucket === 'tracked').length,
+    reference: rows.filter((r) => r.bucket === 'reference').length,
+  }
 
-  const columns: Column<Row>[] = [
-    {
-      key: 'instrument',
-      header: 'Act / instrument',
-      sortValue: (r) => r.inst.title,
-      className: 'max-w-[360px]',
-      render: (r) => (
-        <span className="block">
-          <span className="block truncate text-sm font-medium text-foreground">{r.inst.title}</span>
-          <span className="font-mono text-2xs text-muted-foreground">{r.inst.id}</span>
-        </span>
-      ),
-    },
-    { key: 'authority', header: 'Authority', sortValue: (r) => r.inst.authority, render: (r) => <span className="text-xs text-foreground">{r.inst.authority}</span> },
-    {
-      key: 'type',
-      header: 'Type',
-      sortValue: (r) => r.inst.instrumentType,
-      render: (r) => <span className="rounded bg-info-soft px-1.5 py-0.5 text-2xs font-medium text-info">{r.inst.instrumentType}</span>,
-    },
-    { key: 'clauses', header: 'Clauses', align: 'right', sortValue: (r) => r.summary.clauses, render: (r) => <span className="text-xs tnum text-foreground">{r.summary.clauses}</span> },
-    {
-      key: 'awaiting',
-      header: 'Awaiting',
-      align: 'right',
-      sortValue: (r) => r.summary.awaiting,
-      render: (r) =>
-        r.summary.awaiting > 0 ? (
-          <span className="rounded bg-medium-soft px-1.5 py-0.5 text-2xs font-semibold text-medium">{r.summary.awaiting}</span>
-        ) : r.summary.saved > 0 ? (
-          <span className="inline-flex items-center gap-0.5 text-2xs text-ok"><CheckCircle2 className="size-3" /> tracked</span>
-        ) : (
-          <span className="text-2xs text-muted-foreground">—</span>
-        ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      sortValue: (r) => r.act ?? 'zz',
-      render: (r) => (r.act ? <StatusChip status={r.act} tone={ACT_TONE[r.act]} /> : <span className="text-2xs text-muted-foreground">Reference</span>),
-    },
-    { key: 'updated', header: 'Last updated', sortValue: (r) => r.updated, render: (r) => <span className="text-xs tnum text-muted-foreground">{fmtDate(r.inst.dateOfIssue)}</span> },
+  const filtered = rows.filter((r) => {
+    if (view !== 'all' && r.bucket !== view) return false
+    if (!q) return true
+    const t = q.toLowerCase()
+    return r.inst.title.toLowerCase().includes(t) || r.inst.id.toLowerCase().includes(t) || r.inst.authority.toLowerCase().includes(t)
+  })
+
+  const byAuthority = (a: Row, b: Row) => a.inst.authority.localeCompare(b.inst.authority) || b.summary.awaiting - a.summary.awaiting
+  const groups: ListGroup<Row>[] = [
+    { key: 'needs', label: 'Needs decision', tone: 'warn', items: filtered.filter((r) => r.bucket === 'needs').sort(byAuthority) },
+    { key: 'tracked', label: 'Tracked', tone: 'ok', items: filtered.filter((r) => r.bucket === 'tracked').sort(byAuthority) },
+    { key: 'reference', label: 'Reference standards', tone: 'neutral', defaultOpen: false, items: filtered.filter((r) => r.bucket === 'reference').sort(byAuthority) },
   ]
 
-  const filters: TableFilter<Row>[] = [
-    { key: 'authority', label: 'Authority', options: authorities, predicate: (r, v) => r.inst.authority === v },
-    { key: 'type', label: 'Type', options: types, predicate: (r, v) => r.inst.instrumentType === v },
-    { key: 'status', label: 'Status', options: ['Processing', 'In review', 'Tracked'], predicate: (r, v) => r.act === v },
+  const stats: Stat[] = [
+    { label: 'Acts', value: WORLD.instruments.length, icon: <Scale className="size-3.5" />, tone: 'info', onClick: () => setView('all') },
+    { label: 'Clauses', value: totalClauses, icon: <ScrollText className="size-3.5" /> },
+    { label: 'Awaiting decision', value: awaiting, icon: <AlertTriangle className="size-3.5" />, tone: awaiting > 0 ? 'warn' : 'neutral', sub: `${counts.needs} acts`, onClick: () => setView('needs') },
+    { label: 'Saved to controls', value: saved, icon: <CheckCircle2 className="size-3.5" />, tone: 'ok', onClick: () => setView('tracked') },
+  ]
+
+  const views: SavedView[] = [
+    { id: 'all', label: 'All', count: rows.length },
+    { id: 'needs', label: 'Needs decision', count: counts.needs },
+    { id: 'tracked', label: 'Tracked', count: counts.tracked },
+    { id: 'reference', label: 'Reference', count: counts.reference },
   ]
 
   return (
@@ -104,8 +88,8 @@ export function Sources() {
         description={
           <>
             <span className="font-medium text-foreground">The acts behind the controls.</span> {WORLD.instruments.length}{' '}
-            instruments broken into {totalClauses} clauses — open an act to read what it covers, how it affects SPF, and
-            save each clause to a control.
+            instruments broken into {totalClauses} clauses. Items awaiting a decision rise to the top; open an act to read what
+            it covers and save each clause to a control.
           </>
         }
         actions={
@@ -115,22 +99,56 @@ export function Sources() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiTile label="Acts" value={WORLD.instruments.length} icon={<Scale className="size-4" />} tone="info" />
-        <KpiTile label="Clauses" value={totalClauses} icon={<ScrollText className="size-4" />} />
-        <KpiTile label="Awaiting decision" value={awaiting} icon={<AlertTriangle className="size-4" />} tone={awaiting > 0 ? 'warn' : 'neutral'} />
-        <KpiTile label="Saved to controls" value={saved} icon={<CheckCircle2 className="size-4" />} tone="ok" />
+      <StatGroup className="mb-4" stats={stats} />
+
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <SavedViews views={views} active={view} onSelect={(v) => setView(v as 'all' | Bucket)} />
+        <label className="flex h-8 w-64 items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 text-muted-foreground focus-within:bg-background">
+          <Search className="size-3.5" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search act, id or authority"
+            className="w-full bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          />
+        </label>
       </div>
 
-      <DataTable
-        data={rows}
-        columns={columns}
-        rowKey={(r) => r.inst.id}
-        searchKeys={[(r) => r.inst.title, (r) => r.inst.id, (r) => r.inst.authority]}
-        searchPlaceholder="Search act, id or authority…"
-        filters={filters}
-        initialSort={{ key: 'awaiting', dir: 'desc' }}
-        onRowClick={(r) => navigate(`/sources/${r.inst.id}`)}
+      <GroupedList
+        groups={groups}
+        renderItem={(r) => (
+          <button
+            key={r.inst.id}
+            onClick={() => navigate(`/sources/${r.inst.id}`)}
+            className="group flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-info-soft/30"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-foreground">{r.inst.title}</div>
+              <div className="mt-0.5 flex items-center gap-2 text-2xs text-muted-foreground">
+                <span className="font-mono">{r.inst.id}</span>
+                <span>·</span>
+                <span>{r.inst.authority}</span>
+                <span className="rounded bg-info-soft px-1.5 py-0 font-medium text-info">{r.inst.instrumentType}</span>
+                <span>·</span>
+                <span>updated {fmtDate(r.inst.dateOfIssue)}</span>
+              </div>
+            </div>
+            <span className="hidden shrink-0 text-2xs tnum text-muted-foreground sm:block">{r.summary.clauses} clauses</span>
+            <span className="w-20 shrink-0 text-right">
+              {r.summary.awaiting > 0 ? (
+                <span className="rounded bg-medium-soft px-1.5 py-0.5 text-2xs font-semibold text-medium">{r.summary.awaiting} awaiting</span>
+              ) : r.summary.saved > 0 ? (
+                <span className="inline-flex items-center gap-0.5 text-2xs text-ok"><CheckCircle2 className="size-3" /> tracked</span>
+              ) : (
+                <span className="text-2xs text-muted-foreground">-</span>
+              )}
+            </span>
+            <span className="w-24 shrink-0">
+              {r.act ? <StatusChip status={r.act} tone={ACT_TONE[r.act]} /> : <span className="text-2xs text-muted-foreground">Reference</span>}
+            </span>
+            <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5')} />
+          </button>
+        )}
       />
     </div>
   )
