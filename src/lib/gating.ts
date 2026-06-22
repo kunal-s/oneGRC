@@ -21,6 +21,7 @@ export type GrcAction =
   // must not be the maker (separation of duties).
   | { kind: 'obligation.submit'; makerId?: string }
   | { kind: 'obligation.approve'; makerId?: string }
+  | { kind: 'control.retest' }
   | { kind: 'incident.fileTrack'; makerId?: string }
   | { kind: 'issue.resolve' }
   | { kind: 'regchange.acknowledge' }
@@ -34,6 +35,7 @@ const ABLE: Record<GrcAction['kind'], RoleKey[]> = {
   'clause.applicability': ['CCO'],
   'obligation.submit': ['CCO', 'ANALYST'],
   'obligation.approve': ['CCO', 'EXEC'],
+  'control.retest': ['CTRLOWNER', 'AUDITOR', 'EXEC'],
   'incident.fileTrack': ['CTRLOWNER', 'EXEC'],
   'issue.resolve': ['CTRLOWNER', 'AUDITOR', 'CCO'],
   'regchange.acknowledge': ['CCO', 'ANALYST', 'RISK'],

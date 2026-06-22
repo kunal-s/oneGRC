@@ -10,11 +10,13 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { SourceList, SourceChip } from '@/components/SourceRef'
-import { getControl, getIssue, getInstrument, WORLD } from '@/data'
+import { getIssue, getInstrument, WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
 import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveControl } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 import type { Control, SourceProvision } from '@/types'
 
@@ -41,11 +43,12 @@ function groupByAct(clauses: SourceProvision[]): { instrumentId: string; clauses
 export function ControlDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
-  const getSessionControl = useApp((s) => s.getSessionControl)
+  const retestControl = useApp((s) => s.retestControl)
+  const sessionTests = useApp((s) => (id ? s.controlTests[id] : undefined))
   const clauseOverrides = useApp((s) => s.clauseOverrides)
-  const control = id ? getControl(id) ?? getSessionControl(id) : undefined
+  const canRetest = useCanAct({ kind: 'control.retest' })
+  const control = useEffectiveControl(id ?? '')
   const [tab, setTab] = React.useState('overview')
 
   if (!control) return <ComingSoon title="Control not found" />
@@ -53,7 +56,8 @@ export function ControlDetail() {
   const evidence = WORLD.evidence.filter((e) => e.linkedControls.includes(control.id))
   const issues = control.linkedIssues.map((i) => getIssue(i)).filter(Boolean)
   const owner = PEOPLE_BY_ID[control.owner]
-  const testHistory = buildTestHistory(control)
+  // Session re-tests prepend to the seeded history (Epic 2.3).
+  const testHistory = [...(sessionTests ?? []), ...buildTestHistory(control)]
   // Sources pipeline — the clauses (across acts) this control satisfies.
   const satisfied = clausesForControl(control.id, clauseOverrides)
   const satisfiedByAct = groupByAct(satisfied)
@@ -106,7 +110,9 @@ export function ControlDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => pushToast({ title: 'Control re-test queued', description: `${control.id} re-test scheduled.`, variant: 'info' })}
+              disabled={!canRetest}
+              title={canRetest ? undefined : 'Recording a test is restricted to the Control Owner, Auditor or Executive.'}
+              onClick={() => retestControl(control.id)}
             >
               Re-test
             </Button>

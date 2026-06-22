@@ -3,8 +3,17 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource, getObligation } from '@/data'
+import { getSource, getObligation, getControl } from '@/data'
 import { nextInstance } from '@/lib/recurrence'
+
+/** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
+export interface TestRun {
+  at: string // ISO
+  result: 'Pass' | 'Fail' | 'Partial'
+  method: string
+  tester: string // person id
+  note: string
+}
 import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
 import { NOW, minsFromNow } from '@/lib/time'
 
@@ -142,6 +151,10 @@ interface AppState {
   // recurring instance is scheduled (Epic 2.2).
   submitObligation: (id: string) => void
   approveObligation: (id: string) => void
+
+  // ── Control test/re-test (Epic 2.3) ─────────────────────────────────────────
+  controlTests: Record<string, TestRun[]>
+  retestControl: (id: string, opts?: { result?: TestRun['result']; method?: string; note?: string }) => void
 }
 
 let toastSeq = 0
@@ -291,5 +304,29 @@ export const useApp = create<AppState>((set, get) => ({
       get().recordAction({ action: `Scheduled next ${next.frequency.toLowerCase()} cycle ${next.id}`, entityId: next.id, route: `/obligations/${next.id}`, detail: next.title })
       get().notify({ title: 'Next cycle scheduled', body: `${next.id} - ${next.title} is now due ${new Date(next.dueDate).toLocaleDateString('en-IN')}.`, severity: 'info', entityId: next.id, route: `/obligations/${next.id}` })
     }
+  },
+
+  // ── Control test/re-test (Epic 2.3) ─────────────────────────────────────────
+  controlTests: {},
+  retestControl: (id, opts) => {
+    const base = getControl(id) ?? get().getSessionControl(id)
+    if (!base) return
+    // Protect the load-bearing marquee CCM chain: a re-test of the patch-SLA
+    // control records remediation-in-progress (Partial), not a clean Pass, so the
+    // failing CCM rule -> issue -> incident story survives.
+    const marquee = id === 'CTRL-PCI-6.3.3'
+    const result = opts?.result ?? (marquee ? 'Partial' : 'Pass')
+    const tester = get().currentPersonId()
+    const run: TestRun = {
+      at: NOW.toISOString(),
+      result,
+      method: opts?.method ?? 'Manual re-test',
+      tester,
+      note: opts?.note ?? (marquee ? 'Re-tested; patch remediation in progress, critical CVEs being closed.' : 'Re-tested and operating effectively.'),
+    }
+    set((s) => ({ controlTests: { ...s.controlTests, [id]: [run, ...(s.controlTests[id] ?? [])] } }))
+    get().patchControl(id, { result, lastTested: run.at })
+    get().recordAction({ action: `Re-tested control ${id} - ${result}`, entityId: id, route: `/controls/${id}`, detail: base.title })
+    get().notify({ title: 'Control re-tested', body: `${id} - ${base.title}: ${result}.`, severity: result === 'Pass' ? 'info' : 'warn', entityId: id, route: `/controls/${id}` })
   },
 }))

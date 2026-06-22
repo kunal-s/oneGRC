@@ -1,29 +1,33 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Download, Bot, Hand, Layers } from 'lucide-react'
+import { Download, Bot, Hand, Layers, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPills } from '@/components/FrameworkPill'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import { StatGroup, SavedViews, type Stat, type SavedView } from '@/components/kit'
 import { WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveControls } from '@/lib/effective'
+import { pct } from '@/lib/format'
 import type { Control } from '@/types'
 
 const FRAMEWORK_OPTIONS = ['ISO 27001', 'NIST CSF', 'PCI DSS', 'PFRDA ICS']
+type ViewId = 'all' | 'failing' | 'partial' | 'ccm' | 'mine' | 'multi'
 
 export function ControlLibrary() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const sessionControls = useApp((s) => s.sessionControls)
+  const selfId = useApp((s) => s.currentPersonId)()
   const clauseOverrides = useApp((s) => s.clauseOverrides)
+  const [view, setView] = React.useState<ViewId>('all')
 
-  const allControls = React.useMemo(() => [...WORLD.controls, ...sessionControls], [sessionControls])
+  const allControls = useEffectiveControls()
 
   // How many clauses / acts each control satisfies (Sources pipeline).
   const satisfies = React.useMemo(() => {
@@ -42,6 +46,28 @@ export function ControlLibrary() {
   const ccmCount = allControls.filter((c) => c.automation === 'CCM').length
   const multiMapped = allControls.filter((c) => c.frameworks.length >= 2).length
   const avgFrameworks = (WORLD.controls.reduce((s, c) => s + c.frameworks.length, 0) / WORLD.controls.length).toFixed(1)
+  const failing = allControls.filter((c) => c.result === 'Fail').length
+  const partial = allControls.filter((c) => c.result === 'Partial').length
+  const coverage = (allControls.filter((c) => c.result !== 'Fail').length / allControls.length) * 100
+
+  const views: SavedView[] = [
+    { id: 'all', label: 'All', count: allControls.length },
+    { id: 'failing', label: 'Failing', count: failing },
+    { id: 'partial', label: 'Partial', count: partial },
+    { id: 'ccm', label: 'CCM', count: ccmCount },
+    { id: 'mine', label: 'Mine', count: allControls.filter((c) => c.owner === selfId).length },
+    { id: 'multi', label: 'Multi-framework', count: multiMapped },
+  ]
+  const data = allControls.filter((c) => {
+    switch (view) {
+      case 'failing': return c.result === 'Fail'
+      case 'partial': return c.result === 'Partial'
+      case 'ccm': return c.automation === 'CCM'
+      case 'mine': return c.owner === selfId
+      case 'multi': return c.frameworks.length >= 2
+      default: return true
+    }
+  })
 
   const columns: Column<Control>[] = [
     {
@@ -160,15 +186,12 @@ export function ControlLibrary() {
         }
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Stat icon={<Layers className="size-3.5" />} label="Avg frameworks / control" value={avgFrameworks} />
-        <Stat label="Mapped to ≥2 frameworks" value={`${multiMapped}`} />
-        <Stat icon={<Bot className="size-3.5" />} label="CCM-automated" value={`${ccmCount}`} tone="ok" />
-        <Stat label="Failing" value={`${WORLD.controls.filter((c) => c.result === 'Fail').length}`} tone="danger" />
-      </div>
+      <StatGroup className="mb-3" stats={summaryStats({ coverage, avgFrameworks, multiMapped, ccmCount, failing, navigate, setView })} />
+
+      <SavedViews className="mb-3" views={views} active={view} onSelect={(v) => setView(v as ViewId)} />
 
       <DataTable
-        data={allControls}
+        data={data}
         columns={columns}
         searchKeys={['id', 'title', (c) => personName(c.owner)]}
         searchPlaceholder="Search control id, title or owner…"
@@ -181,12 +204,19 @@ export function ControlLibrary() {
   )
 }
 
-function Stat({ icon, label, value, tone }: { icon?: React.ReactNode; label: string; value: string; tone?: 'ok' | 'danger' }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs">
-      {icon && <span className="text-muted-foreground">{icon}</span>}
-      <span className="text-muted-foreground">{label}</span>
-      <span className={cn('font-semibold tnum', tone === 'ok' ? 'text-ok' : tone === 'danger' ? 'text-critical' : 'text-foreground')}>{value}</span>
-    </span>
-  )
+function summaryStats(a: {
+  coverage: number
+  avgFrameworks: string
+  multiMapped: number
+  ccmCount: number
+  failing: number
+  navigate: (to: string) => void
+  setView: (v: ViewId) => void
+}): Stat[] {
+  return [
+    { label: 'Control coverage', value: pct(a.coverage), tone: 'ok', icon: <ShieldCheck className="size-3.5" />, onClick: () => a.setView('all') },
+    { label: 'Avg frameworks / control', value: a.avgFrameworks, icon: <Layers className="size-3.5" />, sub: `${a.multiMapped} mapped to 2+` },
+    { label: 'CCM-automated', value: a.ccmCount, tone: 'info', icon: <Bot className="size-3.5" />, onClick: () => a.setView('ccm') },
+    { label: 'Failing', value: a.failing, tone: a.failing ? 'danger' : 'ok', icon: <ShieldAlert className="size-3.5" />, onClick: () => a.setView('failing') },
+  ]
 }
