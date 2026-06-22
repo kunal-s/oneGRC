@@ -217,6 +217,8 @@ export interface Obligation {
   sourceRefs?: string[] // SourceProvision ids — the instrument(s) this obligation derives from
   requirement?: string // plain-English outcome the provision imposes — shown as "What this requires"
   applicability?: string // whether/why it applies to SPF + the basis — shown as "Applies because"
+  origin?: 'External' | 'Internal' // External = statutory/regulator; Internal = policy-driven duty the firm set itself
+  policySource?: string // for internal duties: the policy that mandates it (shown instead of a regulator)
 }
 
 export interface RegulatorTrack {

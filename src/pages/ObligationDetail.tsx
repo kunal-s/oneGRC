@@ -9,22 +9,29 @@ import { MakerCheckerChain } from '@/components/MakerChecker'
 import { SourceList } from '@/components/SourceRef'
 import { RegulatorChip } from '@/lib/regulators'
 import { cn } from '@/lib/utils'
-import { getObligation, getRegChange, WORLD } from '@/data'
+import { getRegChange, WORLD } from '@/data'
 import { PEOPLE_BY_ID } from '@/data/people'
 import { fmtIST, fmtRelative, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveObligation } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 
 export function ObligationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
-  const o = id ? getObligation(id) : undefined
+  const submitObligation = useApp((s) => s.submitObligation)
+  const approveObligation = useApp((s) => s.approveObligation)
+  const o = useEffectiveObligation(id ?? '')
+  const canSubmit = useCanAct({ kind: 'obligation.submit' })
+  const canApprove = useCanAct({ kind: 'obligation.approve', makerId: o?.makerChecker.maker })
 
   if (!o) return <ComingSoon title="Obligation not found" />
 
+  const internal = o.origin === 'Internal'
   const owner = PEOPLE_BY_ID[o.owner]
+  const completedNoEvidence = (o.status === 'In review' || o.status === 'Filed') && o.evidence.length === 0
   const evidence = o.evidence.map((e) => WORLD.evidence.find((x) => x.id === e)).filter(Boolean) as typeof WORLD.evidence
   const regChange = o.linkedRegChange ? getRegChange(o.linkedRegChange) : undefined
   const overdue = o.status === 'Overdue'
@@ -40,24 +47,42 @@ export function ObligationDetail() {
         eyebrow={
           <span className="inline-flex items-center gap-1.5">
             <span className="font-mono text-info">{o.id}</span>
-            <RegulatorChip regulator={o.regulator} />
+            {internal ? (
+              <span className="rounded bg-accent/15 px-1.5 py-0.5 text-2xs font-medium text-accent-foreground">Internal policy</span>
+            ) : (
+              <RegulatorChip regulator={o.regulator} />
+            )}
             <span className="text-muted-foreground">· {o.frequency} · ref {o.reference}</span>
           </span>
         }
         title={o.title}
-        description={`Filed with ${o.regulator}; owned by ${owner.name} (${owner.title}) under maker-checker control.`}
+        description={
+          internal
+            ? `Policy-driven duty (${o.policySource ?? 'internal policy'}); owned by ${owner.name} (${owner.title}) under maker-checker control - tracked identically to a statutory filing.`
+            : `Filed with ${o.regulator}; owned by ${owner.name} (${owner.title}) under maker-checker control.`
+        }
         actions={
           <div className="flex items-center gap-2">
             <StatusChip status={o.status} />
-            {o.status !== 'Filed' && (
-              <Button size="sm" onClick={() => pushToast({ title: o.status === 'In review' ? 'Approved for filing' : 'Submitted for check', description: `${o.id} ${o.status === 'In review' ? 'approved (maker-checker)' : 'sent to checker'}.`, variant: 'success' })}>
-                {o.status === 'In review' ? <CheckCircle2 className="size-4" /> : <Send className="size-4" />}
-                {o.status === 'In review' ? 'Approve filing' : 'Submit for check'}
+            {o.status === 'In review' ? (
+              <Button size="sm" disabled={!canApprove} title={canApprove ? undefined : 'Approval is restricted to the checker (a Compliance Manager or the Executive who is not the maker).'} onClick={() => approveObligation(o.id)}>
+                <CheckCircle2 className="size-4" /> Approve filing
               </Button>
-            )}
+            ) : o.status !== 'Filed' ? (
+              <Button size="sm" disabled={!canSubmit} title={canSubmit ? undefined : 'Submitting is restricted to the Compliance Manager / Analyst (maker).'} onClick={() => submitObligation(o.id)}>
+                <Send className="size-4" /> Submit for check
+              </Button>
+            ) : null}
           </div>
         }
       />
+
+      {completedNoEvidence && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-sm text-foreground">
+          <FileCheck className="size-4 shrink-0 text-medium" />
+          <span><span className="font-medium">Lacking evidence.</span> This duty is marked done but has no evidence attached - the exact gap that hurts firms at inspection. Attach the {internal ? 'committee minute' : 'filing acknowledgement'} to complete it.</span>
+        </div>
+      )}
 
       <div className={cn('mb-4 flex flex-wrap items-center gap-2 rounded-lg border px-3.5 py-2.5', overdue ? 'border-critical/30 bg-critical-soft/40' : 'border-border bg-muted/30')}>
         <CalendarClock className={cn('size-4', overdue ? 'text-critical' : 'text-muted-foreground')} />

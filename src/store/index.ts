@@ -3,7 +3,8 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource } from '@/data'
+import { getSource, getObligation } from '@/data'
+import { nextInstance } from '@/lib/recurrence'
 import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
 import { NOW, minsFromNow } from '@/lib/time'
 
@@ -134,6 +135,13 @@ interface AppState {
   recordAction: (e: Omit<AuditEntry, 'id' | 'at' | 'actor'> & { actor?: string }) => void
   notify: (n: Omit<NotificationItem, 'id' | 'at' | 'read'>) => void
   markNotificationsRead: () => void
+
+  // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
+  // Maker submits, a different checker approves; status advances via overrides and
+  // the action is written to the audit log + notifications. On approval the next
+  // recurring instance is scheduled (Epic 2.2).
+  submitObligation: (id: string) => void
+  approveObligation: (id: string) => void
 }
 
 let toastSeq = 0
@@ -258,4 +266,30 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ notifications: [item, ...s.notifications] }))
   },
   markNotificationsRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
+
+  // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
+  submitObligation: (id) => {
+    const base = getObligation(id) ?? get().sessionObligations.find((o) => o.id === id)
+    if (!base) return
+    const mc = { ...base.makerChecker, ...(get().obligationOverrides[id]?.makerChecker ?? {}) }
+    get().patchObligation(id, { status: 'In review', makerChecker: { ...mc, state: 'Submitted' } })
+    get().recordAction({ action: `Submitted obligation ${id} for check`, entityId: id, route: `/obligations/${id}`, detail: base.title })
+    get().notify({ title: 'Filing submitted for check', body: `${id} - ${base.title}`, severity: 'info', entityId: id, route: `/obligations/${id}` })
+  },
+  approveObligation: (id) => {
+    const base = getObligation(id) ?? get().sessionObligations.find((o) => o.id === id)
+    if (!base) return
+    const mc = { ...base.makerChecker, ...(get().obligationOverrides[id]?.makerChecker ?? {}) }
+    get().patchObligation(id, { status: 'Filed', makerChecker: { ...mc, state: 'Approved' } })
+    get().recordAction({ action: `Approved & filed obligation ${id}`, entityId: id, route: `/obligations/${id}`, detail: base.title })
+    get().notify({ title: 'Obligation filed', body: `${id} - ${base.title} approved under maker-checker.`, severity: 'info', entityId: id, route: `/obligations/${id}` })
+    // Schedule the next recurring instance (spec 5.4) as a session-appended duty.
+    const merged = { ...base, ...(get().obligationOverrides[id] ?? {}), status: 'Filed' as const }
+    const next = nextInstance(merged)
+    if (next) {
+      get().addSessionObligation(next)
+      get().recordAction({ action: `Scheduled next ${next.frequency.toLowerCase()} cycle ${next.id}`, entityId: next.id, route: `/obligations/${next.id}`, detail: next.title })
+      get().notify({ title: 'Next cycle scheduled', body: `${next.id} - ${next.title} is now due ${new Date(next.dueDate).toLocaleDateString('en-IN')}.`, severity: 'info', entityId: next.id, route: `/obligations/${next.id}` })
+    }
+  },
 }))

@@ -587,8 +587,48 @@ function buildObligations(): Obligation[] {
       reference: def.ref,
       requirement: def.requirement,
       applicability: def.applicability,
+      origin: 'External',
     })
   }
+
+  // Internal, policy-driven duties - handled identically to statutory filings
+  // (spec 5.2 / Req 2). Statuses are chosen so they do NOT change the curated
+  // 9-overdue / 23-due anchors. One is deliberately completed-but-lacking-evidence
+  // to make the "done but not documented" gap visible.
+  obligations.push(
+    {
+      id: 'OBL-INT-INVREV-Q1', regulator: 'PFRDA', title: 'Quarterly investment-policy holdings review', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS + 9 * 86400000)), owner: 'arvind', status: 'In review',
+      makerChecker: { maker: 'arvind', checker: 'meera', state: 'Submitted' }, evidence: [], reference: 'IP-REV-Q1',
+      requirement: 'Review the firm holdings against the board-approved investment policy and minute it at the Investment Committee.',
+      applicability: 'Set by the firm’s own investment policy, not a single statute.', origin: 'Internal',
+      policySource: 'Board-approved Investment Policy', sourceRefs: ['SRC-PFRDA-INV-COMMITTEE'],
+    },
+    {
+      id: 'OBL-INT-INVREV-PREVQ', regulator: 'PFRDA', title: 'Quarterly investment-policy holdings review (prior cycle)', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS - 84 * 86400000)), owner: 'arvind', status: 'Filed',
+      makerChecker: { maker: 'arvind', checker: 'meera', state: 'Approved' }, evidence: ['EVD-44420'], reference: 'IP-REV-PREVQ',
+      requirement: 'Review the firm holdings against the board-approved investment policy and minute it at the Investment Committee.',
+      applicability: 'Set by the firm’s own investment policy, not a single statute.', origin: 'Internal',
+      policySource: 'Board-approved Investment Policy', sourceRefs: ['SRC-PFRDA-INV-COMMITTEE'],
+    },
+    {
+      id: 'OBL-INT-CONSENT-H1', regulator: 'DPDP', title: 'Half-yearly consent-ledger reconciliation', frequency: 'Half-yearly',
+      dueDate: iso(new Date(NOW_MS + 16 * 86400000)), owner: 'priya', status: 'In review',
+      makerChecker: { maker: 'priya', checker: 'anjali', state: 'Submitted' }, evidence: ['EVD-44400'], reference: 'DP-CONSENT-H1',
+      requirement: 'Reconcile the consent ledger against active processing and remediate gaps.',
+      applicability: 'Set by the firm’s own data-protection policy.', origin: 'Internal',
+      policySource: 'Data Protection & Privacy Policy', sourceRefs: ['SRC-DPDP-6'],
+    },
+    {
+      id: 'OBL-INT-ACCESS-Q1', regulator: 'CERT-In', title: 'Quarterly privileged-access recertification', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS - 100 * 86400000)), owner: 'rohan', status: 'Filed',
+      makerChecker: { maker: 'rohan', checker: 'rajesh', state: 'Approved' }, evidence: ['EVD-44192'], reference: 'IS-ACCESS-Q1',
+      requirement: 'Recertify privileged access to the CRA interface and fund-accounting systems.',
+      applicability: 'Set by the firm’s own information-security policy.', origin: 'Internal',
+      policySource: 'Information Security Policy',
+    },
+  )
   return obligations
 }
 
