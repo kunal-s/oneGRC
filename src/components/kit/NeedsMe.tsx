@@ -22,6 +22,9 @@ const INCIDENT_PERSONAS: RoleKey[] = ['EXEC', 'CTRLOWNER', 'AUDITOR']
 export function NeedsMe({ className }: { className?: string }) {
   const navigate = useNavigate()
   const role = useApp((s) => s.role)
+  // Subscribe to incident overrides so the nearest-clock chip updates when a
+  // regulator track is filed (Epic 3.2); activeTracks reads the merged state.
+  useApp((s) => s.incidentOverrides)
 
   const mine = React.useMemo(() => WORLD.queue.filter((q) => q.role === role), [role])
   const overdue = mine.filter((t) => new Date(t.due).getTime() < NOW_MS)

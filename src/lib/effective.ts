@@ -1,6 +1,6 @@
 import { useApp } from '@/store'
-import { WORLD, getObligation, getControl, getIssue, getIncident, getRegChange, getDsar } from '@/data'
-import type { Obligation, Control, Issue, Incident, RegulatoryChange, Dsar } from '@/types'
+import { WORLD, getObligation, getControl, getIssue, getIncident, getRegChange, getDsar, getAudit } from '@/data'
+import type { Obligation, Control, Issue, Incident, RegulatoryChange, Dsar, Audit, AuditFinding } from '@/types'
 
 /**
  * The generalised merge-on-read layer (Epic 1.1), mirroring effectiveClause for
@@ -88,4 +88,33 @@ export function useEffectiveRegChanges(): RegulatoryChange[] {
 export function useEffectiveDsars(): Dsar[] {
   const ov = useApp((s) => s.dsarOverrides)
   return WORLD.dsars.map((d) => effectiveDsar(d, ov[d.id]))
+}
+
+// ── Audits: findings have no override map of their own — a finding's effective
+// status is derived from its 1:1 remediation issue (Epic 3.3). Closing a finding
+// resolves that issue, and the finding then reads Closed everywhere. This makes
+// "the duty was done but never documented" structurally impossible (Req 12): the
+// remediation record IS the documentation.
+
+export function effectiveFinding(f: AuditFinding, issueOverrides: Record<string, Partial<Issue>>): AuditFinding {
+  if (f.status === 'Closed' || !f.linkedIssue) return f
+  const iss = getIssue(f.linkedIssue)
+  const eff = iss ? effectiveIssue(iss, issueOverrides[iss.id]) : undefined
+  return eff?.status === 'Resolved' ? { ...f, status: 'Closed' } : f
+}
+
+const withEffectiveFindings = (a: Audit, issueOverrides: Record<string, Partial<Issue>>): Audit => ({
+  ...a,
+  findings: a.findings.map((f) => effectiveFinding(f, issueOverrides)),
+})
+
+export function useEffectiveAudit(id: string): Audit | undefined {
+  const issueOverrides = useApp((s) => s.issueOverrides)
+  const base = getAudit(id)
+  return base ? withEffectiveFindings(base, issueOverrides) : undefined
+}
+
+export function useEffectiveAudits(): Audit[] {
+  const issueOverrides = useApp((s) => s.issueOverrides)
+  return WORLD.audits.map((a) => withEffectiveFindings(a, issueOverrides))
 }

@@ -3,7 +3,7 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource, getObligation, getControl, getRegChange } from '@/data'
+import { getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit } from '@/data'
 import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
 
@@ -159,6 +159,14 @@ interface AppState {
 
   // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
   acknowledgeRegChange: (id: string) => void
+
+  // ── Incident regulator-track filing (Epic 3.2) ──────────────────────────────
+  fileIncidentTrack: (incidentId: string, trackIndex: number) => void
+
+  // ── Issue remediation + audit findings (Epic 3.3) ───────────────────────────
+  resolveIssue: (id: string) => void
+  bulkSetIssueStatus: (ids: string[], status: Issue['status']) => void
+  closeFinding: (auditId: string, findingId: string) => void
 }
 
 let toastSeq = 0
@@ -341,5 +349,57 @@ export const useApp = create<AppState>((set, get) => ({
     get().patchRegChange(id, { status: 'Closed' })
     get().recordAction({ action: `Acknowledged regulatory change ${id}`, entityId: id, route: `/reg-change/${id}`, detail: c.summary })
     get().notify({ title: 'Regulatory change acknowledged', body: `${id} - ${personName(c.owner)} alerted; ${c.impactedObligations.length} obligation(s) and ${c.impactedControls.length} control(s) updated.`, severity: 'info', entityId: id, route: `/reg-change/${id}` })
+  },
+
+  // ── Incident regulator-track filing (Epic 3.2) ──────────────────────────────
+  // Files one regulator track (it leaves activeTracks); the incident itself stays
+  // open so the marquee "1 Critical live" vital is preserved.
+  fileIncidentTrack: (incidentId, trackIndex) => {
+    const base = getIncident(incidentId)
+    if (!base) return
+    const cur = { ...base, ...(get().incidentOverrides[incidentId] ?? {}) }
+    const tracks = cur.regulatorTracks.map((t, i) => (i === trackIndex ? { ...t, status: 'Filed' as const } : t))
+    const filed = tracks[trackIndex]
+    get().patchIncident(incidentId, { regulatorTracks: tracks })
+    get().recordAction({ action: `Filed ${filed.regulator} report for ${incidentId}`, entityId: incidentId, route: `/incidents/${incidentId}`, detail: filed.output })
+    get().notify({ title: `${filed.regulator} report filed`, body: `${incidentId} - ${filed.clockLabel} satisfied under maker-checker sign-off.`, severity: 'info', entityId: incidentId, route: `/incidents/${incidentId}` })
+  },
+
+  // ── Issue remediation + audit findings (Epic 3.3) ───────────────────────────
+  // Resolving an audit-finding-sourced issue is what retires the finding and drops
+  // the Open-findings metric (see lib/metrics). Session-override only; seed intact.
+  resolveIssue: (id) => {
+    const base = getIssue(id)
+    if (!base) return
+    const cur = { ...base, ...(get().issueOverrides[id] ?? {}) }
+    if (cur.status === 'Resolved') return
+    get().patchIssue(id, { status: 'Resolved' })
+    get().recordAction({ action: `Resolved issue ${id}`, entityId: id, route: `/issues/${id}`, detail: cur.title })
+    get().notify({ title: 'Issue resolved', body: `${id} - ${cur.title} closed with remediation evidence.`, severity: 'info', entityId: id, route: `/issues/${id}` })
+  },
+
+  // Bulk status write across selected issues — one audit-log line for the batch.
+  bulkSetIssueStatus: (ids, status) => {
+    const targets = ids.filter((id) => {
+      const b = getIssue(id)
+      return b && { ...b, ...(get().issueOverrides[id] ?? {}) }.status !== status
+    })
+    if (!targets.length) return
+    for (const id of targets) get().patchIssue(id, { status })
+    const verb = status === 'Resolved' ? 'Resolved' : `Set to "${status}"`
+    get().recordAction({ action: `${verb} ${targets.length} issue(s)`, entityId: targets[0], route: '/issues', detail: targets.join(', ') })
+    get().notify({ title: `${targets.length} issue(s) ${status === 'Resolved' ? 'resolved' : 'updated'}`, body: `Bulk ${status === 'Resolved' ? 'closure recorded with remediation evidence' : `status set to ${status}`}.`, severity: 'info', route: '/issues' })
+  },
+
+  // Closing an audit finding resolves its 1:1 remediation issue; the finding then
+  // reads Closed through effectiveFinding and the Open-findings metric drops.
+  closeFinding: (auditId, findingId) => {
+    const audit = getAudit(auditId)
+    if (!audit) return
+    const f = audit.findings.find((x) => x.id === findingId)
+    if (!f) return
+    if (f.linkedIssue) get().patchIssue(f.linkedIssue, { status: 'Resolved' })
+    get().recordAction({ action: `Closed audit finding ${findingId}`, entityId: auditId, route: `/audits/${auditId}`, detail: f.title })
+    get().notify({ title: 'Audit finding closed', body: `${findingId} - ${f.title}${f.linkedIssue ? ` · remediation ${f.linkedIssue} resolved` : ''}.`, severity: 'info', entityId: auditId, route: `/audits/${auditId}` })
   },
 }))

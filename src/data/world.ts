@@ -1161,6 +1161,11 @@ function crossLink() {
       issue.sourceRef = f.id
       issue.title = `${f.title} — remediation (${a.id})`
       issue.severity = f.severity
+      // An open finding's 1:1 remediation cannot already be Resolved — otherwise the
+      // finding reads open while its issue reads closed, and the Open-findings metric
+      // (derived from the linked issue) understates the 27 baseline. Coerce off
+      // Resolved so the seed is internally consistent and closure is an in-session act.
+      if (issue.status === 'Resolved') issue.status = 'In progress'
     }
   })
 }

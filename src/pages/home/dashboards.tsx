@@ -13,7 +13,7 @@ import { HeatMap } from './HeatMap'
 import { useApp } from '@/store'
 import { WORLD, SOURCES, getInstrument } from '@/data'
 import { PEOPLE_BY_ID, ROLES } from '@/data/people'
-import { useEffectiveObligations, useEffectiveControls, useEffectiveIssues } from '@/lib/effective'
+import { useEffectiveObligations, useEffectiveControls, useEffectiveIssues, useEffectiveAudits } from '@/lib/effective'
 import { useEffectiveMetrics } from '@/lib/metrics'
 import { effectiveClause, awaitingDecision } from '@/lib/sources'
 import { pct } from '@/lib/format'
@@ -307,12 +307,13 @@ export function AuditorDashboard() {
   const { label, first } = usePersona()
   const M = useEffectiveMetrics()
   const issues = useEffectiveIssues()
-  const openAudits = WORLD.audits.filter((a) => a.status !== 'Closed')
+  const audits = useEffectiveAudits()
+  const openAudits = audits.filter((a) => a.status !== 'Closed')
   const findingIssues = issues.filter((i) => i.source === 'Audit finding' && i.status !== 'Resolved')
   const overdueIssues = issues.filter((i) => i.status === 'Overdue')
 
   const stats: Stat[] = [
-    { label: 'Active audits', value: openAudits.length, sub: `of ${WORLD.audits.length}`, tone: 'info', icon: <ClipboardCheck className="size-3.5" />, onClick: () => navigate('/audits') },
+    { label: 'Active audits', value: openAudits.length, sub: `of ${audits.length}`, tone: 'info', icon: <ClipboardCheck className="size-3.5" />, onClick: () => navigate('/audits') },
     { label: 'Open findings', value: M.openFindings, sub: 'to remediate', tone: 'warn', icon: <FileSearch className="size-3.5" />, onClick: () => navigate('/audits') },
     { label: 'Overdue issues', value: overdueIssues.length, sub: 'past due', tone: overdueIssues.length ? 'danger' : 'ok', icon: <Wrench className="size-3.5" />, onClick: () => navigate('/issues') },
     { label: 'Finding remediations', value: findingIssues.length, sub: 'in flight', tone: 'neutral', icon: <Wrench className="size-3.5" />, onClick: () => navigate('/issues') },

@@ -1,7 +1,7 @@
 import { useApp } from '@/store'
 import { WORLD, METRICS } from '@/data'
 import type { Obligation, Control, Issue, Incident } from '@/types'
-import { effectiveObligation, effectiveControl, effectiveIssue, effectiveIncident } from './effective'
+import { effectiveObligation, effectiveControl, effectiveIncident, effectiveFinding } from './effective'
 
 /**
  * Headline metrics recomputed from effective (seed + override) state, so a session
@@ -54,12 +54,14 @@ export function effectiveMetrics(maps: {
     .filter((i) => i.status !== 'Closed')
   const criticalOpen = openIncidents.filter((i) => i.classification === 'Critical').length
 
-  // Open findings: seed baseline minus audit-finding-sourced issues now resolved
-  // (a closed finding's 1:1 remediation issue resolving is what retires it).
-  const resolvedFindingIssues = WORLD.issues.filter(
-    (i) => i.source === 'Audit finding' && effectiveIssue(i, maps.issueOverrides[i.id]).status === 'Resolved',
-  ).length
-  const openFindings = Math.max(0, METRICS.openFindings - resolvedFindingIssues)
+  // Open findings: counted straight off the effective findings (a finding reads
+  // Closed once its 1:1 remediation issue is Resolved). Single source of truth, so
+  // it can never disagree with the audit screens, and resolving an audit-finding
+  // issue that is NOT linked to an open finding correctly leaves it unchanged. With
+  // zero overrides the seed is internally consistent, so this equals METRICS (27).
+  const openFindings = WORLD.audits
+    .flatMap((a) => a.findings)
+    .filter((f) => effectiveFinding(f, maps.issueOverrides).status !== 'Closed').length
 
   return {
     enterpriseRisk: METRICS.enterpriseRisk,

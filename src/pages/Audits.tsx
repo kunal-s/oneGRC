@@ -5,16 +5,17 @@ import { DataTable, type Column, type TableFilter } from '@/components/DataTable
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { WORLD } from '@/data'
 import { useApp } from '@/store'
+import { useEffectiveAudits } from '@/lib/effective'
 import type { Audit } from '@/types'
 
 export function Audits() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
 
-  const totalFindings = WORLD.audits.reduce((s, a) => s + a.findings.length, 0)
-  const openFindings = WORLD.audits.reduce((s, a) => s + a.findings.filter((f) => f.status !== 'Closed').length, 0)
+  const audits = useEffectiveAudits()
+  const totalFindings = audits.reduce((s, a) => s + a.findings.length, 0)
+  const openFindings = audits.reduce((s, a) => s + a.findings.filter((f) => f.status !== 'Closed').length, 0)
 
   const columns: Column<Audit>[] = [
     {
@@ -70,7 +71,7 @@ export function Audits() {
       <PageHeader
         eyebrow="Audit & Assurance"
         title="Audits"
-        description={`${WORLD.audits.length} audits — CERT-In empanelled IS audits, internal audits and PFRDA reviews. Every finding spawns a tracked remediation issue.`}
+        description={`${audits.length} audits — CERT-In empanelled IS audits, internal audits and PFRDA reviews. Every finding spawns a tracked remediation issue.`}
         actions={
           <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Audit register exported', description: 'audit-register-fy26.csv.', variant: 'success' })}>
             <Download className="size-4" /> Export
@@ -80,14 +81,14 @@ export function Audits() {
 
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
         <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1">
-          <ClipboardCheck className="size-3.5 text-muted-foreground" /> {WORLD.audits.length} audits
+          <ClipboardCheck className="size-3.5 text-muted-foreground" /> {audits.length} audits
         </span>
         <span className="rounded-md border border-critical/30 bg-critical-soft px-2.5 py-1 text-critical">Open findings <span className="font-semibold tnum">{openFindings}</span></span>
         <span className="rounded-md border border-border bg-background px-2.5 py-1">Total findings <span className="font-semibold tnum text-foreground">{totalFindings}</span></span>
       </div>
 
       <DataTable
-        data={WORLD.audits}
+        data={audits}
         columns={columns}
         searchKeys={['id', 'title', 'auditor']}
         searchPlaceholder="Search audit id, title or auditor…"

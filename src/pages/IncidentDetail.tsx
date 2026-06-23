@@ -11,11 +11,13 @@ import { CrossRefPanel } from '@/components/CrossRefPanel'
 import { EvidenceList } from '@/components/EvidenceList'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
+import { CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getIncident } from '@/data'
 import { personName } from '@/data/people'
 import { fmtIST, fmtRelative, fmtDate, fmtTime } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveIncident } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 import type { RegulatorTrack } from '@/types'
 
@@ -38,7 +40,9 @@ export function IncidentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
-  const inc = id ? getIncident(id) : undefined
+  const fileIncidentTrack = useApp((s) => s.fileIncidentTrack)
+  const inc = useEffectiveIncident(id ?? '')
+  const canFile = useCanAct({ kind: 'incident.fileTrack', makerId: inc?.owner })
 
   if (!inc) return <ComingSoon title="Incident not found" />
 
@@ -141,7 +145,7 @@ export function IncidentDetail() {
             <span className="text-2xs text-muted-foreground">Live regulator countdowns</span>
           </div>
           <div className={cn('grid gap-3', inc.regulatorTracks.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2')}>
-            {inc.regulatorTracks.map((t) => (
+            {inc.regulatorTracks.map((t, idx) => (
               <div key={t.regulator} className={cn('card-surface flex flex-col overflow-hidden border', TRACK_ACCENT[t.regulator])}>
                 <RegulatorClock track={t} className="border-0 bg-transparent" />
                 <div className="border-t border-border px-3.5 py-2 text-2xs leading-snug text-muted-foreground">
@@ -152,10 +156,19 @@ export function IncidentDetail() {
                     <div>Started {fmtTime(t.clockStartedAt)} IST</div>
                     <div>Due {fmtIST(t.deadline)}</div>
                   </div>
-                  {t.status !== 'Filed' && (
-                    <Button size="sm" variant="outline" onClick={() => trackAction(t)}>
-                      {trackCta(t)}
-                    </Button>
+                  {t.status === 'Filed' ? (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-ok-soft px-2 py-1 text-2xs font-medium text-ok">
+                      <CheckCircle2 className="size-3.5" /> Filed
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="outline" onClick={() => trackAction(t)}>
+                        {trackCta(t)}
+                      </Button>
+                      <Button size="sm" disabled={!canFile} title={canFile ? undefined : 'Filing is signed off by the Control Owner or Executive (not the maker).'} onClick={() => fileIncidentTrack(inc.id, idx)}>
+                        File now
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
