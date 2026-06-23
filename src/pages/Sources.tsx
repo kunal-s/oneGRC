@@ -9,6 +9,8 @@ import { WORLD } from '@/data'
 import { instrumentSummary, actStatus, type InstrumentSummary } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { useScope, instrumentInScope } from '@/lib/access'
+import { ScopeBanner, ScopeEmpty } from '@/components/ScopeBanner'
 import { cn } from '@/lib/utils'
 import type { SourceInstrument } from '@/types'
 
@@ -31,16 +33,21 @@ export function Sources() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const overrides = useApp((s) => s.clauseOverrides)
+  const scope = useScope()
   const [view, setView] = React.useState<'all' | Bucket>('all')
   const [q, setQ] = React.useState('')
 
+  // Department access boundary (1.1): a source act is visible to a department
+  // that owns records deriving from it; Compliance and the administrator see all.
   const rows: Row[] = React.useMemo(
     () =>
-      WORLD.instruments.map((inst) => {
-        const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
-        return { ...base, bucket: bucketOf(base) }
-      }),
-    [overrides],
+      WORLD.instruments
+        .filter((inst) => instrumentInScope(inst.id, scope))
+        .map((inst) => {
+          const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
+          return { ...base, bucket: bucketOf(base) }
+        }),
+    [overrides, scope],
   )
 
   const totalClauses = WORLD.sources.length
@@ -99,6 +106,8 @@ export function Sources() {
         }
       />
 
+      <ScopeBanner entity="source acts" />
+
       <StatGroup className="mb-4" stats={stats} />
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -114,6 +123,9 @@ export function Sources() {
         </label>
       </div>
 
+      {!scope.seesAll && rows.length === 0 ? (
+        <ScopeEmpty entity="source acts" />
+      ) : (
       <GroupedList
         groups={groups}
         renderItem={(r) => (
@@ -150,6 +162,7 @@ export function Sources() {
           </button>
         )}
       />
+      )}
     </div>
   )
 }

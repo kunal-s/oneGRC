@@ -12,6 +12,7 @@ import { useApp } from '@/store'
 import { WORLD } from '@/data'
 import { ROLES, PEOPLE, PEOPLE_BY_ID, personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
+import { ScopeBanner } from '@/components/ScopeBanner'
 import type { QueueTask } from '@/types'
 
 const KIND_META: Record<QueueTask['kind'], { icon: React.ComponentType<{ className?: string }>; cls: string }> = {
@@ -109,6 +110,8 @@ export function MyQueue() {
           </div>
         }
       />
+
+      <ScopeBanner entity="tasks" />
 
       {/* Kind segmented filter */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">

@@ -17,6 +17,8 @@ import { useApp } from '@/store'
 import { ReportMenu } from '@/components/kit/ReportMenu'
 import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveObligations } from '@/lib/effective'
+import { useScope, ownerInScope } from '@/lib/access'
+import { ScopeBanner } from '@/components/ScopeBanner'
 import type { Obligation } from '@/types'
 
 type ViewId = 'all' | 'overdue' | 'due' | 'review' | 'mine' | 'internal'
@@ -25,7 +27,11 @@ export function Obligations() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const selfId = useApp((s) => s.currentPersonId)()
-  const all = useEffectiveObligations()
+  const scope = useScope()
+  const raw = useEffectiveObligations()
+  // Department access boundary (1.1): a user sees only their department's duties;
+  // Compliance and the administrator see all.
+  const all = React.useMemo(() => raw.filter((o) => ownerInScope(o.owner, scope)), [raw, scope])
   const [tab, setTab] = React.useState<'list' | 'calendar'>('list')
   const [view, setView] = React.useState<ViewId>('all')
 
@@ -123,6 +129,8 @@ export function Obligations() {
           </div>
         }
       />
+
+      <ScopeBanner entity="obligations" />
 
       {/* per-regulator summary - "one calendar across regulators" */}
       <div className="mb-3 flex flex-wrap items-center gap-2">

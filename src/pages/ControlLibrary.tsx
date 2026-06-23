@@ -16,6 +16,8 @@ import { useApp } from '@/store'
 import { ReportMenu } from '@/components/kit/ReportMenu'
 import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveControls } from '@/lib/effective'
+import { useScope, ownerInScope } from '@/lib/access'
+import { ScopeBanner, ScopeEmpty } from '@/components/ScopeBanner'
 import { pct } from '@/lib/format'
 import type { Control } from '@/types'
 
@@ -27,9 +29,13 @@ export function ControlLibrary() {
   const pushToast = useApp((s) => s.pushToast)
   const selfId = useApp((s) => s.currentPersonId)()
   const clauseOverrides = useApp((s) => s.clauseOverrides)
+  const scope = useScope()
   const [view, setView] = React.useState<ViewId>('all')
 
-  const allControls = useEffectiveControls()
+  const rawControls = useEffectiveControls()
+  // Department access boundary (1.1): scope the library to the user's department;
+  // Compliance and the administrator see all controls.
+  const allControls = React.useMemo(() => rawControls.filter((c) => ownerInScope(c.owner, scope)), [rawControls, scope])
 
   // How many clauses / acts each control satisfies (Sources pipeline).
   const satisfies = React.useMemo(() => {
@@ -50,7 +56,7 @@ export function ControlLibrary() {
   const avgFrameworks = (WORLD.controls.reduce((s, c) => s + c.frameworks.length, 0) / WORLD.controls.length).toFixed(1)
   const failing = allControls.filter((c) => c.result === 'Fail').length
   const partial = allControls.filter((c) => c.result === 'Partial').length
-  const coverage = (allControls.filter((c) => c.result !== 'Fail').length / allControls.length) * 100
+  const coverage = allControls.length ? (allControls.filter((c) => c.result !== 'Fail').length / allControls.length) * 100 : 0
 
   const views: SavedView[] = [
     { id: 'all', label: 'All', count: allControls.length },
@@ -191,20 +197,28 @@ export function ControlLibrary() {
         }
       />
 
-      <StatGroup className="mb-3" stats={summaryStats({ coverage, avgFrameworks, multiMapped, ccmCount, failing, navigate, setView })} />
+      <ScopeBanner entity="controls" />
 
-      <SavedViews className="mb-3" views={views} active={view} onSelect={(v) => setView(v as ViewId)} />
+      {!scope.seesAll && allControls.length === 0 ? (
+        <ScopeEmpty entity="controls" />
+      ) : (
+        <>
+          <StatGroup className="mb-3" stats={summaryStats({ coverage, avgFrameworks, multiMapped, ccmCount, failing, navigate, setView })} />
 
-      <DataTable
-        data={data}
-        columns={columns}
-        searchKeys={['id', 'title', (c) => personName(c.owner)]}
-        searchPlaceholder="Search control id, title or owner…"
-        filters={filters}
-        initialSort={{ key: 'id', dir: 'asc' }}
-        onRowClick={(c) => navigate(`/controls/${c.id}`)}
-        rightSlot={<span className="text-2xs text-muted-foreground">one row → one control, many frameworks</span>}
-      />
+          <SavedViews className="mb-3" views={views} active={view} onSelect={(v) => setView(v as ViewId)} />
+
+          <DataTable
+            data={data}
+            columns={columns}
+            searchKeys={['id', 'title', (c) => personName(c.owner)]}
+            searchPlaceholder="Search control id, title or owner…"
+            filters={filters}
+            initialSort={{ key: 'id', dir: 'asc' }}
+            onRowClick={(c) => navigate(`/controls/${c.id}`)}
+            rightSlot={<span className="text-2xs text-muted-foreground">one row → one control, many frameworks</span>}
+          />
+        </>
+      )}
     </div>
   )
 }

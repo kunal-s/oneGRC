@@ -19,6 +19,21 @@ export type Regulator =
 
 export type LineOfDefence = '1LoD' | '2LoD' | '3LoD'
 
+// The department dimension (enhancement plan 1.1). A department is derived from
+// the owner's function; every obligation, control, policy, task and approval
+// takes its department from whoever owns it. The set is fixed; every department
+// has at least one named owner. Compliance and the administrator keep the
+// all-departments view; a department user sees only their own department.
+export type Department =
+  | 'Compliance and Company Secretarial'
+  | 'Risk'
+  | 'IT and Information Security'
+  | 'Investment Compliance'
+  | 'Data Protection'
+  | 'Finance and Tax'
+  | 'HR and Labour'
+  | 'Internal Audit'
+
 // ── Provenance (Epic 1 — Source and Provenance; normalized in Epic 15) ───────
 // THE single source model, normalized into a parent SourceInstrument (the legal
 // instrument — Act / Rules / Circular / Standard) and provision-level
@@ -150,6 +165,7 @@ export interface Person {
   initials: string
   lod: LineOfDefence
   email: string
+  department: Department // the function this person belongs to (1.1)
 }
 
 // The 7 functional personas the app is organised around. The switcher selects a
