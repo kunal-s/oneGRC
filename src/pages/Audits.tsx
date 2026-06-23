@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { useEffectiveAudits } from '@/lib/effective'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import type { Audit } from '@/types'
 
 export function Audits() {
@@ -73,9 +75,12 @@ export function Audits() {
         title="Audits"
         description={`${audits.length} audits — CERT-In empanelled IS audits, internal audits and PFRDA reviews. Every finding spawns a tracked remediation issue.`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Audit register exported', description: 'audit-register-fy26.csv.', variant: 'success' })}>
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('Audit')} />
+            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Audit register exported', description: 'audit-register-fy26.csv.', variant: 'success' })}>
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
 

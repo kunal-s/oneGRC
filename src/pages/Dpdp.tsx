@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { WORLD, MARQUEE } from '@/data'
 import { useEffectiveDsars } from '@/lib/effective'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { inGroup, maskPran } from '@/lib/format'
 import { useApp } from '@/store'
@@ -79,9 +81,12 @@ export function Dpdp() {
         title="DPDP / Data Governance"
         description="Subscriber PII governed end to end — data inventory, consent ledger and data-principal requests (DSARs) under the DPDP Act 2023 / Rules 2025. Breach signals feed the same incident workflow."
         actions={
-          <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Data map exported', description: 'dpdp-data-inventory.csv.', variant: 'success' })}>
-            <Download className="size-4" /> Export data map
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('DSAR')} />
+            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Data map exported', description: 'dpdp-data-inventory.csv.', variant: 'success' })}>
+              <Download className="size-4" /> Export data map
+            </Button>
+          </div>
         }
       />
 

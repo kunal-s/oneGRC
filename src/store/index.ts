@@ -98,6 +98,9 @@ interface AppState {
   commandOpen: boolean
   setCommandOpen: (v: boolean) => void
 
+  copilotOpen: boolean
+  setCopilotOpen: (v: boolean) => void
+
   artifacts: Artifact[]
   addArtifact: (a: Omit<Artifact, 'id'>) => string
   getArtifact: (id: string) => Artifact | undefined
@@ -201,6 +204,9 @@ export const useApp = create<AppState>((set, get) => ({
 
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
+
+  copilotOpen: false,
+  setCopilotOpen: (v) => set({ copilotOpen: v }),
 
   artifacts: [],
   addArtifact: (a) => {

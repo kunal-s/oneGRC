@@ -12,6 +12,8 @@ import { WORLD } from '@/data'
 import { personName } from '@/data/people'
 import { residualCell, DOMAIN_COLORS, DOMAIN_LABELS } from '@/lib/heatmap'
 import { useApp } from '@/store'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import type { Risk, RiskDomain } from '@/types'
 
 const TREATMENTS = ['Mitigate', 'Accept', 'Transfer', 'Avoid']
@@ -143,14 +145,17 @@ export function RiskRegister() {
           </>
         }
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => pushToast({ title: 'Risk Register exported', description: 'risk-register-jun-2026.csv.', variant: 'success' })}
-          >
-            <Download className="size-4" />
-            Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('Risk')} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pushToast({ title: 'Risk Register exported', description: 'risk-register-jun-2026.csv.', variant: 'success' })}
+            >
+              <Download className="size-4" />
+              Export
+            </Button>
+          </div>
         }
       />
 

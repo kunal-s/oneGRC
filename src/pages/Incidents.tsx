@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils'
 import { WORLD } from '@/data'
 import { fmtIST, fmtRelative } from '@/lib/time'
 import { useApp } from '@/store'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import type { Incident, Severity } from '@/types'
 
 const SEV_ORDER: Record<Severity, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 }
@@ -110,13 +112,16 @@ export function Incidents() {
         title="Incidents"
         description="Security and operational incidents on the PFRDA ICS Critical/High/Medium/Low taxonomy — fed from Sankalp ServiceDesk (ITSM), Splunk SIEM and CrowdStrike EDR. One incident record can drive multiple regulator clocks."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => pushToast({ title: 'Incidents exported', description: 'incident-log-jun-2026.csv.', variant: 'success' })}
-          >
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('Incident')} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pushToast({ title: 'Incidents exported', description: 'incident-log-jun-2026.csv.', variant: 'success' })}
+            >
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
 

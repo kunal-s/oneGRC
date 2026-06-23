@@ -14,6 +14,8 @@ import { personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { REGULATOR_ORDER, REGULATOR_COLORS, RegulatorChip } from '@/lib/regulators'
 import { useApp } from '@/store'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveObligations } from '@/lib/effective'
 import type { Obligation } from '@/types'
 
@@ -114,6 +116,7 @@ export function Obligations() {
               <ToggleBtn active={tab === 'list'} onClick={() => setTab('list')} icon={<List className="size-4" />} label="List" />
               <ToggleBtn active={tab === 'calendar'} onClick={() => setTab('calendar')} icon={<CalendarDays className="size-4" />} label="Calendar" />
             </div>
+            <ReportMenu templates={reportsForModule('Obligations')} />
             <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Compliance calendar exported', description: 'obligations-calendar-jun-2026.ics.', variant: 'success' })}>
               <Download className="size-4" /> Export
             </Button>

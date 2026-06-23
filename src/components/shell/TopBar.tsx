@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Bell, ChevronsUpDown, Building2, AlertTriangle, Info, Siren } from 'lucide-react'
+import { Search, Bell, ChevronsUpDown, Building2, AlertTriangle, Info, Siren, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { fmtRelative } from '@/lib/time'
@@ -81,6 +81,7 @@ function NotificationsBell() {
 
 export function TopBar() {
   const setCommandOpen = useApp((s) => s.setCommandOpen)
+  const setCopilotOpen = useApp((s) => s.setCopilotOpen)
   const navigate = useNavigate()
 
   return (
@@ -108,6 +109,13 @@ export function TopBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-2">
+        <button
+          onClick={() => setCopilotOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-info/40 hover:bg-info-soft/40"
+          title="Ask the OneGRC Copilot about the current record"
+        >
+          <Sparkles className="size-4 text-info" /> Copilot
+        </button>
         <NotificationsBell />
         <button
           onClick={() => navigate('/incidents/INC-2026-0411')}

@@ -13,6 +13,8 @@ import { clausesForControl } from '@/lib/sources'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative } from '@/lib/time'
 import { useApp } from '@/store'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveControls } from '@/lib/effective'
 import { pct } from '@/lib/format'
 import type { Control } from '@/types'
@@ -176,13 +178,16 @@ export function ControlLibrary() {
           </>
         }
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => pushToast({ title: 'Control library exported', description: 'control-library-jun-2026.csv.', variant: 'success' })}
-          >
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('Control')} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pushToast({ title: 'Control library exported', description: 'control-library-jun-2026.csv.', variant: 'success' })}
+            >
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
 
