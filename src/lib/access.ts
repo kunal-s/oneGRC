@@ -9,10 +9,12 @@
 // active role. Detail pages stay reachable by direct link / command search; the
 // boundary applies to the list and queue surfaces (where work is discovered).
 import { useApp } from '@/store'
-import { PEOPLE_BY_ID } from '@/data/people'
+import { departmentOfPerson } from '@/data/people'
 import { WORLD, getControl } from '@/data'
 import { provisionsForInstrument } from '@/lib/sources'
 import type { Department } from '@/types'
+
+export { departmentOfPerson }
 
 export const DEPARTMENTS: Department[] = [
   'Compliance and Company Secretarial',
@@ -27,10 +29,6 @@ export const DEPARTMENTS: Department[] = [
 
 // The cross-department authority: the Compliance function keeps the overall view.
 export const COMPLIANCE_DEPT: Department = 'Compliance and Company Secretarial'
-
-export function departmentOfPerson(id?: string): Department | undefined {
-  return id ? PEOPLE_BY_ID[id]?.department : undefined
-}
 
 export interface Scope {
   personId: string

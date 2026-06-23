@@ -1,4 +1,4 @@
-import type { Person, RoleKey } from '@/types'
+import type { Person, RoleKey, Department } from '@/types'
 
 // The named 15-person roster (A2). ids are short, stable handles.
 // Each roster person carries a primary persona (role). Multiple people back one
@@ -28,6 +28,38 @@ export const PEOPLE_BY_ID: Record<string, Person> = Object.fromEntries(
 export function personName(id: string): string {
   return PEOPLE_BY_ID[id]?.name ?? id
 }
+
+export function departmentOfPerson(id?: string): Department | undefined {
+  return id ? PEOPLE_BY_ID[id]?.department : undefined
+}
+
+// The named department head — the master authority for the department (1.5).
+// Set here as the default; E0.5 makes it admin-configurable with an audit trail.
+// Pure org facts (no store dependency) so the reminder/escalation engine and the
+// access layer can both resolve escalation targets without an import cycle.
+export const DEFAULT_DEPARTMENT_HEADS: Record<Department, string> = {
+  'Compliance and Company Secretarial': 'anjali',
+  'Risk': 'meera',
+  'IT and Information Security': 'rajesh',
+  'Investment Compliance': 'arvind',
+  'Data Protection': 'priya',
+  'Finance and Tax': 'deepa',
+  'HR and Labour': 'farhan',
+  'Internal Audit': 'sunita',
+}
+
+export function departmentHeadOf(dept?: Department): string | undefined {
+  return dept ? DEFAULT_DEPARTMENT_HEADS[dept] : undefined
+}
+
+/** The line manager for escalation = the head of the person's department. */
+export function lineManagerOf(personId?: string): string | undefined {
+  return departmentHeadOf(departmentOfPerson(personId))
+}
+
+// The cross-department escalation owners (1.2): Compliance Officer, then CRO.
+export const COMPLIANCE_OFFICER = 'anjali'
+export const CRO = 'meera'
 
 // The persona switcher. Order is the demo altitude order; EXEC is the default.
 // `label` is the persona; `person` is the representative whose queue/identity loads.

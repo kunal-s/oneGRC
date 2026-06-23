@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck, ScrollText } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck, ScrollText, BellRing, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { EvidenceList } from '@/components/EvidenceList'
@@ -10,7 +10,8 @@ import { SourceList } from '@/components/SourceRef'
 import { RegulatorChip } from '@/lib/regulators'
 import { cn } from '@/lib/utils'
 import { getRegChange, WORLD } from '@/data'
-import { PEOPLE_BY_ID } from '@/data/people'
+import { PEOPLE_BY_ID, personName } from '@/data/people'
+import { reminderEvents } from '@/lib/reminders'
 import { fmtIST, fmtRelative, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
 import { useEffectiveObligation } from '@/lib/effective'
@@ -36,6 +37,7 @@ export function ObligationDetail() {
   const regChange = o.linkedRegChange ? getRegChange(o.linkedRegChange) : undefined
   const overdue = o.status === 'Overdue'
   const daysToDue = Math.round((new Date(o.dueDate).getTime() - NOW_MS) / 86400000)
+  const ladder = reminderEvents(o)
 
   return (
     <div>
@@ -119,6 +121,55 @@ export function ObligationDetail() {
             <EvidenceList items={evidence} />
             <p className="mt-2 text-2xs text-muted-foreground">Filing acknowledgements and supporting evidence are retained on the obligation record and reused for audit.</p>
           </div>
+
+          {ladder.length > 0 && (
+            <div className="card-surface p-4">
+              <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <BellRing className="size-4 text-info" /> Reminders &amp; escalations
+              </h3>
+              <p className="mb-3 text-2xs text-muted-foreground">
+                Reminders at 7, 3 and 1 days before due; escalations at 1, 3 and 7 days overdue. Every fired event is written to the audit log.
+              </p>
+              <ol className="space-y-1.5">
+                {ladder.map((e) => {
+                  const esc = e.kind === 'escalation'
+                  return (
+                    <li key={`${e.kind}-${e.offsetDays}`} className="flex items-center gap-2.5">
+                      <span
+                        className={cn(
+                          'flex size-6 shrink-0 items-center justify-center rounded-full border',
+                          !e.fired
+                            ? 'border-dashed border-border text-muted-foreground'
+                            : esc
+                              ? 'border-critical/40 bg-critical-soft text-critical'
+                              : 'border-info/40 bg-info-soft text-info',
+                        )}
+                      >
+                        {esc ? <AlertTriangle className="size-3" /> : <BellRing className="size-3" />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <span className={cn('font-medium', esc ? 'text-critical' : 'text-foreground')}>
+                            {esc ? 'Escalation' : 'Reminder'} · {e.intervalLabel}
+                          </span>
+                          <span className="text-2xs text-muted-foreground">→ {e.targetRole} ({e.targets.map(personName).join(', ')})</span>
+                        </div>
+                        <div className="text-2xs text-muted-foreground tnum">{fmtIST(e.at)}</div>
+                      </div>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold',
+                          e.fired ? 'bg-ok-soft text-ok' : 'bg-muted text-muted-foreground',
+                        )}
+                      >
+                        {e.fired ? 'Fired' : 'Scheduled'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">

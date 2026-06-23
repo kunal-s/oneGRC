@@ -8,6 +8,7 @@ import { provisionsForInstrument } from '@/lib/sources'
 import { dsarTotalSteps } from '@/lib/dsar'
 import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
+import { escalationSeedNotifications } from '@/lib/reminders'
 
 /** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
 export interface TestRun {
@@ -49,7 +50,10 @@ export interface NotificationItem {
 
 // A small seeded baseline so the notification bell is never empty (no empty
 // states). Timestamps derive from the frozen NOW. Session events prepend.
+// The most recent fired escalations (E0.2) are folded in so the bell reflects the
+// reminder/escalation engine, not just static items.
 const SEED_NOTIFICATIONS: NotificationItem[] = [
+  ...escalationSeedNotifications(3).map((n, i) => ({ ...n, id: `NTF-esc-${i + 1}`, read: false })),
   { id: 'NTF-seed-1', at: minsFromNow(-8), title: 'CERT-In 6-hour clock at risk', body: 'INC-2026-0411 Annexure I awaiting sign-off.', severity: 'critical', entityId: 'INC-2026-0411', route: '/incidents/INC-2026-0411', read: false },
   { id: 'NTF-seed-2', at: minsFromNow(-41), title: 'Patch-SLA CCM rule failing', body: '3 critical CVEs past the 14-day window.', severity: 'warn', entityId: 'CTRL-PCI-6.3.3', route: '/ccm', read: false },
   { id: 'NTF-seed-3', at: minsFromNow(-126), title: 'GSTR-3B Table 4 change ingested', body: 'Reg-change RCM-2026-118 impacts the monthly GST return.', severity: 'warn', entityId: 'RCM-2026-118', route: '/reg-change/RCM-2026-118', read: false },

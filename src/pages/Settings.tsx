@@ -18,6 +18,7 @@ import { inCrore, inGroup } from '@/lib/format'
 import { resolveEntity } from '@/lib/entity'
 import { useApp } from '@/store'
 import { useCanAct } from '@/lib/gating'
+import { reminderAuditRows } from '@/lib/reminders'
 import type { Person } from '@/types'
 import {
   ORG, ROLE_DEFS, ROLE_LABEL, USER_META, FRAMEWORKS, TOTAL_CONTROLS, REG_CLOCKS, MC_ROWS,
@@ -429,6 +430,9 @@ function NotificationsSection() {
 
 // ── 9 · Audit Log ───────────────────────────────────────────────────────────
 const AUDIT_LOG = buildAuditLog()
+// Fired reminders + escalations (E0.2) — derived deterministically from due dates
+// vs the frozen NOW, written into the trail with actor/action/timestamp/interval.
+const REMINDER_LOG = reminderAuditRows()
 function AuditLogSection() {
   const navigate = useNavigate()
   // Session events (Epic 1.3) appear above the seeded history - the audit log is
@@ -438,6 +442,7 @@ function AuditLogSection() {
     () => [
       ...sessionLog.map((e) => ({ id: e.id, at: e.at, actor: e.actor, action: e.action, object: e.entityId ?? 'SYSTEM', detail: e.detail ?? '' })),
       ...AUDIT_LOG,
+      ...REMINDER_LOG,
     ],
     [sessionLog],
   )
