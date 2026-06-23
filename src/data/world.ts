@@ -1030,6 +1030,25 @@ const COMPLIANCE_CONTROLS: Control[] = [
     nextDue: ist(2026, 6, 30).toISOString(),
     sourceRefs: ['SRC-CERTIN-LOGS'],
   },
+  {
+    id: 'CTRL-COMP-PT-01',
+    title: 'Profession-tax deduction, remittance & return',
+    frameworks: [],
+    mappedFrameworkRefs: [],
+    owner: 'farhan',
+    type: 'Preventive',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 9 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 4,
+    linkedRisks: [],
+    linkedIssues: [],
+    description:
+      'Deduct Maharashtra profession tax at the Schedule I slab from monthly payroll, deposit it to the State by the statutory date, and file the PT return — PTRC maintained; supports the monthly remittance duty (OBL-LAB-JUN26-02).',
+    frequency: 'Monthly',
+    nextDue: ist(2026, 6, 30).toISOString(),
+    sourceRefs: ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8'],
+  },
 ]
 controls.push(...COMPLIANCE_CONTROLS)
 
@@ -1043,6 +1062,22 @@ const audits = buildAudits()
 const regChanges = buildRegChanges()
 const dataAssets = buildDataAssets()
 const dsars = buildDsars()
+
+// Curated, named evidence pinned to the worked demo records so their Evidence tabs
+// show relevant proof (not just the random pool). The cross-link pass below pushes
+// each item's linkedObligations into that obligation's evidence list automatically.
+const CURATED_EVIDENCE: Evidence[] = [
+  // Maharashtra profession-tax chain (CTRL-COMP-PT-01 / OBL-LAB-JUN26-02)
+  { id: 'EVD-44600', title: 'PTRC registration certificate — Maharashtra', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 210 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: [], frameworkRefs: [], source: 'Manual upload' },
+  { id: 'EVD-44601', title: 'Monthly PT challan — payment acknowledgement (May 2026)', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 26 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
+  { id: 'EVD-44602', title: 'PT return filing acknowledgement', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 24 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
+  { id: 'EVD-44603', title: 'Payroll PT deduction register — Schedule I slabs', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 25 * 86400000 - 4200000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'Payroll system' },
+  // DPDP worked controls
+  { id: 'EVD-44604', title: 'Breach-notification runbook — CERT-In 6h + DPDP Board', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 12 * 86400000)), capturedBy: 'priya', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: [], frameworkRefs: ['ISO 27001', 'NIST CSF'], source: 'Manual upload' },
+  { id: 'EVD-44605', title: 'KYC-store encryption & access-control config export', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 4 * 86400000 - 1800000)), capturedBy: 'CCM (auto)', auto: true, linkedControls: ['CTRL-COMP-SEC-01'], linkedObligations: [], frameworkRefs: ['ISO 27001'], source: 'AWS Security Hub' },
+  { id: 'EVD-44606', title: 'Consent ledger reconciliation — Q1 FY2026-27', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 9 * 86400000)), capturedBy: 'anjali', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: ['OBL-DPDP-JUN26-01'], frameworkRefs: [], source: 'Consent & Privacy platform' },
+]
+evidence.push(...CURATED_EVIDENCE)
 
 // ── cross-linking pass ──────────────────────────────────────────────────────
 function crossLink() {
@@ -1188,7 +1223,7 @@ function linkSources() {
       // Professional tax → the state PT Act (not the EPF Act — corrects the
       // earlier mislink); PF/ESI → the EPF & MP Act provisions.
       refs = /professional tax|profession/.test(t)
-        ? ['SRC-PT-3', 'SRC-PT-6']
+        ? ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
         : ['SRC-EPF-6', 'SRC-EPF-14B', 'SRC-EPF-7Q']
     } else {
       refs = [sourceForRegulator(o.regulator)]
@@ -1226,13 +1261,17 @@ function linkSources() {
     p.sourceRefs = uniq(byCat[p.category] ?? ['SRC-ISO-37301'])
   }
 
-  // Controls: each framework mapping carries the standard it satisfies.
+  // Controls: each framework mapping carries the standard it satisfies. Where a
+  // control maps to frameworks, derive its sourceRefs from them; where it has no
+  // framework mapping (e.g. a state-tax control), keep the seed-provided sourceRefs
+  // so the source→control link to its clauses survives.
   for (const c of controls) {
     c.mappedFrameworkRefs = c.mappedFrameworkRefs.map((m) => ({
       ...m,
       sourceRef: sourceForFramework(m.framework),
     }))
-    c.sourceRefs = uniq(c.mappedFrameworkRefs.map((m) => m.sourceRef!))
+    const derived = uniq(c.mappedFrameworkRefs.map((m) => m.sourceRef!).filter(Boolean))
+    if (derived.length) c.sourceRefs = derived
   }
 }
 linkSources()

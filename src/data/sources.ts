@@ -1234,7 +1234,11 @@ export const SOURCES: SourceProvision[] = [
     sourceExtract:
       'The tax payable under this Act by any person earning a salary or wage shall be deducted by his employer from the salary or wage payable to such person, before such salary or wage is paid to him, and such employer shall, irrespective of whether such deduction has been made or not, be liable to pay tax on behalf of all such persons.',
     aiRecommendation: ai('Save to a new profession-tax deduction & remittance control owned by the Labour team (Farhan).', 92.7, 'Section 4 places the deduct-and-pay duty squarely on SPF as employer.', t(2026, 6, 9, 9, 26)),
-    status: 'Recommended',
+    status: 'Saved',
+    linkedControlId: 'CTRL-COMP-PT-01',
+    reviewer: 'farhan',
+    reviewedAt: t(2026, 6, 12, 15, 40),
+    rationale: 'Applicable; saved to the profession-tax deduction, remittance & return control (CTRL-COMP-PT-01).',
   }),
   prov({
     id: 'SRC-PT-5',

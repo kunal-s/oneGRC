@@ -44,9 +44,9 @@ export function EvidenceVault() {
       render: (e) => {
         const Icon = TYPE_ICON[e.type]
         return (
-          <span className="inline-flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate text-sm text-foreground">{e.title}</span>
+            <span className="min-w-0 truncate text-sm text-foreground">{e.title}</span>
           </span>
         )
       },
@@ -67,7 +67,7 @@ export function EvidenceVault() {
           </span>
         ),
     },
-    { key: 'source', header: 'Source', sortValue: (e) => e.source, render: (e) => <span className="text-xs text-muted-foreground">{e.source}</span> },
+    { key: 'source', header: 'Source', className: 'max-w-[160px]', sortValue: (e) => e.source, render: (e) => <span className="block truncate text-xs text-muted-foreground" title={e.source}>{e.source}</span> },
     {
       key: 'capturedAt',
       header: 'Captured',
