@@ -29,6 +29,7 @@ export function SourceSectionDetail() {
   const engageSpecialist = useApp((s) => s.engageSpecialist)
   const completeSpecialist = useApp((s) => s.completeSpecialist)
   const pushToast = useApp((s) => s.pushToast)
+  const setCopilotOpen = useApp((s) => s.setCopilotOpen)
   const [saving, setSaving] = React.useState(false)
 
   if (!base) return <ComingSoon title="Clause not found" />
@@ -57,6 +58,9 @@ export function SourceSectionDetail() {
           <div className="flex items-center gap-2">
             {p.severity && <SeverityBadge severity={p.severity} />}
             {p.status && <StatusChip status={p.status} tone={statusTone(p.status)} />}
+            <Button variant="outline" size="sm" onClick={() => setCopilotOpen(true)} title="Ask the OneGRC Copilot to clarify this clause">
+              <Sparkles className="size-4 text-info" /> Ask Copilot
+            </Button>
           </div>
         }
       />
