@@ -169,9 +169,9 @@ export const INTEGRATIONS: IntegrationRow[] = [
   { name: 'CrowdStrike EDR', detail: 'Endpoint detection', status: 'Live', syncMins: 3 },
   { name: 'Okta / AD', detail: 'Identity & access', status: 'Synced', syncMins: 12 },
   { name: 'AWS Security Hub', detail: 'CCM cloud feed', status: 'Live', syncMins: 8 },
-  { name: 'OneTrust', detail: 'DPDP / consent & discovery', status: 'Synced', syncMins: 37 },
-  { name: 'TeamLease RegTech', detail: 'Obligation engine', status: 'Synced', syncMins: 64 },
-  { name: 'Lexplosion Komrisk', detail: 'Regulatory change feed', status: 'Synced', syncMins: 88 },
+  { name: 'Consent & Privacy platform', detail: 'DPDP / consent & discovery', status: 'Synced', syncMins: 37 },
+  { name: 'Regulatory Intelligence feed', detail: 'Obligation engine', status: 'Synced', syncMins: 64 },
+  { name: 'Statutory Update service', detail: 'Regulatory change feed', status: 'Synced', syncMins: 88 },
   { name: 'ClearTax / IRIS GST', detail: 'GST filing', status: 'Connected', syncMins: 126 },
   { name: 'NPS Trust + CRA', detail: 'Protean / KFintech', status: 'Synced', syncMins: 19 },
 ]
@@ -240,7 +240,7 @@ export function buildAuditLog(): AuditLogRow[] {
     { actor: 'vikram', action: 'Finalised board minutes', object: WORLD.obligations.find((o) => o.regulator === 'Companies Act')?.id ?? overdueObl, detail: 'Q1 board meeting' },
     { actor: 'sanjay', action: 'Flagged exposure breach', object: WORLD.risks.find((r) => r.domain === 'Investment')?.id ?? WORLD.risks[2].id, detail: 'Single-issuer concentration' },
     { actor: 'meera', action: 'Exported board pack', object: 'INC-2026-0411', detail: 'Board risk & compliance pack' },
-    { actor: 'priya', action: 'Reconciled consent ledger', object: WORLD.dataAssets[0].id, detail: 'OneTrust discovery sync' },
+    { actor: 'priya', action: 'Reconciled consent ledger', object: WORLD.dataAssets[0].id, detail: 'Consent & Privacy discovery sync' },
     { actor: 'rohan', action: 'Closed issue', object: WORLD.issues[2].id, detail: 'Config drift remediated' },
   ]
 

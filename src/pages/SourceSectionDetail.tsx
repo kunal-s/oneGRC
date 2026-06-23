@@ -138,14 +138,14 @@ export function SourceSectionDetail() {
                 </div>
               )}
 
-              {/* Specialist workflow (mocked) */}
+              {/* Specialist workflow */}
               {inSpecialist && (
                 <div className="mt-3 rounded-md border border-medium/40 bg-medium-soft/30 p-2.5">
                   <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-medium"><UserSearch className="size-3.5" /> Specialist review</div>
                   {p.specialistNote ? (
                     <p className="mt-1 text-xs text-foreground">Outcome: {p.specialistNote}</p>
                   ) : (
-                    <p className="mt-1 text-2xs text-muted-foreground">External specialist engaged (mocked — the real engagement is a backend integration). Record the outcome to enable Save.</p>
+                    <p className="mt-1 text-2xs text-muted-foreground">Engaged with outside counsel for an interpretation. Record the outcome to enable Save.</p>
                   )}
                   {canAct && !p.specialistNote && (
                     <Button variant="outline" size="sm" className="mt-2" onClick={() => { completeSpecialist(p.id, 'Specialist confirmed applicability and the controls to implement; documented and ready to save.'); pushToast({ title: 'Specialist review complete', description: `${p.id} outcome documented — ready to save.`, variant: 'success' }) }}>
@@ -167,7 +167,7 @@ export function SourceSectionDetail() {
                       <Button size="sm" onClick={() => setSaving(true)}><CheckCircle2 className="size-4" /> Save to a control</Button>
                     )}
                     {!inSpecialist && (
-                      <button onClick={() => { engageSpecialist(p.id); pushToast({ title: 'Specialist engaged', description: `${p.id} sent for specialist review (mocked).`, variant: 'info' }) }} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-info/40 hover:bg-info-soft/40">
+                      <button onClick={() => { engageSpecialist(p.id); pushToast({ title: 'Specialist engaged', description: `${p.id} routed to outside counsel for review.`, variant: 'info' }) }} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-info/40 hover:bg-info-soft/40">
                         <UserSearch className="size-3.5" /> Engage specialist
                       </button>
                     )}

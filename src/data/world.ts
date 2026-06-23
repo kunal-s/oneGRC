@@ -750,7 +750,7 @@ function buildEvidence(controls: Control[], obligations: Obligation[]): Evidence
   const r = new Rand(600)
   const ev: Evidence[] = []
   const types: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attestation', 'Filing ack']
-  const sources = ['AWS Security Hub', 'Splunk SIEM', 'Qualys VM', 'CrowdStrike EDR', 'Okta/AD', 'Sankalp ServiceDesk', 'OneTrust', 'ClearTax']
+  const sources = ['AWS Security Hub', 'Splunk SIEM', 'Qualys VM', 'CrowdStrike EDR', 'Okta/AD', 'Sankalp ServiceDesk', 'Consent & Privacy platform', 'ClearTax']
   for (let i = 0; i < 600; i++) {
     const id = `EVD-${44000 + i}`
     const auto = i < 420 // 70%
@@ -856,14 +856,14 @@ function buildRegChanges(): RegulatoryChange[] {
   const r = new Rand(90)
   const changes: RegulatoryChange[] = []
   const feed: { summary: string; reg: Regulator; src: RegulatoryChange['source']; detail: string }[] = [
-    { summary: 'GSTR-3B table 4 ITC reporting format revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'CBIC notification revises the GSTR-3B Table 4 auto-population and ITC reversal disclosure. The monthly GSTR-3B obligation template and the reconciliation control are auto-updated; owner Deepa Iyer alerted.' },
+    { summary: 'GSTR-3B table 4 ITC reporting format revised', reg: 'GST', src: 'Regulatory Intelligence feed', detail: 'CBIC notification revises the GSTR-3B Table 4 auto-population and ITC reversal disclosure. The monthly GSTR-3B obligation template and the reconciliation control are auto-updated; owner Deepa Iyer alerted.' },
     { summary: 'PFRDA revises scheme-wise exposure caps for Scheme E', reg: 'PFRDA', src: 'PFRDA circular', detail: 'PFRDA circular tightens single-issuer and sectoral exposure caps for Scheme E. The exposure-limit monitoring control and the quarterly investment return obligation are auto-updated; owners Arvind Patel and Sanjay Verma alerted.' },
-    { summary: 'CERT-In reiterates 6-hour reporting & log retention', reg: 'CERT-In', src: 'Lexplosion Komrisk', detail: 'Advisory reiterates Direction 20(3)/2022 — 6-hour incident reporting, 180-day in-India log retention and NTP synchronization.' },
-    { summary: 'DPDP Rules 2025 notify consent-manager obligations', reg: 'DPDP', src: 'Lexplosion Komrisk', detail: 'DPDP Rules 2025 operationalize consent-manager registration and breach intimation timelines.' },
-    { summary: 'Companies Act — CSR disclosure amendment', reg: 'Companies Act', src: 'TeamLease RegTech', detail: 'MCA amends CSR reporting in the board report.' },
-    { summary: 'Labour codes — wage definition clarification', reg: 'Labour', src: 'TeamLease RegTech', detail: 'Clarification on wage definition impacting PF contribution computation.' },
+    { summary: 'CERT-In reiterates 6-hour reporting & log retention', reg: 'CERT-In', src: 'Regulatory Intelligence feed', detail: 'Advisory reiterates Direction 20(3)/2022 — 6-hour incident reporting, 180-day in-India log retention and NTP synchronization.' },
+    { summary: 'DPDP Rules 2025 notify consent-manager obligations', reg: 'DPDP', src: 'Regulatory Intelligence feed', detail: 'DPDP Rules 2025 operationalize consent-manager registration and breach intimation timelines.' },
+    { summary: 'Companies Act — CSR disclosure amendment', reg: 'Companies Act', src: 'Regulatory Intelligence feed', detail: 'MCA amends CSR reporting in the board report.' },
+    { summary: 'Labour codes — wage definition clarification', reg: 'Labour', src: 'Regulatory Intelligence feed', detail: 'Clarification on wage definition impacting PF contribution computation.' },
     { summary: 'PFRDA committee cadence guidance updated', reg: 'PFRDA', src: 'PFRDA circular', detail: 'Guidance on Risk, Audit, Investment and NRC committee frequency and minute-keeping.' },
-    { summary: 'GST e-invoicing threshold revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'e-invoicing applicability threshold revised.' },
+    { summary: 'GST e-invoicing threshold revised', reg: 'GST', src: 'Regulatory Intelligence feed', detail: 'e-invoicing applicability threshold revised.' },
   ]
   const statuses: RegulatoryChange['status'][] = ['Assessed', 'In progress', 'Closed']
   for (let i = 0; i < 90; i++) {
@@ -1248,7 +1248,7 @@ function buildActivity(): ActivityItem[] {
   push(14, 'evidence', 'CCM (auto)', 'Evidence EVD-44192 auto-captured (EDR detection export) and linked to INC-2026-0411', 'EVD-44192', '/incidents/INC-2026-0411')
   push(23, 'incident', 'Neha Joshi', 'Incident INC-2026-0411 escalated to Critical — three regulator clocks started', 'INC-2026-0411', '/incidents/INC-2026-0411')
   push(41, 'evidence', 'CCM (auto)', 'Config baseline export auto-captured for 12 controls (AWS Security Hub feed)', 'EVD-44380', '/evidence')
-  push(58, 'reg-change', 'TeamLease RegTech', 'Regulatory change RCM-2026-118 ingested — GSTR-3B Table 4 format revised; obligation + control auto-updated', 'RCM-2026-118', '/reg-change/RCM-2026-118')
+  push(58, 'reg-change', 'Regulatory Intelligence feed', 'Regulatory change RCM-2026-118 ingested — GSTR-3B Table 4 format revised; obligation + control auto-updated', 'RCM-2026-118', '/reg-change/RCM-2026-118')
   push(72, 'dsar', 'Priya Sharma', 'DSAR-2026-0047 raised — erasure request placed on hold pending PFRDA retention rule', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047')
   push(96, 'approval', 'Anjali Deshmukh', 'Approved (maker-checker) quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations')
   push(118, 'obligation', 'Deepa Iyer', 'GSTR-3B monthly return moved to "In review" after reg-change impact assessment', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations')

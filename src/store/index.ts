@@ -114,9 +114,9 @@ interface AppState {
   saveClauseToControl: (provisionId: string, controlId: string) => void
   // Create a new control from a clause and save the clause to it. Returns the id.
   createControlForClause: (provisionId: string, c: { title: string; owner: string; frequency: string; nextDue?: string; description?: string }) => string
-  // Engage a specialist (mocked workflow) for an unclear clause.
+  // Route an unclear clause to an external specialist for an interpretation.
   engageSpecialist: (provisionId: string) => void
-  // Record the specialist's outcome so Save is enabled (mocked).
+  // Record the specialist's outcome so Save is enabled.
   completeSpecialist: (provisionId: string, note: string) => void
   // Officer override of applicability (applicable / not applicable).
   setClauseApplicability: (provisionId: string, applicable: boolean, basis?: string) => void

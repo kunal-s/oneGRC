@@ -14,7 +14,7 @@ import { useApp } from '@/store'
 import { useEffectiveRegChanges } from '@/lib/effective'
 import type { RegulatoryChange } from '@/types'
 
-const SOURCES = ['TeamLease RegTech', 'Lexplosion Komrisk', 'PFRDA circular']
+const SOURCES = ['Regulatory Intelligence feed', 'PFRDA circular']
 
 export function RegChange() {
   const navigate = useNavigate()
@@ -101,7 +101,7 @@ export function RegChange() {
             {inGroup(METRICS.regUpdates2025)} updates captured in 2025
           </div>
           <div className="text-2xs text-muted-foreground">
-            Provenance: TeamLease RegTech · Lexplosion Komrisk · PFRDA circulars — native Indian statutory coverage
+            Provenance: Regulatory Intelligence feed · PFRDA circulars — native Indian statutory coverage
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs">

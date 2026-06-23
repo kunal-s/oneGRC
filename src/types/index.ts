@@ -46,8 +46,8 @@ export type SourceChannel =
 
 export type InstrumentStatus = 'In force' | 'Superseded' | 'Draft' | 'Repealed'
 
-// The session-held artifact behind an instrument (a future repository slots
-// behind this). file pickers are mocked (A10) — "replace with newer version"
+// The session-held artifact behind an instrument (a document repository slots
+// behind this) — e.g. "replace with newer version".
 // is a toast.
 export interface AttachedDocument {
   filename: string // 'PFRDA-MC-Investment-Guidelines-10Dec2025.pdf'
@@ -138,7 +138,7 @@ export interface SourceProvision {
   reviewer?: string // person id (Compliance / Company Secretary) who acted
   reviewedAt?: string // ISO
   rationale?: string // the reviewer's reason
-  specialistNote?: string // mocked specialist outcome (what to implement), set on completion
+  specialistNote?: string // specialist outcome (what to implement), set on completion
   linkedControlId?: string // the control this clause is saved to (Save → Control Library)
 }
 
@@ -244,7 +244,7 @@ export interface Incident {
   title: string
   classification: Severity
   detectedAt: string // ISO
-  source: 'Sankalp ServiceDesk (ITSM)' | 'Splunk SIEM' | 'CrowdStrike EDR' | 'Qualys VM' | 'OneTrust'
+  source: 'Sankalp ServiceDesk (ITSM)' | 'Splunk SIEM' | 'CrowdStrike EDR' | 'Qualys VM' | 'Consent & Privacy platform'
   assets: string[]
   owner: string
   status: 'Open' | 'Contained' | 'Eradicated' | 'Closed'
@@ -320,7 +320,7 @@ export interface Audit {
 
 export interface RegulatoryChange {
   id: string
-  source: 'TeamLease RegTech' | 'Lexplosion Komrisk' | 'PFRDA circular'
+  source: 'Regulatory Intelligence feed' | 'PFRDA circular'
   summary: string
   regulator: Regulator
   publishedAt: string

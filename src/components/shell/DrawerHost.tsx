@@ -235,7 +235,7 @@ export function DrawerHost() {
         <Field label="Personal data categories" value="PRAN, KYC, nominee, bank details" />
         <Field label="Est. principals affected" value="Under assessment — CRA segment" />
         <Field label="Intimation window" value="~72 hours (DPDP Rules 2025)" />
-        <Field label="Consent / spoke" value="OneTrust DPDP spoke — affected-principal list pending" />
+        <Field label="Consent / spoke" value="Consent & Privacy spoke — affected-principal list pending" />
       </div>
     </div>
   )

@@ -80,7 +80,7 @@ export function CopilotPanel() {
           <Sparkles className="size-4 text-info" /> OneGRC Copilot
         </span>
       }
-      subtitle="Grounded in this record's linked data and cited sources — no external model"
+      subtitle="Grounded in this record's linked data and cited sources"
       footer={
         <div className="flex w-full items-center gap-2">
           <input
@@ -183,10 +183,10 @@ export function CopilotPanel() {
         <div className="border-t border-border pt-3">
           <div className="mb-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
             <FileText className="size-3.5" /> Generated artifacts
-            <span className="ml-auto font-normal normal-case">{artifacts.length} this session</span>
+            <span className="ml-auto font-normal normal-case">{artifacts.length} generated</span>
           </div>
           {artifacts.length === 0 ? (
-            <p className="text-2xs text-muted-foreground">Reports and audit records you generate this session appear here.</p>
+            <p className="text-2xs text-muted-foreground">Generated reports and audit records appear here.</p>
           ) : (
             <div className="space-y-1">
               {[...artifacts].reverse().map((a) => {

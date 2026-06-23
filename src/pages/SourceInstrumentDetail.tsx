@@ -132,7 +132,7 @@ export function SourceInstrumentDetail() {
         </div>
 
         {/* Detail: reading pane for the selected clause */}
-        {selected ? <ClauseReader key={selected.id} clause={selected} canAct={canAct} onSave={() => setSaving(selected)} onSpecialist={() => { engageSpecialist(selected.id); pushToast({ title: 'Specialist engaged', description: `${selected.id} sent for specialist review (mocked - pending backend).`, variant: 'info' }) }} /> : null}
+        {selected ? <ClauseReader key={selected.id} clause={selected} canAct={canAct} onSave={() => setSaving(selected)} onSpecialist={() => { engageSpecialist(selected.id); pushToast({ title: 'Specialist engaged', description: `${selected.id} routed to outside counsel for review.`, variant: 'info' }) }} /> : null}
       </div>
 
       {saving && <SaveClauseChooser clause={saving} onClose={() => setSaving(null)} />}
