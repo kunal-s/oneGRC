@@ -9,6 +9,7 @@ import { KpiTile } from '@/components/KpiTile'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { WORLD, MARQUEE } from '@/data'
+import { useEffectiveDsars } from '@/lib/effective'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { inGroup, maskPran } from '@/lib/format'
 import { useApp } from '@/store'
@@ -28,7 +29,7 @@ export function Dpdp() {
   const pushToast = useApp((s) => s.pushToast)
 
   const assets = WORLD.dataAssets
-  const dsars = WORLD.dsars
+  const dsars = useEffectiveDsars()
   const openDsars = dsars.filter((d) => d.status !== 'Fulfilled')
   const totalRecords = assets.reduce((s, a) => s + a.records, 0)
   const consent = {

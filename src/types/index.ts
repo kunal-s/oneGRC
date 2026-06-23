@@ -351,6 +351,7 @@ export interface Dsar {
   status: 'Open' | 'In review' | 'Fulfilled' | 'On hold'
   owner: string
   note: string
+  step: number // completed steps in the locate→retain→erase→log→audit workflow (5.9)
 }
 
 export interface ActivityItem {

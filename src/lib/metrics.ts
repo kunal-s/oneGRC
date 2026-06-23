@@ -1,7 +1,7 @@
 import { useApp } from '@/store'
-import { WORLD, METRICS } from '@/data'
+import { WORLD, METRICS, getIssue } from '@/data'
 import type { Obligation, Control, Issue, Incident } from '@/types'
-import { effectiveObligation, effectiveControl, effectiveIncident, effectiveFinding } from './effective'
+import { effectiveObligation, effectiveControl, effectiveIncident, effectiveIssue, effectiveFinding } from './effective'
 
 /**
  * Headline metrics recomputed from effective (seed + override) state, so a session
@@ -21,6 +21,10 @@ export interface EffectiveMetrics {
   overdueObligations: number
   dueSoonObligations: number
   openFindings: number
+  failingControls: number
+  avgRemediationDays: number
+  avgFindingAgeDays: number
+  oldestFindingDays: number
   aumCrore: number
   subscribers: number
   regUpdates2025: number
@@ -63,6 +67,25 @@ export function effectiveMetrics(maps: {
     .flatMap((a) => a.findings)
     .filter((f) => effectiveFinding(f, maps.issueOverrides).status !== 'Closed').length
 
+  const failingControls = controls.filter((c) => c.result === 'Fail').length
+
+  // Inspection-readiness ageing (Req 14). Time-to-remediate is read as the mean
+  // age of issues still open; findings age as the mean age of the remediation
+  // issues behind findings still open. Resolving issues retires the oldest open
+  // work, so both numbers improve as the session acts — and equal the seed at rest.
+  const openIssues = WORLD.issues
+    .map((i) => effectiveIssue(i, maps.issueOverrides[i.id]))
+    .filter((i) => i.status !== 'Resolved')
+  const avgRemediationDays = mean(openIssues.map((i) => i.ageDays))
+
+  const openFindingIssueAges = WORLD.audits
+    .flatMap((a) => a.findings)
+    .filter((f) => f.linkedIssue && effectiveFinding(f, maps.issueOverrides).status !== 'Closed')
+    .map((f) => getIssue(f.linkedIssue!)?.ageDays)
+    .filter((n): n is number => typeof n === 'number')
+  const avgFindingAgeDays = mean(openFindingIssueAges)
+  const oldestFindingDays = openFindingIssueAges.length ? Math.max(...openFindingIssueAges) : 0
+
   return {
     enterpriseRisk: METRICS.enterpriseRisk,
     enterpriseRiskTrend: METRICS.enterpriseRiskTrend,
@@ -73,10 +96,20 @@ export function effectiveMetrics(maps: {
     overdueObligations,
     dueSoonObligations,
     openFindings,
+    failingControls,
+    avgRemediationDays,
+    avgFindingAgeDays,
+    oldestFindingDays,
     aumCrore: METRICS.aumCrore,
     subscribers: METRICS.subscribers,
     regUpdates2025: METRICS.regUpdates2025,
   }
+}
+
+/** Mean of a numeric list, rounded to one decimal; 0 for an empty list. */
+function mean(xs: number[]): number {
+  if (!xs.length) return 0
+  return Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10
 }
 
 /** Reactive effective metrics for cockpit / strips. */

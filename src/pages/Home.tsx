@@ -1,7 +1,10 @@
+import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Gauge, ShieldCheck, Siren, Timer, CalendarX2, FileSearch, Download } from 'lucide-react'
+import { Gauge, ShieldCheck, Siren, Timer, CalendarX2, FileSearch, Download, ShieldX, Wrench, Hourglass, Users, ArrowUpRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { KpiTile } from '@/components/KpiTile'
 import { RegulatorClockInline } from '@/components/RegulatorClock'
+import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { HeatMap } from './home/HeatMap'
 import { NeedsAttention } from './home/NeedsAttention'
@@ -9,11 +12,12 @@ import { ActivityStream } from './home/ActivityStream'
 import { TrendCharts } from './home/TrendCharts'
 import { nearestTrack } from '@/lib/clocks'
 import { pct } from '@/lib/format'
-import { fmtIST, NOW } from '@/lib/time'
+import { fmtIST, fmtDate, fmtRelative, NOW } from '@/lib/time'
 import { controlPassRateTrend, openIncidentsTrend } from '@/lib/trends'
 import { useApp } from '@/store'
 import { useEffectiveMetrics } from '@/lib/metrics'
-import { PEOPLE_BY_ID } from '@/data/people'
+import { PEOPLE_BY_ID, personName } from '@/data/people'
+import { committeesByNextMeeting, committeeDates } from '@/data/committees'
 import {
   RiskManagerDashboard,
   ComplianceManagerDashboard,
@@ -47,10 +51,18 @@ export function Home() {
 function ExecutiveDashboard() {
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
+  const addArtifact = useApp((s) => s.addArtifact)
   const selfId = useApp((s) => s.currentPersonId)()
   const M = useEffectiveMetrics()
   const nearest = nearestTrack()
   const first = PEOPLE_BY_ID[selfId]?.name.split(' ')[0] ?? 'Meera'
+
+  // The board pack is a view of live posture exported on demand (spec 5.8): record
+  // a session artifact, then open the export preview. No document assembled offline.
+  const exportBoardPack = () => {
+    addArtifact({ kind: 'report', title: 'Board risk & compliance pack', createdAt: NOW.toISOString(), payload: { module: 'Compliance', filename: 'GRC-One-Board-Pack-Jun-2026.pdf' } })
+    openDrawer({ kind: 'export-pdf', title: 'Board risk & compliance pack', payload: { filename: 'GRC-One-Board-Pack-Jun-2026.pdf' } })
+  }
 
   return (
     <div className="space-y-5">
@@ -68,9 +80,7 @@ function ExecutiveDashboard() {
               variant="outline"
               size="sm"
               className="border-white/25 bg-white/10 text-white hover:bg-white/20"
-              onClick={() =>
-                openDrawer({ kind: 'export-pdf', title: 'Board risk & compliance pack', payload: { filename: 'GRC-One-Board-Pack-Jun-2026.pdf' } })
-              }
+              onClick={exportBoardPack}
             >
               <Download className="size-4" />
               Export board pack
@@ -90,6 +100,63 @@ function ExecutiveDashboard() {
         <KpiTile label="Open findings" value={M.openFindings} icon={<FileSearch className="size-3.5" />} tone="warn" sub="Across 18 audits" onClick={() => navigate('/audits')} />
       </div>
 
+      {/* Inspection readiness — the drillable "are we in control" band (Req 14) */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <div className="card-surface p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-foreground">Inspection readiness</h2>
+            <button onClick={() => navigate('/pfrda')} className="inline-flex items-center gap-1 text-2xs font-medium text-info hover:underline">
+              Open PFRDA pack <ArrowUpRight className="size-3" />
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            <ReadinessTile icon={<ShieldCheck className="size-3.5 text-ok" />} label="Control coverage" value={pct(M.controlCoverage)} sub="pass or partial" onClick={() => navigate('/controls')} />
+            <ReadinessTile icon={<ShieldX className="size-3.5 text-critical" />} label="Failing controls" value={M.failingControls} sub="need re-test" tone={M.failingControls ? 'danger' : 'ok'} onClick={() => navigate('/controls')} />
+            <ReadinessTile icon={<CalendarX2 className="size-3.5 text-medium" />} label="Overdue obligations" value={M.overdueObligations} sub={`${M.dueSoonObligations} due soon`} tone={M.overdueObligations ? 'warn' : 'ok'} onClick={() => navigate('/obligations')} />
+            <ReadinessTile icon={<FileSearch className="size-3.5 text-medium" />} label="Open findings" value={M.openFindings} sub={`avg ${M.avgFindingAgeDays}d old`} tone="warn" onClick={() => navigate('/audits')} />
+            <ReadinessTile icon={<Wrench className="size-3.5 text-info" />} label="Time to remediate" value={`${M.avgRemediationDays}d`} sub="avg age, open issues" onClick={() => navigate('/issues')} />
+            <ReadinessTile icon={<Hourglass className="size-3.5 text-info" />} label="Oldest finding age" value={`${M.oldestFindingDays}d`} sub="longest open remediation" tone="warn" onClick={() => navigate('/issues')} />
+          </div>
+          <p className="mt-3 text-2xs leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">Always answerable.</span> "Are we in control?" is the current
+            state of the system — every tile drills to the live records behind it, not a number assembled for a meeting.
+          </p>
+        </div>
+
+        {/* Board & committee prep (Req 13) */}
+        <div className="card-surface p-4">
+          <div className="mb-3 flex items-center gap-1.5">
+            <Users className="size-4 text-info" />
+            <h2 className="text-sm font-semibold text-foreground">Board &amp; committee prep</h2>
+          </div>
+          <div className="space-y-1.5">
+            {committeesByNextMeeting().map((c) => {
+              const d = committeeDates(c)
+              return (
+                <button
+                  key={c.name}
+                  onClick={() => navigate('/pfrda')}
+                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40"
+                >
+                  <Avatar id={c.chair} size={22} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium text-foreground">{c.short} Committee</div>
+                    <div className="text-2xs text-muted-foreground">Chair {personName(c.chair)} · last {fmtDate(d.last)}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-2xs font-medium text-foreground">{fmtRelative(d.next)}</div>
+                    <div className="text-2xs text-muted-foreground">{fmtDate(d.next)}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={exportBoardPack}>
+            <Download className="size-4" /> Export board pack
+          </Button>
+        </div>
+      </div>
+
       {/* Heat map + needs attention */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <HeatMap />
@@ -106,6 +173,38 @@ function ExecutiveDashboard() {
         </button>
       </div>
     </div>
+  )
+}
+
+function ReadinessTile({
+  icon,
+  label,
+  value,
+  sub,
+  tone = 'neutral',
+  onClick,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: React.ReactNode
+  sub: string
+  tone?: 'neutral' | 'ok' | 'warn' | 'danger'
+  onClick?: () => void
+}) {
+  const valueTone =
+    tone === 'danger' ? 'text-critical' : tone === 'warn' ? 'text-medium' : tone === 'ok' ? 'text-ok' : 'text-foreground'
+  return (
+    <button
+      onClick={onClick}
+      className="group rounded-lg border border-border bg-background p-2.5 text-left transition-colors hover:border-info/40 hover:bg-info-soft/40"
+    >
+      <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div className={cn('mt-1 text-xl font-semibold tnum', valueTone)}>{value}</div>
+      <div className="text-2xs text-muted-foreground">{sub}</div>
+    </button>
   )
 }
 

@@ -3,7 +3,8 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit } from '@/data'
+import { getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, MARQUEE } from '@/data'
+import { dsarTotalSteps } from '@/lib/dsar'
 import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
 
@@ -167,6 +168,10 @@ interface AppState {
   resolveIssue: (id: string) => void
   bulkSetIssueStatus: (ids: string[], status: Issue['status']) => void
   closeFinding: (auditId: string, findingId: string) => void
+
+  // ── DSAR erasure-vs-retention workflow (Epic 4.2) ───────────────────────────
+  advanceDsar: (id: string) => void
+  flagDsarBreach: (id: string) => void
 }
 
 let toastSeq = 0
@@ -401,5 +406,38 @@ export const useApp = create<AppState>((set, get) => ({
     if (f.linkedIssue) get().patchIssue(f.linkedIssue, { status: 'Resolved' })
     get().recordAction({ action: `Closed audit finding ${findingId}`, entityId: auditId, route: `/audits/${auditId}`, detail: f.title })
     get().notify({ title: 'Audit finding closed', body: `${findingId} - ${f.title}${f.linkedIssue ? ` · remediation ${f.linkedIssue} resolved` : ''}.`, severity: 'info', entityId: auditId, route: `/audits/${auditId}` })
+  },
+
+  // ── DSAR erasure-vs-retention workflow (Epic 4.2) ───────────────────────────
+  // Walks the 5-step locate→retain→erase→log→audit sequence one stage at a time.
+  // The final stage marks the request Fulfilled and generates an immutable
+  // ATR-DSAR-* audit record (a session artifact) — the provable handling the DPDP
+  // Board and internal audit can inspect. Session-override only; seed intact.
+  advanceDsar: (id) => {
+    const base = getDsar(id)
+    if (!base) return
+    const cur = { ...base, ...(get().dsarOverrides[id] ?? {}) }
+    const total = dsarTotalSteps(cur.type)
+    if (cur.step >= total) return
+    const next = cur.step + 1
+    const isFinal = next >= total
+    get().patchDsar(id, isFinal ? { step: next, status: 'Fulfilled' } : { step: next, status: 'In review' })
+    if (isFinal) {
+      const atr = `ATR-${id}`
+      get().addArtifact({ kind: 'report', title: `DSAR audit record ${atr}`, createdAt: NOW.toISOString(), payload: { dsarId: id, kind: 'dsar-audit-record' } })
+      get().recordAction({ action: `Generated DSAR audit record ${atr}`, entityId: id, route: `/dpdp/dsar/${id}`, detail: `${cur.type} request fulfilled; immutable audit record written.` })
+      get().notify({ title: 'DSAR fulfilled', body: `${id} - ${cur.type} request closed; audit record ${atr} generated.`, severity: 'info', entityId: id, route: `/dpdp/dsar/${id}` })
+    } else {
+      get().recordAction({ action: `Advanced DSAR ${id} to step ${next}/${total}`, entityId: id, route: `/dpdp/dsar/${id}`, detail: cur.note })
+    }
+  },
+
+  // A personal-data breach surfaced while handling a request feeds the same
+  // incident workflow (DPDP breach intimation) — routed to the live incident.
+  flagDsarBreach: (id) => {
+    const base = getDsar(id)
+    if (!base) return
+    get().recordAction({ action: `Flagged personal-data breach from ${id}`, entityId: MARQUEE.id, route: `/incidents/${MARQUEE.id}`, detail: `Routed to incident ${MARQUEE.id} for DPDP Board breach intimation.` })
+    get().notify({ title: 'Breach routed to incident workflow', body: `${id} - personal-data breach escalated to ${MARQUEE.id}; DPDP Board 72-hour intimation track engaged.`, severity: 'warn', entityId: MARQUEE.id, route: `/incidents/${MARQUEE.id}` })
   },
 }))

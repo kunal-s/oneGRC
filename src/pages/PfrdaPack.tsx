@@ -12,13 +12,7 @@ import { personName } from '@/data/people'
 import { fmtDate, fmtRelative, daysFromNow } from '@/lib/time'
 import { inCrore, inGroup } from '@/lib/format'
 import { useApp } from '@/store'
-
-const COMMITTEES = [
-  { name: 'Investment Committee', cadence: 'Quarterly + monthly review', chair: 'arvind', lastDays: -22, nextDays: 68 },
-  { name: 'Risk Management Committee', cadence: 'Quarterly', chair: 'meera', lastDays: -35, nextDays: 55 },
-  { name: 'Audit Committee', cadence: 'Quarterly', chair: 'sunita', lastDays: -14, nextDays: 76 },
-  { name: 'Nomination & Remuneration Committee', cadence: 'Half-yearly', chair: 'vikram', lastDays: -88, nextDays: 92 },
-]
+import { COMMITTEES } from '@/data/committees'
 
 const TEMPLATES = [
   'PFRDA Quarterly Compliance Return (Annexure)',

@@ -1,4 +1,5 @@
 import { useApp } from '@/store'
+import { NOW } from '@/lib/time'
 import type { RoleKey } from '@/types'
 
 export type ReportModule =
@@ -71,7 +72,7 @@ export function useGenerateReport(): (t: ReportTemplate) => void {
   const addArtifact = useApp((s) => s.addArtifact)
   const openDrawer = useApp((s) => s.openDrawer)
   return (t) => {
-    addArtifact({ kind: 'report', title: t.title, createdAt: new Date().toISOString(), payload: { templateId: t.id, module: t.module } })
+    addArtifact({ kind: 'report', title: t.title, createdAt: NOW.toISOString(), payload: { templateId: t.id, module: t.module } })
     openDrawer({ kind: 'export-pdf', title: t.title, payload: { filename: t.filename } })
   }
 }

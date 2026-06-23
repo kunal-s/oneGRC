@@ -919,16 +919,18 @@ function buildDsars(): Dsar[] {
     status: 'On hold',
     owner: 'priya',
     note: 'Subscriber requests erasure. PFRDA mandates 10-year retention of pension records — erasure withheld for statutory data; marketing/CRM consent revoked and purged. Worked erasure-vs-retention case.',
+    step: 4, // located, retention-checked, erased-what-allowed, logged — awaiting audit record + DPO sign-off
   })
   const types: Dsar['type'][] = ['Access', 'Erasure', 'Correction', 'Nomination']
   for (let i = 0; i < 13; i++) {
+    const status = r.weighted<Dsar['status']>([['Open', 3], ['In review', 3], ['On hold', 1]])
     dsars.push({
       id: `DSAR-2026-00${48 + i}`,
       pran: `1100${r.int(1000, 9999)}${r.int(1000, 9999)}`,
       type: r.pick(types),
       raisedAt: iso(new Date(NOW_MS - r.int(1, 25) * 86400000)),
       dueDate: iso(new Date(NOW_MS + r.int(3, 28) * 86400000)),
-      status: r.weighted<Dsar['status']>([['Open', 3], ['In review', 3], ['On hold', 1]]),
+      status,
       owner: 'priya',
       note: r.pick([
         'Access request — compiling data inventory across CRA and KYC stores.',
@@ -936,6 +938,7 @@ function buildDsars(): Dsar[] {
         'Nomination update routed to CRA (Protean) interface.',
         'Access request — identity verification completed.',
       ]),
+      step: status === 'In review' ? 2 : status === 'On hold' ? 1 : 1,
     })
   }
   return dsars
