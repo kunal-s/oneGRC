@@ -102,6 +102,17 @@ export function buildRecordContext(entityId: string): RecordContext | null {
       sources: [],
     }
   }
+  if (entityId.startsWith('SRC-')) {
+    const s = getSource(entityId)
+    if (!s) return null
+    return {
+      id: s.id, type: 'Clause', title: s.nameOfCompliance ?? s.title,
+      summary: s.whatItMeans ?? s.briefDescription ?? s.provision,
+      fields: { provision: s.provision, severity: s.severity ?? '—', frequency: s.frequency ?? '—', status: s.status ?? '—', applicable: s.applicable ?? true },
+      links: s.linkedControlId ? [link(s.linkedControlId, 'Saved to control')] : [],
+      sources: [{ id: s.id, documentTitle: refDisplayTitle(s), citation: s.citation, snippet: s.sourceExtract }],
+    }
+  }
   if (entityId.startsWith('INC-')) {
     const i = getIncident(entityId)
     if (!i) return null

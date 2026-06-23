@@ -7,15 +7,16 @@ import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { fmtRelative } from '@/lib/time'
 import { buildRecordContext, type RecordContext } from '@/lib/copilot/context'
-import { mockResponder, type CopilotAnswer } from '@/lib/copilot/response'
+import { groundedResponder, type CopilotAnswer } from '@/lib/copilot/response'
 
 /** Pull a record id off the current route's last segment, if it is one we ground on. */
 function entityFromPath(pathname: string): string | null {
   const last = pathname.split('/').filter(Boolean).pop() ?? ''
-  return /^(RISK|CTRL|OBL|INC|POL)-/.test(last) ? last : null
+  return /^(RISK|CTRL|OBL|INC|POL|SRC)-/.test(last) ? last : null
 }
 
 const RECORD_ROUTE: Record<string, string> = {
+  Clause: '/sources/section',
   Risk: '/risks',
   Control: '/controls',
   Obligation: '/obligations',
@@ -24,6 +25,7 @@ const RECORD_ROUTE: Record<string, string> = {
 }
 
 const SUGGESTIONS: Record<string, string[]> = {
+  Clause: ['What does this clause require?', "What's the penalty if it's missed?", 'Which control satisfies it?'],
   Risk: ['What controls mitigate this risk?', 'Why is the residual rating what it is?', 'Has this risk been realised?'],
   Control: ['Which frameworks does this satisfy?', 'When was it last tested?', 'What does it derive from?'],
   Obligation: ['What is the source of this duty?', 'What evidence proves it?', 'When is it next due?'],
@@ -59,7 +61,7 @@ export function CopilotPanel() {
   const ask = (q: string) => {
     const question = q.trim()
     if (!question || !ctx) return
-    setTurns((t) => [...t, { q: question, a: mockResponder.ask(question, ctx) }])
+    setTurns((t) => [...t, { q: question, a: groundedResponder.ask(question, ctx) }])
     setDraft('')
   }
 
@@ -116,7 +118,7 @@ export function CopilotPanel() {
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-            Open a <span className="font-medium text-foreground">risk, control, obligation, incident or policy</span> to
+            Open a <span className="font-medium text-foreground">clause, risk, control, obligation, incident or policy</span> to
             ask grounded questions about it — every answer cites the linked records and sources it draws from.
           </div>
         )}

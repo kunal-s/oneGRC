@@ -2,6 +2,7 @@
 // One interface, deterministic mock now, real model later — screens depend only
 // on this contract, never on the implementation. No model API calls.
 import type { RecordContext } from './context'
+import { scriptedAnswer } from './scripts'
 
 export interface CopilotAnswer {
   text: string
@@ -36,5 +37,16 @@ export const mockResponder: CopilotResponder = {
       sourceIds: ctx.sources.map((s) => s.id),
       confidence: ctx.sources.length ? 'high' : 'medium',
     }
+  },
+}
+
+/**
+ * The responder the panel uses: a crafted, scripted answer for a known demo
+ * question if one matches, otherwise the grounded summary above. Both paths are
+ * deterministic and stay within the record's own context.
+ */
+export const groundedResponder: CopilotResponder = {
+  ask(question, ctx) {
+    return scriptedAnswer(ctx.id, question) ?? mockResponder.ask(question, ctx)
   },
 }
