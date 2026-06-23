@@ -3,7 +3,8 @@ import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, MARQUEE } from '@/data'
+import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, MARQUEE } from '@/data'
+import { provisionsForInstrument } from '@/lib/sources'
 import { dsarTotalSteps } from '@/lib/dsar'
 import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
@@ -134,6 +135,9 @@ interface AppState {
   dsarOverrides: Record<string, Partial<Dsar>>
   // Session-appended recurring obligation instances (Epic 2.2 schedules these).
   sessionObligations: Obligation[]
+  // Session-registered regulatory changes (a new circular / version on an Act).
+  sessionRegChanges: RegulatoryChange[]
+  addInstrumentChange: (instrumentId: string, kind: 'Circular' | 'New version', title: string) => string
 
   patchObligation: (id: string, patch: Partial<Obligation>) => void
   patchControl: (id: string, patch: Partial<Control>) => void
@@ -182,6 +186,7 @@ let artifactSeq = 0
 let sessionControlSeq = 0
 let auditSeq = 0
 let notifSeq = 0
+let regChangeSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'EXEC',
@@ -289,6 +294,44 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ dsarOverrides: { ...s.dsarOverrides, [id]: { ...s.dsarOverrides[id], ...patch } } })),
   addSessionObligation: (o) => set((s) => ({ sessionObligations: [...s.sessionObligations, o] })),
 
+  // ── Add a circular / new version to an existing Act (Item 1) ────────────────
+  // Registers a regulatory change against the instrument, flags the records its
+  // clauses produced, alerts the owner, and routes into the Reg-Change pipeline
+  // (assess → acknowledge). Session-only; never mutates the seed.
+  sessionRegChanges: [],
+  addInstrumentChange: (instrumentId, kind, title) => {
+    const inst = getInstrument(instrumentId)
+    if (!inst) return ''
+    const regulator: RegulatoryChange['regulator'] = inst.regulator ?? 'Companies Act'
+    const provs = provisionsForInstrument(instrumentId)
+    const provIds = provs.map((p) => p.id)
+    const cites = (refs?: string[]) => (refs ?? []).some((r) => provIds.includes(r))
+    const impactedObligations = WORLD.obligations.filter((o) => cites(o.sourceRefs)).map((o) => o.id).slice(0, 8)
+    // Controls connect to a clause either by sourceRefs (state-tax style) or by the
+    // clause's linkedControlId (the saved-to-control link, e.g. DPDP -> DPB/SEC).
+    const linkedCtrls = provs.map((p) => p.linkedControlId).filter((x): x is string => Boolean(x))
+    const impactedControls = Array.from(new Set([...WORLD.controls.filter((c) => cites(c.sourceRefs)).map((c) => c.id), ...linkedCtrls])).slice(0, 8)
+    const owner = getObligation(impactedObligations[0] ?? '')?.owner ?? 'anjali'
+    const id = `RCM-2026-S${String(++regChangeSeq).padStart(2, '0')}`
+    const rc: RegulatoryChange = {
+      id,
+      source: regulator === 'PFRDA' ? 'PFRDA circular' : 'Regulatory Intelligence feed',
+      summary: title,
+      regulator,
+      publishedAt: NOW.toISOString(),
+      impactedObligations,
+      impactedControls,
+      owner,
+      status: 'In progress',
+      detail: `${kind} registered against ${inst.title}. ${impactedObligations.length} obligation(s) and ${impactedControls.length} control(s) flagged for review; owner ${personName(owner)} alerted to assess and acknowledge.`,
+      instrumentId,
+    }
+    set((s) => ({ sessionRegChanges: [...s.sessionRegChanges, rc] }))
+    get().recordAction({ action: `Registered ${kind.toLowerCase()} on ${inst.title}`, entityId: id, route: `/reg-change/${id}`, detail: title })
+    get().notify({ title: `${kind} registered`, body: `${id} - ${personName(owner)} alerted; ${impactedObligations.length} obligation(s) and ${impactedControls.length} control(s) to review.`, severity: 'warn', entityId: id, route: `/reg-change/${id}` })
+    return id
+  },
+
   // ── Governance primitives (Epic 1.3) ────────────────────────────────────────
   auditLog: [],
   notifications: SEED_NOTIFICATIONS,
@@ -355,7 +398,7 @@ export const useApp = create<AppState>((set, get) => ({
 
   // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
   acknowledgeRegChange: (id) => {
-    const c = getRegChange(id)
+    const c = getRegChange(id) ?? get().sessionRegChanges.find((r) => r.id === id)
     if (!c) return
     get().patchRegChange(id, { status: 'Closed' })
     get().recordAction({ action: `Acknowledged regulatory change ${id}`, entityId: id, route: `/reg-change/${id}`, detail: c.summary })

@@ -46,8 +46,9 @@ export function useEffectiveIncident(id: string): Incident | undefined {
 
 export function useEffectiveRegChange(id: string): RegulatoryChange | undefined {
   const ov = useApp((s) => s.regChangeOverrides[id])
+  const session = useApp((s) => s.sessionRegChanges.find((r) => r.id === id))
   const base = getRegChange(id)
-  return base ? effectiveRegChange(base, ov) : undefined
+  return base ? effectiveRegChange(base, ov) : session ? effectiveRegChange(session, ov) : undefined
 }
 
 export function useEffectiveDsar(id: string): Dsar | undefined {
@@ -82,7 +83,8 @@ export function useEffectiveIncidents(): Incident[] {
 
 export function useEffectiveRegChanges(): RegulatoryChange[] {
   const ov = useApp((s) => s.regChangeOverrides)
-  return WORLD.regChanges.map((r) => effectiveRegChange(r, ov[r.id]))
+  const session = useApp((s) => s.sessionRegChanges)
+  return [...session.map((r) => effectiveRegChange(r, ov[r.id])), ...WORLD.regChanges.map((r) => effectiveRegChange(r, ov[r.id]))]
 }
 
 export function useEffectiveDsars(): Dsar[] {

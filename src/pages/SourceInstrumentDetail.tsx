@@ -1,6 +1,7 @@
+import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowUpRight, ExternalLink, History, BookOpen, Building2, ListChecks,
+  ArrowLeft, ArrowUpRight, ExternalLink, History, BookOpen, Building2, ListChecks, FilePlus2, Bell,
 } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
@@ -11,6 +12,9 @@ import { getInstrument } from '@/data'
 import { provisionsForInstrument, effectiveClause, statusTone, awaitingDecision } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveRegChanges } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
+import { cn } from '@/lib/utils'
 import type { SourceProvision } from '@/types'
 import { ComingSoon } from './ComingSoon'
 
@@ -23,8 +27,13 @@ export function SourceInstrumentDetail() {
   const navigate = useNavigate()
   const inst = id ? getInstrument(id) : undefined
   const overrides = useApp((s) => s.clauseOverrides)
+  const addInstrumentChange = useApp((s) => s.addInstrumentChange)
+  const canAdd = useCanAct({ kind: 'regchange.acknowledge' })
+  const regChanges = useEffectiveRegChanges()
+  const [adding, setAdding] = React.useState(false)
 
   const clauses = inst ? provisionsForInstrument(inst.id).map((p) => effectiveClause(p, overrides)) : []
+  const pendingChanges = inst ? regChanges.filter((r) => r.instrumentId === inst.id && r.status !== 'Closed') : []
 
   if (!inst) return <ComingSoon title="Act not found" />
 
@@ -132,12 +141,35 @@ export function SourceInstrumentDetail() {
         actions={
           <div className="flex items-center gap-2">
             <StatusChip status={inst.status} tone={inst.status === 'In force' ? 'ok' : inst.status === 'Superseded' ? 'warn' : 'neutral'} />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canAdd}
+              title={canAdd ? undefined : 'Registering a circular / new version is done by the Compliance team.'}
+              onClick={() => setAdding(true)}
+            >
+              <FilePlus2 className="size-4" /> Add circular / new version
+            </Button>
             <a href={inst.sourceLink} target="_blank" rel="noreferrer">
               <Button variant="outline" size="sm"><ExternalLink className="size-4" /> Open source</Button>
             </a>
           </div>
         }
       />
+
+      {pendingChanges.length > 0 && (
+        <button
+          onClick={() => navigate(`/reg-change/${pendingChanges[0].id}`)}
+          className="mb-4 flex w-full items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-medium-soft/70"
+        >
+          <Bell className="size-4 shrink-0 text-medium" />
+          <span className="min-w-0 flex-1 text-sm text-foreground">
+            {pendingChanges.length} update{pendingChanges.length === 1 ? '' : 's'} registered against this Act — under review
+            <span className="ml-1.5 font-mono text-2xs text-muted-foreground">{pendingChanges[0].id}</span>
+          </span>
+          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      )}
 
       {supersededBy && (
         <button onClick={() => navigate(`/sources/${supersededBy.id}`)} className="mb-4 flex w-full items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-left transition-colors hover:bg-medium-soft/70">
@@ -182,6 +214,79 @@ export function SourceInstrumentDetail() {
         initialSort={{ key: 'section', dir: 'asc' }}
         onRowClick={(c) => navigate(`/sources/section/${c.id}`)}
       />
+
+      {adding && (
+        <AddChangeModal
+          instrumentTitle={inst.title}
+          onClose={() => setAdding(false)}
+          onSubmit={(kind, title) => {
+            const rid = addInstrumentChange(inst.id, kind, title)
+            setAdding(false)
+            if (rid) navigate(`/reg-change/${rid}`)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function AddChangeModal({
+  instrumentTitle,
+  onClose,
+  onSubmit,
+}: {
+  instrumentTitle: string
+  onClose: () => void
+  onSubmit: (kind: 'Circular' | 'New version', title: string) => void
+}) {
+  const [kind, setKind] = React.useState<'Circular' | 'New version'>('Circular')
+  const [title, setTitle] = React.useState('')
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[1px] animate-fade-in" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-xl border border-border bg-background p-4 shadow-xl animate-slide-up">
+        <div className="mb-1 flex items-center gap-1.5">
+          <FilePlus2 className="size-4 text-info" />
+          <h3 className="text-sm font-semibold text-foreground">Add a circular / new version</h3>
+        </div>
+        <p className="mb-3 text-2xs text-muted-foreground">
+          Register an update to <span className="font-medium text-foreground">{instrumentTitle}</span>. It enters the Regulatory
+          Change pipeline, flags the obligations and controls this Act produced, and alerts the owner to assess and acknowledge.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Type</div>
+            <div className="flex gap-1.5">
+              {(['Circular', 'New version'] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setKind(k)}
+                  className={cn('rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors', kind === k ? 'border-info bg-info-soft text-info' : 'border-border text-muted-foreground hover:bg-muted')}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="block">
+            <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">Summary</span>
+            <input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && title.trim() && onSubmit(kind, title.trim())}
+              placeholder={kind === 'Circular' ? 'e.g. Clarification on breach-intimation timelines' : 'e.g. 2026 amendment — revised retention rule'}
+              className="mt-1 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </label>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={!title.trim()} onClick={() => onSubmit(kind, title.trim())}>
+            <FilePlus2 className="size-4" /> Register &amp; route
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

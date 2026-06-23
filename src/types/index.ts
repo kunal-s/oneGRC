@@ -329,6 +329,7 @@ export interface RegulatoryChange {
   owner: string
   status: 'Assessed' | 'In progress' | 'Closed'
   detail: string
+  instrumentId?: string // set when registered against an existing instrument (a new circular/version)
 }
 
 export interface DataAsset {
