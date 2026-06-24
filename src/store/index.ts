@@ -272,10 +272,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
   approveAgentAction: (run, action) => {
     const a = action.apply
-    if (a.op === 'saveClauseToControl') get().saveClauseToControl(a.provisionId, a.controlId)
-    else get().createControlForClause(a.provisionId, { title: a.title, owner: a.owner, frequency: a.frequency, description: a.description })
-    get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
-    get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+    if (a.op === 'saveClauseToControl') {
+      get().saveClauseToControl(a.provisionId, a.controlId)
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
+      get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+    } else if (a.op === 'createControlForClause') {
+      get().createControlForClause(a.provisionId, { title: a.title, owner: a.owner, frequency: a.frequency, description: a.description })
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
+      get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+    } else {
+      // addInstrumentChange already records its own audit + owner-alert notification.
+      const id = get().addInstrumentChange(a.instrumentId, a.kind, a.title)
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: id || a.instrumentId, route: id ? `/reg-change/${id}` : `/sources/${a.instrumentId}`, detail: `${run.agent}: ${action.detail}` })
+    }
   },
 
   artifacts: [],
@@ -425,7 +434,12 @@ export const useApp = create<AppState>((set, get) => ({
     const provs = provisionsForInstrument(instrumentId)
     const provIds = provs.map((p) => p.id)
     const cites = (refs?: string[]) => (refs ?? []).some((r) => provIds.includes(r))
-    const impactedObligations = WORLD.obligations.filter((o) => cites(o.sourceRefs)).map((o) => o.id).slice(0, 8)
+    let impactedObligations = WORLD.obligations.filter((o) => cites(o.sourceRefs)).map((o) => o.id).slice(0, 8)
+    // Fallback for a newly-arrived instrument whose clauses are not yet cited:
+    // assess impact (and the owner to alert) by the instrument's regulator.
+    if (impactedObligations.length === 0 && inst.regulator) {
+      impactedObligations = WORLD.obligations.filter((o) => o.regulator === inst.regulator).map((o) => o.id).slice(0, 8)
+    }
     // Controls connect to a clause either by sourceRefs (state-tax style) or by the
     // clause's linkedControlId (the saved-to-control link, e.g. DPDP -> DPB/SEC).
     const linkedCtrls = provs.map((p) => p.linkedControlId).filter((x): x is string => Boolean(x))

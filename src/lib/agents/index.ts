@@ -16,6 +16,7 @@ export interface AgentStep {
 export type ApplyOp =
   | { op: 'saveClauseToControl'; provisionId: string; controlId: string }
   | { op: 'createControlForClause'; provisionId: string; title: string; owner: string; frequency: string; description: string }
+  | { op: 'addInstrumentChange'; instrumentId: string; kind: 'Circular' | 'New version'; title: string }
 
 export interface ProposedAction {
   id: string
@@ -134,3 +135,43 @@ export function clauseMappingRun(provisionId: string, overrides: ClauseOverrides
 
 // The clauses showcased in the demo (Recommended, awaiting a mapping decision).
 export const MAPPING_DEMO_CLAUSES = ['SRC-PT-4', 'SRC-DPDP-33']
+
+/** Run 1 — Source scan. Detects newly-arrived instruments, assesses impact, and
+ *  proposes registering a regulatory change (which alerts the affected owner). */
+export function sourceScanRun(): AgentRunResult {
+  const detected = WORLD.instruments.filter((i) => i.status === 'Draft')
+  const impactByReg = (reg?: Regulator) => (reg ? WORLD.obligations.filter((o) => o.regulator === reg).length : 0)
+
+  const proposedActions: ProposedAction[] = detected.slice(0, 4).map((inst, i) => {
+    const impObl = impactByReg(inst.regulator)
+    const jitter = (inst.id.charCodeAt(inst.id.length - 1) % 9) / 10
+    return {
+      id: `scan-${inst.id}`,
+      label: `Register change on ${inst.id} & alert owner`,
+      detail: `${inst.title} — assessed to affect ~${impObl} ${inst.regulator ?? ''} obligation(s)`,
+      confidence: Number((Math.min(93, 70 + impObl + jitter)).toFixed(1)),
+      apply: { op: 'addInstrumentChange', instrumentId: inst.id, kind: 'Circular', title: `Newly arrived: ${inst.title}` },
+      recommended: i === 0,
+    }
+  })
+
+  return {
+    runId: 'RUN-SCAN',
+    agent: 'Source scan',
+    steps: [
+      { label: 'Scan the source library for newly-arrived / changed instruments' },
+      { label: 'Detect drafts not yet assessed' },
+      { label: 'Assess impact on existing obligations and controls' },
+    ],
+    findings: [
+      { label: 'Newly arrived', value: `${detected.length} instrument(s) flagged Draft` },
+      ...detected.slice(0, 4).map((inst) => ({
+        label: inst.regulator ?? 'Instrument',
+        value: `${inst.id} — ${inst.title}`,
+        entityId: inst.id,
+        route: `/sources/${inst.id}`,
+      })),
+    ],
+    proposedActions,
+  }
+}

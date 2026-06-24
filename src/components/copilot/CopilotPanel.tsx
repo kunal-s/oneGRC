@@ -9,7 +9,7 @@ import { useCanAct } from '@/lib/gating'
 import { fmtRelative } from '@/lib/time'
 import { buildRecordContext, type RecordContext } from '@/lib/copilot/context'
 import { groundedResponder, type CopilotAnswer } from '@/lib/copilot/response'
-import { clauseMappingRun, MAPPING_DEMO_CLAUSES, type AgentRunResult, type ProposedAction } from '@/lib/agents'
+import { clauseMappingRun, sourceScanRun, MAPPING_DEMO_CLAUSES, type AgentRunResult, type ProposedAction } from '@/lib/agents'
 
 /** Pull a record id off the current route's last segment, if it is one we ground on. */
 function entityFromPath(pathname: string): string | null {
@@ -243,27 +243,36 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
 }
 
 // The "Agents" tab — scripted, deterministic runs surfaced for human approval.
-// E0.5.1 ships Run 2 (clause -> control mapping); the other runs land in E0.5.2/3.
+// E0.5.1 mapping; E0.5.2 source scan. (Owner chase lands in E0.5.3.)
+type RunType = 'mapping' | 'scan'
+const RUNS: { key: RunType; label: string; blurb: string }[] = [
+  { key: 'mapping', label: 'Clause → control', blurb: 'Reads a clause and proposes how to satisfy it — attach to an existing control or create a new one.' },
+  { key: 'scan', label: 'Source scan', blurb: 'Detects newly-arrived instruments, assesses impact, and proposes a regulatory change that alerts the affected owner.' },
+]
+
 function AgentsTab({ onNavigate }: { onNavigate: (route: string) => void }) {
   const agentScope = useApp((s) => s.agentScope)
   const clauseOverrides = useApp((s) => s.clauseOverrides)
   const sessionControls = useApp((s) => s.sessionControls)
   const recordAgentRun = useApp((s) => s.recordAgentRun)
   const approveAgentAction = useApp((s) => s.approveAgentAction)
-  const canApprove = useCanAct({ kind: 'clause.save' })
+  const canClause = useCanAct({ kind: 'clause.save' })
+  const canReg = useCanAct({ kind: 'regchange.acknowledge' })
+  const gateFor = (a: ProposedAction) => (a.apply.op === 'addInstrumentChange' ? canReg : canClause)
 
+  const [runType, setRunType] = React.useState<RunType>('mapping')
   const [scope, setScope] = React.useState<string>(agentScope ?? MAPPING_DEMO_CLAUSES[0])
-  React.useEffect(() => { if (agentScope) setScope(agentScope) }, [agentScope])
+  React.useEffect(() => { if (agentScope) { setRunType('mapping'); setScope(agentScope) } }, [agentScope])
 
   const [phase, setPhase] = React.useState<'running' | 'done'>('running')
   const [applied, setApplied] = React.useState<Record<string, boolean>>({})
 
   const result: AgentRunResult | null = React.useMemo(
-    () => clauseMappingRun(scope, clauseOverrides, sessionControls),
-    [scope, clauseOverrides, sessionControls],
+    () => (runType === 'mapping' ? clauseMappingRun(scope, clauseOverrides, sessionControls) : sourceScanRun()),
+    [runType, scope, clauseOverrides, sessionControls],
   )
 
-  // Staged reveal, then record the run to the audit trail (once per scope).
+  // Staged reveal, then record the run to the audit trail (once per run/scope).
   React.useEffect(() => {
     setPhase('running')
     setApplied({})
@@ -272,7 +281,7 @@ function AgentsTab({ onNavigate }: { onNavigate: (route: string) => void }) {
       if (result) recordAgentRun(result)
     }, 750)
     return () => clearTimeout(t)
-  }, [scope, result, recordAgentRun])
+  }, [runType, scope, result, recordAgentRun])
 
   const approve = (action: ProposedAction) => {
     if (!result) return
@@ -282,22 +291,30 @@ function AgentsTab({ onNavigate }: { onNavigate: (route: string) => void }) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border border-info/30 bg-info-soft/40 p-2.5 text-2xs text-muted-foreground">
-        <span className="font-medium text-foreground">Clause → control mapping.</span> A scripted run reads a clause and proposes how to satisfy it — attach to an existing control or create a new one. You approve; nothing changes until you do.
-      </div>
-
-      {/* clause scope chips */}
-      <div className="flex flex-wrap gap-1.5">
-        {MAPPING_DEMO_CLAUSES.map((c) => (
-          <button
-            key={c}
-            onClick={() => setScope(c)}
-            className={cn('rounded-full border px-2.5 py-1 text-2xs font-mono font-semibold', scope === c ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-info hover:bg-info-soft/40')}
-          >
-            {c}
-          </button>
+      {/* run selector */}
+      <div className="flex items-center rounded-md border border-border p-0.5 text-2xs">
+        {RUNS.map((r) => (
+          <button key={r.key} onClick={() => setRunType(r.key)} className={cn('flex-1 rounded px-2 py-1 font-medium transition-colors', runType === r.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>{r.label}</button>
         ))}
       </div>
+      <div className="rounded-lg border border-info/30 bg-info-soft/40 p-2.5 text-2xs text-muted-foreground">
+        {RUNS.find((r) => r.key === runType)!.blurb} You approve; nothing changes until you do.
+      </div>
+
+      {/* clause scope chips (mapping only) */}
+      {runType === 'mapping' && (
+        <div className="flex flex-wrap gap-1.5">
+          {MAPPING_DEMO_CLAUSES.map((c) => (
+            <button
+              key={c}
+              onClick={() => setScope(c)}
+              className={cn('rounded-full border px-2.5 py-1 text-2xs font-mono font-semibold', scope === c ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-info hover:bg-info-soft/40')}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
 
       {!result ? (
         <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">No clause in scope.</div>
@@ -354,7 +371,7 @@ function AgentsTab({ onNavigate }: { onNavigate: (route: string) => void }) {
                       {applied[a.id] ? (
                         <span className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-2xs font-medium text-ok"><Check className="size-3" /> Applied</span>
                       ) : (
-                        <Button size="sm" variant={a.recommended ? 'primary' : 'outline'} disabled={!canApprove} title={canApprove ? undefined : 'Approval is restricted to Compliance / the Company Secretary.'} onClick={() => approve(a)}>
+                        <Button size="sm" variant={a.recommended ? 'primary' : 'outline'} disabled={!gateFor(a)} title={gateFor(a) ? undefined : 'You do not have the role to approve this action.'} onClick={() => approve(a)}>
                           Approve &amp; apply
                         </Button>
                       )}
