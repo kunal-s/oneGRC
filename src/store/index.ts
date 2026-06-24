@@ -167,7 +167,7 @@ interface AppState {
   sessionEvidence: Evidence[]
   taskWorkflow: Record<string, TaskWorkflow> // tskId -> { evidenceId, maker, makerAt, checker, checkerAt }
   getAnyEvidence: (id: string) => Evidence | undefined
-  attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type'] }) => string
+  attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type']; onBehalfOf?: string }) => string
   verifyTask: (args: { taskId: string; obligationId: string }) => void
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
@@ -371,7 +371,7 @@ export const useApp = create<AppState>((set, get) => ({
   sessionEvidence: [],
   taskWorkflow: {},
   getAnyEvidence: (id) => getEvidence(id) ?? get().sessionEvidence.find((e) => e.id === id),
-  attachTaskEvidence: ({ taskId, obligationId, controlId, title, type }) => {
+  attachTaskEvidence: ({ taskId, obligationId, controlId, title, type, onBehalfOf }) => {
     const actor = get().currentPersonId()
     const id = `EVD-S-${String(++evidenceSeq).padStart(3, '0')}`
     const rec: Evidence = {
@@ -389,14 +389,16 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({
       sessionEvidence: [...s.sessionEvidence, rec],
       // Maker step: record the actor + timestamp alongside the evidence link.
-      taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...s.taskWorkflow[taskId], evidenceId: id, maker: actor, makerAt: NOW.toISOString() } },
+      // onBehalfOf is set when a department head steps in for the assigned owner.
+      taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...s.taskWorkflow[taskId], evidenceId: id, maker: actor, makerAt: NOW.toISOString(), onBehalfOf } },
     }))
     // Reflect the proof on the obligation record too (closes the evidence gap).
     const base = getObligation(obligationId) ?? get().sessionObligations.find((o) => o.id === obligationId)
     const curEv = get().obligationOverrides[obligationId]?.evidence ?? base?.evidence ?? []
     get().patchObligation(obligationId, { evidence: [...curEv, id] })
-    get().recordAction({ action: `Maker attached evidence to ${taskId}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
-    get().notify({ title: 'Evidence attached', body: `${id} linked to task ${taskId}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
+    const onBehalfNote = onBehalfOf ? ` on behalf of ${personName(onBehalfOf)}` : ''
+    get().recordAction({ action: `${onBehalfOf ? 'Department head attached' : 'Maker attached'} evidence to ${taskId}${onBehalfNote}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
+    get().notify({ title: onBehalfOf ? 'Evidence attached (head step-in)' : 'Evidence attached', body: `${id} linked to task ${taskId}${onBehalfNote}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
     return id
   },
   // Checker step: a different person verifies the maker's evidence. The action is

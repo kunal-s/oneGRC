@@ -16,6 +16,7 @@ export interface TaskWorkflow {
   evidenceId?: string
   maker?: string // who actually attached the evidence
   makerAt?: string // ISO
+  onBehalfOf?: string // set when a department head stepped in for the assigned owner (1.5)
   checker?: string // who verified
   checkerAt?: string // ISO
 }
@@ -34,6 +35,7 @@ export interface Task {
   // Explicit two-step trail (E0.4): who did each step and when.
   attachedBy?: string
   attachedAt?: string
+  attachedOnBehalfOf?: string // the owner the head stepped in for (E0.5)
   verifiedBy?: string
   verifiedAt?: string
 }
@@ -67,6 +69,7 @@ export function tasksForObligation(o: Obligation, workflow?: Record<string, Task
       evidenceId,
       attachedBy: wf?.maker,
       attachedAt: wf?.makerAt,
+      attachedOnBehalfOf: wf?.onBehalfOf,
       verifiedBy: wf?.checker,
       verifiedAt: wf?.checkerAt,
     }

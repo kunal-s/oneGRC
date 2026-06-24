@@ -7,7 +7,7 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { getControl } from '@/data'
-import { PEOPLE_BY_ID, personName } from '@/data/people'
+import { PEOPLE_BY_ID, personName, departmentOfPerson, departmentHeadOf } from '@/data/people'
 import { useApp } from '@/store'
 import { useEffectiveObligations } from '@/lib/effective'
 import { useScope } from '@/lib/access'
@@ -49,9 +49,15 @@ export function TaskDetail() {
   const control = controlId ? getControl(controlId) : undefined
   const evidence = task.evidenceId ? getAnyEvidence(task.evidenceId) : undefined
   const verified = task.status === 'Done'
-  // Maker may attach when assigned (or Compliance/admin). Checker may verify only
-  // after evidence exists, and never the person who attached it (separation of duties).
-  const canAttach = !evidence && (selfId === task.maker || scope.seesAll)
+  // The department head may step into the maker step on the owner's behalf (1.5).
+  const head = departmentHeadOf(departmentOfPerson(task.maker))
+  const isDeptHead = !!head && selfId === head && selfId !== task.maker
+  // Maker may attach when assigned; the department head (or Compliance/admin) may
+  // step in for the owner. Checker may verify only after evidence exists, and never
+  // the person who attached it (separation of duties).
+  const canAttach = !evidence && (selfId === task.maker || isDeptHead || scope.seesAll)
+  const actingOnBehalf = canAttach && selfId !== task.maker
+  const attachLabel = selfId === task.maker ? 'Attach evidence' : `Attach on behalf of ${maker.name}`
   const attacher = task.attachedBy ?? task.maker
   const canVerify = !!evidence && !verified && selfId !== attacher && (selfId === task.checker || scope.seesAll)
   const ladder = verified ? [] : ladderFor(task.id, task.dueDate, task.maker, task.checker)
@@ -65,8 +71,9 @@ export function TaskDetail() {
       controlId,
       title: `${task!.title} — proof`,
       type: 'Filing ack',
+      onBehalfOf: actingOnBehalf ? task!.maker : undefined,
     })
-    pushToast({ title: 'Evidence created & linked', description: `${newId} attached to ${task!.id}. Awaiting checker verification.`, variant: 'success' })
+    pushToast({ title: actingOnBehalf ? 'Evidence attached on behalf of the owner' : 'Evidence created & linked', description: `${newId} attached to ${task!.id}. Awaiting checker verification.`, variant: 'success' })
   }
   const onVerify = () => {
     verifyTask({ taskId: task!.id, obligationId: obligation!.id })
@@ -93,8 +100,8 @@ export function TaskDetail() {
           <div className="flex items-center gap-2">
             <StatusChip status={task.status} />
             {!evidence ? (
-              <Button size="sm" disabled={!canAttach} title={canAttach ? undefined : `Only the maker (${maker.name}) can attach evidence.`} onClick={onAttach}>
-                <Paperclip className="size-4" /> Attach evidence
+              <Button size="sm" disabled={!canAttach} title={canAttach ? undefined : `Only the maker (${maker.name}) or the department head can attach evidence.`} onClick={onAttach}>
+                <Paperclip className="size-4" /> {attachLabel}
               </Button>
             ) : !verified ? (
               <Button size="sm" disabled={!canVerify} title={canVerify ? undefined : `Verification is the checker's step (${checker.name}) and cannot be done by whoever attached the evidence.`} onClick={onVerify}>
@@ -135,6 +142,7 @@ export function TaskDetail() {
             role="Maker performs &amp; attaches evidence"
             personId={task.attachedBy ?? task.maker}
             at={task.attachedAt}
+            subNote={task.attachedOnBehalfOf ? `on behalf of ${personName(task.attachedOnBehalfOf)} (department head step-in)` : undefined}
             evidenceId={evidence ? task.evidenceId : undefined}
             onEvidenceClick={evidence ? scrollToEvidence : undefined}
             note={evidence ? 'Attached' : task.status === 'Done' ? 'Completed' : 'Awaiting action'}
@@ -172,9 +180,10 @@ export function TaskDetail() {
           ) : (
             <div className="rounded-md border border-dashed border-border p-3 text-center">
               <p className="text-xs text-muted-foreground">No evidence attached yet — this is the inspection gap to close.</p>
-              <Button className="mt-2" size="sm" variant="outline" disabled={!canAttach} title={canAttach ? undefined : `Only the maker (${maker.name}) can attach evidence.`} onClick={onAttach}>
-                <Paperclip className="size-4" /> Attach / create evidence
+              <Button className="mt-2" size="sm" variant="outline" disabled={!canAttach} title={canAttach ? undefined : `Only the maker (${maker.name}) or the department head can attach evidence.`} onClick={onAttach}>
+                <Paperclip className="size-4" /> {selfId === task.maker ? 'Attach / create evidence' : attachLabel}
               </Button>
+              {isDeptHead && <p className="mt-1.5 text-2xs text-muted-foreground">You are the {departmentOfPerson(task.maker)} head — you may step in for {maker.name}.</p>}
             </div>
           )}
           <p className="mt-2 text-2xs text-muted-foreground">Creating the evidence record links it to this task, its obligation and its control, and writes to the audit log.</p>
@@ -269,6 +278,7 @@ function Step({
   personId,
   note,
   at,
+  subNote,
   evidenceId,
   onEvidenceClick,
 }: {
@@ -277,6 +287,7 @@ function Step({
   personId: string
   note: string
   at?: string
+  subNote?: string
   evidenceId?: string
   onEvidenceClick?: () => void
 }) {
@@ -290,6 +301,7 @@ function Step({
         <div className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-foreground">
           <Avatar id={personId} size={18} /> {personName(personId)}
         </div>
+        {subNote && <div className="mt-0.5 text-2xs font-medium text-accent-foreground">{subNote}</div>}
         {at && <div className="mt-0.5 text-2xs text-muted-foreground tnum">{fmtIST(at)}</div>}
         {evidenceId && (
           <button onClick={onEvidenceClick} className="mt-1 inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
