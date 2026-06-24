@@ -10,6 +10,7 @@ import { HeatMap } from './home/HeatMap'
 import { NeedsAttention } from './home/NeedsAttention'
 import { ActivityStream } from './home/ActivityStream'
 import { TrendCharts } from './home/TrendCharts'
+import { MyComplianceCalendarCard } from '@/components/MyComplianceCalendar'
 import { nearestTrack } from '@/lib/clocks'
 import { pct } from '@/lib/format'
 import { fmtIST, fmtDate, fmtRelative, NOW } from '@/lib/time'
@@ -162,6 +163,9 @@ function ExecutiveDashboard() {
         <HeatMap />
         <NeedsAttention />
       </div>
+
+      {/* The logged-in user's own compliance calendar — act on what you own */}
+      <MyComplianceCalendarCard />
 
       <TrendCharts />
       <ActivityStream />

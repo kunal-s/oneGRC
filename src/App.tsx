@@ -6,7 +6,6 @@ import { RiskRegister } from '@/pages/RiskRegister'
 import { RiskDetail } from '@/pages/RiskDetail'
 import { Incidents } from '@/pages/Incidents'
 import { IncidentDetail } from '@/pages/IncidentDetail'
-import { RegulatorClocks } from '@/pages/RegulatorClocks'
 import { ControlLibrary } from '@/pages/ControlLibrary'
 import { ControlDetail } from '@/pages/ControlDetail'
 import { Ccm } from '@/pages/Ccm'
@@ -49,7 +48,6 @@ export default function App() {
         <Route path="/policies/:id" element={<PolicyDetail />} />
         <Route path="/incidents" element={<Incidents />} />
         <Route path="/incidents/:id" element={<IncidentDetail />} />
-        <Route path="/clocks" element={<RegulatorClocks />} />
         <Route path="/obligations" element={<Obligations />} />
         <Route path="/obligations/:id" element={<ObligationDetail />} />
         <Route path="/tasks/:id" element={<TaskDetail />} />

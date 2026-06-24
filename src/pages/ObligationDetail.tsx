@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { getRegChange, getEvidence } from '@/data'
 import { PEOPLE_BY_ID, personName } from '@/data/people'
 import { tasksForObligation, taskFollowUp, type Task } from '@/lib/tasks'
+import { recentCycles, type Timing } from '@/lib/cycles'
 import { fmtIST, fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
 import { useEffectiveObligation } from '@/lib/effective'
@@ -95,6 +96,8 @@ export function ObligationDetail() {
         </span>
       </div>
 
+      <CycleHistory o={o} />
+
       <TasksTable tasks={tasks} navigate={navigate} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -131,6 +134,49 @@ export function ObligationDetail() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Per-cycle history (E2.3) — for each cycle, what was due and whether it was met
+// on time or late. Makes "on time versus late" legible at a glance.
+const TIMING_TONE: Record<Timing, string> = {
+  'on-time': 'bg-ok-soft text-ok',
+  late: 'bg-medium-soft text-medium',
+  pending: 'bg-muted text-muted-foreground',
+}
+function CycleHistory({ o }: { o: import('@/types').Obligation }) {
+  const cycles = recentCycles(o, 4)
+  const onTime = cycles.filter((c) => c.timing === 'on-time').length
+  const judged = cycles.filter((c) => c.timing !== 'pending').length
+  return (
+    <div className="card-surface mb-4 overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <CalendarClock className="size-4 text-info" /> Cycle history · on time vs late
+        </h3>
+        <span className="text-2xs font-medium text-muted-foreground tnum">{judged ? `${onTime}/${judged} on time` : 'first cycle'}</span>
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border text-left text-2xs uppercase tracking-wide text-muted-foreground">
+            <th className="px-3 py-2 font-medium">Cycle</th>
+            <th className="px-3 py-2 font-medium">Due</th>
+            <th className="px-3 py-2 font-medium">Filed</th>
+            <th className="px-3 py-2 font-medium">Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cycles.map((c, i) => (
+            <tr key={i} className="border-b border-border/70 last:border-0">
+              <td className="px-3 py-2 text-foreground">{c.period}</td>
+              <td className="px-3 py-2 tnum text-muted-foreground">{fmtDate(c.dueDate)}</td>
+              <td className="px-3 py-2 tnum text-muted-foreground">{c.filedAt ? fmtDate(c.filedAt) : '—'}</td>
+              <td className="px-3 py-2"><span className={cn('rounded px-1.5 py-0.5 text-2xs font-medium', TIMING_TONE[c.timing])}>{c.timing === 'on-time' ? 'On time' : c.timing === 'late' ? 'Late' : 'Pending'}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

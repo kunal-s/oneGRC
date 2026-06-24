@@ -560,7 +560,7 @@ export const useApp = create<AppState>((set, get) => ({
     const base = getObligation(id) ?? get().sessionObligations.find((o) => o.id === id)
     if (!base) return
     const mc = { ...base.makerChecker, ...(get().obligationOverrides[id]?.makerChecker ?? {}) }
-    get().patchObligation(id, { status: 'Filed', makerChecker: { ...mc, state: 'Approved' } })
+    get().patchObligation(id, { status: 'Filed', makerChecker: { ...mc, state: 'Approved' }, filedAt: NOW.toISOString() })
     get().recordAction({ action: `Approved & filed obligation ${id}`, entityId: id, route: `/obligations/${id}`, detail: base.title })
     get().notify({ title: 'Obligation filed', body: `${id} - ${base.title} approved under maker-checker.`, severity: 'info', entityId: id, route: `/obligations/${id}` })
     // Schedule the next recurring instance (spec 5.4) as a session-appended duty.

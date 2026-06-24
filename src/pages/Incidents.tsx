@@ -108,7 +108,7 @@ export function Incidents() {
   return (
     <div>
       <PageHeader
-        eyebrow="Incidents & Clocks"
+        eyebrow="Incidents"
         title="Incidents"
         description="Security and operational incidents on the PFRDA ICS Critical/High/Medium/Low taxonomy — fed from Sankalp ServiceDesk (ITSM), Splunk SIEM and CrowdStrike EDR. One incident record can drive multiple regulator clocks."
         actions={

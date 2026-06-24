@@ -256,6 +256,7 @@ export interface Obligation {
   origin?: 'External' | 'Internal' // External = statutory/regulator; Internal = policy-driven duty the firm set itself
   policySource?: string // for internal duties: the policy that mandates it (shown instead of a regulator)
   subSteps?: ObligationSubStep[] // ordered actions to satisfy a multi-step (deduction-type) duty
+  filedAt?: string // ISO — when a Filed cycle was actually filed (for on-time vs late, E2.3)
 }
 
 export interface RegulatorTrack {

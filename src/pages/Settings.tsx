@@ -322,10 +322,9 @@ function FrameworksSection() {
 
 // ── 4 · Regulators & Clocks ─────────────────────────────────────────────────
 function RegulatorsSection() {
-  const navigate = useNavigate()
   return (
-    <Card title="Regulator clock configuration" action={<Button variant="outline" size="sm" onClick={() => navigate('/clocks')}><ExternalLink className="size-3.5" /> View live clocks</Button>}>
-      <p className="mb-3 text-2xs text-muted-foreground">Thresholds below drive the live countdowns on Regulator Clocks and the regulator tracks on each incident. Read-only configuration.</p>
+    <Card title="Regulator clock configuration">
+      <p className="mb-3 text-2xs text-muted-foreground">Thresholds below drive the live countdowns on regulator clock tracking and the regulator tracks on each incident. Read-only configuration.</p>
       <div className="space-y-2">
         {REG_CLOCKS.map((r) => (
           <div key={r.regulator} className="rounded-lg border border-border bg-background p-3">

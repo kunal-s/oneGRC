@@ -566,6 +566,11 @@ function buildObligations(): Obligation[] {
     else dueDate = iso(new Date(NOW_MS - r.int(5, 120) * 86400000))
     const maker = r.pick(def.team)
     const checker = r.pick(def.reg === 'PFRDA' ? ['meera', 'anjali'] : ['anjali', 'vikram', 'meera'])
+    // Filed cycles carry an actual filed date — mostly on time, ~20% late (E2.3).
+    const filedAt =
+      status === 'Filed'
+        ? iso(new Date(new Date(dueDate).getTime() + (i % 5 === 0 ? r.int(2, 12) : -r.int(0, 4)) * 86400000))
+        : undefined
     obligations.push({
       id,
       regulator: def.reg,
@@ -574,6 +579,7 @@ function buildObligations(): Obligation[] {
       dueDate,
       owner: maker,
       status,
+      filedAt,
       makerChecker: {
         maker,
         checker,
@@ -1124,6 +1130,8 @@ function curatePtSubSteps() {
   const prior = obligations.find((o) => o.id === 'OBL-LAB-JUN26-02')
   if (prior) {
     prior.sourceRefs = ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+    // Worked example: this cycle was filed two days before its due date — on time.
+    prior.filedAt = iso(new Date(new Date(prior.dueDate).getTime() - 2 * 86400000))
     prior.subSteps = mk('OBL-LAB-JUN26-02', new Date(prior.dueDate).getTime(), [
       { seq: 1, title: 'Deduct profession tax from payroll (Schedule I slabs)', clause: 'SRC-PT-4', maker: 'farhan', checker: 'deepa', offsetDays: -4, status: 'Done', ev: 'EVD-44603' },
       { seq: 2, title: 'Deposit profession tax with the State (PT challan)', clause: 'SRC-PT-8', maker: 'deepa', checker: 'anjali', offsetDays: -1, status: 'Done', ev: 'EVD-44601', dep: 1 },

@@ -5,6 +5,7 @@ import {
   Activity, ClipboardCheck, Wrench, Users, Plug, ShieldCheck, ArrowUpRight, Inbox, FileSearch,
 } from 'lucide-react'
 import { RoleDashboard, DashboardCard, StatGroup, ReportMenu, reportsForPersona, type Stat } from '@/components/kit'
+import { MyComplianceCalendarCard } from '@/components/MyComplianceCalendar'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
@@ -117,6 +118,7 @@ export function RiskManagerDashboard() {
       actions={<ReportMenu templates={reportsForPersona('RISK')} />}
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <div className="lg:col-span-2"><HeatMap /></div>
       <DashboardCard title="Top residual risks" icon={<ShieldAlert className="size-4 text-critical" />} to="/risks">
         <div className="-mx-3.5 -mb-3.5 divide-y divide-border/70">
@@ -170,6 +172,7 @@ export function ComplianceManagerDashboard() {
       actions={<ReportMenu templates={reportsForPersona('CCO')} />}
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <DashboardCard title="Clause decisions pending" icon={<Scale className="size-4 text-info" />} to="/sources" action={<span className="text-2xs text-muted-foreground tnum">{pending.length}</span>}>
         <div className="-mx-3.5 -mb-3.5 divide-y divide-border/70">
           {pending.slice(0, 6).map((p) => {
@@ -234,6 +237,7 @@ export function ComplianceAnalystDashboard() {
       actions={<ReportMenu templates={reportsForPersona('ANALYST')} />}
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <DashboardCard title="My filings & tasks" icon={<Inbox className="size-4 text-info" />} to="/queue" action={<span className="text-2xs text-muted-foreground tnum">{tasks.length}</span>}>
         <TaskList tasks={tasks} limit={8} />
       </DashboardCard>
@@ -283,6 +287,7 @@ export function ControlOwnerDashboard() {
       actions={<ReportMenu templates={reportsForPersona('CTRLOWNER')} />}
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <DashboardCard title="Controls needing attention" icon={<Library className="size-4 text-critical" />} to="/controls" action={<span className="text-2xs text-muted-foreground tnum">{failing.length + partial.length}</span>}>
         <div className="-mx-3.5 -mb-3.5 divide-y divide-border/70">
           {attention.map((c) => (
@@ -327,6 +332,7 @@ export function AuditorDashboard() {
       actions={<ReportMenu templates={reportsForPersona('AUDITOR')} />}
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <DashboardCard title="Active audits" icon={<ClipboardCheck className="size-4 text-info" />} to="/audits">
         <div className="-mx-3.5 -mb-3.5 divide-y divide-border/70">
           {openAudits.slice(0, 6).map((a) => {
@@ -379,6 +385,7 @@ export function AdministratorDashboard() {
       description="Organisation, users and roles, frameworks, integrations and the tamper-evident audit log - every change itself governed by maker-checker."
       summary={<StatGroup stats={stats} />}
     >
+      <MyComplianceCalendarCard className="lg:col-span-2" />
       <DashboardCard title="Recent system activity" icon={<ClipboardCheck className="size-4 text-info" />} to="/settings">
         {sessionLog.length === 0 ? (
           <div className="flex items-center gap-2 px-0.5 py-4 text-sm text-muted-foreground">

@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { RoleKey } from '@/types'
 import {
   LayoutDashboard, Inbox, ShieldAlert, Library, Activity, FileText,
-  Siren, Timer, CalendarClock, GitPullRequestArrow, Landmark, DatabaseZap,
+  Siren, CalendarClock, GitPullRequestArrow, Landmark, DatabaseZap,
   ClipboardCheck, Wrench, FolderArchive, Plug, Settings, Scale,
 } from 'lucide-react'
 
@@ -35,16 +35,15 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    header: 'INCIDENTS & CLOCKS',
+    header: 'INCIDENTS',
     items: [
       { to: '/incidents', label: 'Incidents', icon: Siren },
-      { to: '/clocks', label: 'Regulator Clocks', icon: Timer },
     ],
   },
   {
     header: 'COMPLIANCE',
     items: [
-      { to: '/obligations', label: 'Obligations & Calendar', icon: CalendarClock },
+      { to: '/obligations', label: 'Obligations', icon: CalendarClock },
       { to: '/reg-change', label: 'Regulatory Change', icon: GitPullRequestArrow },
       { to: '/sources', label: 'Source Library', icon: Scale },
       { to: '/pfrda', label: 'PFRDA Pack', icon: Landmark },
@@ -85,7 +84,6 @@ export const NAV_VISIBILITY: Record<string, RoleKey[]> = {
   '/ccm': ['EXEC', 'CTRLOWNER', 'AUDITOR'],
   '/policies': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
   '/incidents': ['EXEC', 'RISK', 'CCO', 'CTRLOWNER', 'AUDITOR'],
-  '/clocks': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
   '/obligations': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
   '/reg-change': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'AUDITOR'],
   '/sources': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'AUDITOR'],

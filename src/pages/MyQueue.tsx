@@ -13,6 +13,7 @@ import { WORLD } from '@/data'
 import { ROLES, PEOPLE, PEOPLE_BY_ID, personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { reminderEngineSummary } from '@/lib/reminders'
+import { MyComplianceCalendarCard } from '@/components/MyComplianceCalendar'
 import type { QueueTask } from '@/types'
 
 const ENGINE = reminderEngineSummary()
@@ -123,6 +124,8 @@ export function MyQueue() {
         </span>
         <ArrowUpRight className="ml-auto size-3.5 shrink-0" />
       </button>
+
+      <MyComplianceCalendarCard className="mb-3" />
 
       {/* Kind segmented filter */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
