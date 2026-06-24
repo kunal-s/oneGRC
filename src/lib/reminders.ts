@@ -40,9 +40,9 @@ export const ESCALATION_LADDER: { days: number; targetRole: string; resolve: (ow
 
 const dayWord = (n: number) => `${n} day${n === 1 ? '' : 's'}`
 
-// The ladder for any (refId, due, owner, checker) — reused by obligations and by
-// individual sub-steps, so a step's own owner gets chased on its own due date.
-function buildLadder(refId: string, dueIso: string, ownerId: string, checkerId: string): ReminderEvent[] {
+// The ladder for any (refId, due, owner, checker) — reused by obligations, by
+// individual sub-steps and by tasks, so each owner gets chased on its own due date.
+export function ladderFor(refId: string, dueIso: string, ownerId: string, checkerId: string): ReminderEvent[] {
   const due = new Date(dueIso).getTime()
   const events: ReminderEvent[] = []
   for (const off of REMINDER_OFFSETS) {
@@ -83,13 +83,13 @@ function buildLadder(refId: string, dueIso: string, ownerId: string, checkerId: 
 export function reminderEvents(o: Obligation): ReminderEvent[] {
   // Only active duties carry a live ladder; Filed / In review are out of scope.
   if (o.status !== 'Due' && o.status !== 'Overdue') return []
-  return buildLadder(o.id, o.dueDate, o.owner, o.makerChecker.checker)
+  return ladderFor(o.id, o.dueDate, o.owner, o.makerChecker.checker)
 }
 
 /** The ladder for one sub-step (its own maker is chased on its own due date). */
 export function subStepLadder(step: ObligationSubStep): ReminderEvent[] {
   if (step.status === 'Done') return []
-  return buildLadder(step.id, step.dueDate, step.maker, step.checker)
+  return ladderFor(step.id, step.dueDate, step.maker, step.checker)
 }
 
 /** The most recent fired event in a ladder (events are sorted ascending). */

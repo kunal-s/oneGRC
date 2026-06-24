@@ -10,15 +10,14 @@ import { MakerChecker } from '@/components/MakerChecker'
 import { SavedViews, type SavedView } from '@/components/kit'
 import { ObligationCalendar } from './obligations/ObligationCalendar'
 import { cn } from '@/lib/utils'
-import { personName } from '@/data/people'
+import { personName, departmentOfPerson } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { REGULATOR_ORDER, REGULATOR_COLORS, RegulatorChip } from '@/lib/regulators'
 import { useApp } from '@/store'
 import { ReportMenu } from '@/components/kit/ReportMenu'
 import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveObligations } from '@/lib/effective'
-import { useScope, passesDeptFilter } from '@/lib/access'
-import { DepartmentSelect, initialDepartment } from '@/components/ScopeBanner'
+import { useScope, ownerInScope, DEPARTMENTS } from '@/lib/access'
 import type { Obligation } from '@/types'
 
 type ViewId = 'all' | 'overdue' | 'due' | 'review' | 'mine' | 'internal'
@@ -28,12 +27,11 @@ export function Obligations() {
   const pushToast = useApp((s) => s.pushToast)
   const selfId = useApp((s) => s.currentPersonId)()
   const scope = useScope()
-  const [dept, setDept] = React.useState(() => initialDepartment(scope))
-  React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
   const raw = useEffectiveObligations()
   // Department access boundary (1.1): a user sees only their department's duties;
-  // Compliance and the administrator see all (and can narrow via the dropdown).
-  const all = React.useMemo(() => raw.filter((o) => passesDeptFilter(o.owner, scope, dept)), [raw, scope, dept])
+  // Compliance and the administrator see all. Narrowing to one department is the
+  // inline Department filter below.
+  const all = React.useMemo(() => raw.filter((o) => ownerInScope(o.owner, scope)), [raw, scope])
   const [tab, setTab] = React.useState<'list' | 'calendar'>('list')
   const [view, setView] = React.useState<ViewId>('all')
 
@@ -99,11 +97,13 @@ export function Obligations() {
     { key: 'status', header: 'Status', sortValue: (o) => o.status, render: (o) => <StatusChip status={o.status} /> },
   ]
 
+  const deptOptions = scope.seesAll ? [...DEPARTMENTS] : [scope.department ?? 'Unassigned']
   const filters: TableFilter<Obligation>[] = [
     { key: 'regulator', label: 'Regulator', options: REGULATOR_ORDER, predicate: (o, v) => o.regulator === v },
+    { key: 'department', label: 'Department', options: deptOptions, predicate: (o, v) => departmentOfPerson(o.owner) === v },
+    { key: 'owner', label: 'Owner', options: owners, predicate: (o, v) => personName(o.owner) === v },
     { key: 'status', label: 'Status', options: ['Filed', 'Due', 'Overdue', 'In review'], predicate: (o, v) => o.status === v },
     { key: 'frequency', label: 'Frequency', options: frequencies, predicate: (o, v) => o.frequency === v },
-    { key: 'owner', label: 'Owner', options: owners, predicate: (o, v) => personName(o.owner) === v },
   ]
 
   return (
@@ -134,7 +134,6 @@ export function Obligations() {
 
       {/* per-regulator summary - "one calendar across regulators" */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <DepartmentSelect value={dept} onChange={setDept} />
         <span className="inline-flex items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
           <Network className="size-3.5" /> One calendar
         </span>
