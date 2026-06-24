@@ -1,11 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, ArrowUpRight, Paperclip, Upload, History } from 'lucide-react'
+import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, Paperclip, Upload, History } from 'lucide-react'
 import { useApp } from '@/store'
 import { Drawer } from '../Drawer'
 import { Button } from '../ui/Button'
 import { MARQUEE, getSource, getInstrument } from '@/data'
-import { citingRecords } from '@/lib/sources'
-import { resolveEntity } from '@/lib/entity'
 import { fmtDate, fmtIST } from '@/lib/time'
 import { maskPran } from '@/lib/format'
 
@@ -30,7 +28,6 @@ export function DrawerHost() {
   const sourceId = (drawer.payload as { sourceId?: string })?.sourceId
   const src = sourceId ? getSource(sourceId) : undefined
   const inst = src ? getInstrument(src.instrumentId) : undefined
-  const producedIds = src ? citingRecords(src.id) : []
   const supersedes = inst?.supersedesId ? getInstrument(inst.supersedesId) : undefined
   const supersededBy = inst?.supersededById ? getInstrument(inst.supersededById) : undefined
   // "Open full source" deep-links into the full-page Source Library section
@@ -144,36 +141,6 @@ export function DrawerHost() {
           <ExternalLink className="size-3.5" /> {inst.sourceChannel}
         </a>
       </div>
-      {producedIds.length > 0 && (
-        <div className="border-t border-border pt-3">
-          <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-            What this source produced · {producedIds.length}
-          </div>
-          <div className="scrollbar-thin max-h-64 space-y-1 overflow-y-auto">
-            {producedIds.slice(0, 12).map((id) => {
-              const e = resolveEntity(id)
-              return (
-                <button
-                  key={id}
-                  onClick={() => {
-                    close()
-                    navigate(e.route)
-                  }}
-                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left transition-colors hover:border-info/40 hover:bg-info-soft/40"
-                >
-                  <span className="font-mono text-2xs font-semibold text-info">{id}</span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{e.label}</span>
-                  <span className="rounded bg-muted px-1 py-0 text-2xs text-muted-foreground">{e.type}</span>
-                  <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                </button>
-              )
-            })}
-            {producedIds.length > 12 && (
-              <div className="pl-2 text-2xs text-muted-foreground">+{producedIds.length - 12} more</div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 

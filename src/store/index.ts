@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import type {
-  Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar,
+  Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar, Evidence,
 } from '@/types'
 import { ROLES } from '@/data/people'
-import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, MARQUEE } from '@/data'
+import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, getEvidence, MARQUEE } from '@/data'
 import { provisionsForInstrument } from '@/lib/sources'
 import { dsarTotalSteps } from '@/lib/dsar'
 import { personName } from '@/data/people'
@@ -158,6 +158,14 @@ interface AppState {
   notify: (n: Omit<NotificationItem, 'id' | 'at' | 'read'>) => void
   markNotificationsRead: () => void
 
+  // ── Task evidence (E0.3) ────────────────────────────────────────────────────
+  // The maker's action on a task: create an Evidence record and link it to the
+  // task (and its obligation/control). Session-only; merged on read into tasks.
+  sessionEvidence: Evidence[]
+  taskEvidence: Record<string, string> // tskId -> evidence id
+  getAnyEvidence: (id: string) => Evidence | undefined
+  attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type'] }) => string
+
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
   // Maker submits, a different checker approves; status advances via overrides and
   // the action is written to the audit log + notifications. On approval the next
@@ -191,6 +199,7 @@ let sessionControlSeq = 0
 let auditSeq = 0
 let notifSeq = 0
 let regChangeSeq = 0
+let evidenceSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'EXEC',
@@ -349,6 +358,38 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ notifications: [item, ...s.notifications] }))
   },
   markNotificationsRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
+
+  // ── Task evidence (E0.3) ────────────────────────────────────────────────────
+  sessionEvidence: [],
+  taskEvidence: {},
+  getAnyEvidence: (id) => getEvidence(id) ?? get().sessionEvidence.find((e) => e.id === id),
+  attachTaskEvidence: ({ taskId, obligationId, controlId, title, type }) => {
+    const actor = get().currentPersonId()
+    const id = `EVD-S-${String(++evidenceSeq).padStart(3, '0')}`
+    const rec: Evidence = {
+      id,
+      title,
+      type,
+      capturedAt: NOW.toISOString(),
+      capturedBy: actor,
+      auto: false,
+      linkedControls: controlId ? [controlId] : [],
+      linkedObligations: [obligationId],
+      frameworkRefs: [],
+      source: 'Manual upload',
+    }
+    set((s) => ({
+      sessionEvidence: [...s.sessionEvidence, rec],
+      taskEvidence: { ...s.taskEvidence, [taskId]: id },
+    }))
+    // Reflect the proof on the obligation record too (closes the evidence gap).
+    const base = getObligation(obligationId) ?? get().sessionObligations.find((o) => o.id === obligationId)
+    const curEv = get().obligationOverrides[obligationId]?.evidence ?? base?.evidence ?? []
+    get().patchObligation(obligationId, { evidence: [...curEv, id] })
+    get().recordAction({ action: `Attached evidence to ${taskId}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
+    get().notify({ title: 'Evidence attached', body: `${id} linked to task ${taskId}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
+    return id
+  },
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
   submitObligation: (id) => {

@@ -29,7 +29,8 @@ export function ObligationDetail() {
 
   const internal = o.origin === 'Internal'
   const owner = PEOPLE_BY_ID[o.owner]
-  const tasks = tasksForObligation(o)
+  const taskEvidence = useApp((s) => s.taskEvidence)
+  const tasks = tasksForObligation(o, taskEvidence)
   // The "done but not documented" gap, computed from the tasks (Req 2).
   const gap = tasks.some((t) => t.status === 'Done' && !t.evidenceId)
   const regChange = o.linkedRegChange ? getRegChange(o.linkedRegChange) : undefined
@@ -167,14 +168,18 @@ function TasksTable({ tasks, navigate }: { tasks: Task[]; navigate: (to: string)
               const overdue = t.status === 'Overdue'
               const f = taskFollowUp(t)
               return (
-                <tr key={t.id} className="border-b border-border/70 align-top last:border-0 hover:bg-info-soft/20">
-                  <td className="px-3 py-2.5"><span className="font-mono text-2xs font-semibold text-info">{t.id}</span></td>
+                <tr
+                  key={t.id}
+                  onClick={() => navigate(`/tasks/${t.id}`)}
+                  className="cursor-pointer border-b border-border/70 align-top last:border-0 hover:bg-info-soft/20"
+                >
+                  <td className="px-3 py-2.5"><span className="font-mono text-2xs font-semibold text-info hover:underline">{t.id}</span></td>
                   <td className="px-3 py-2.5 max-w-[260px]"><span className="text-foreground">{t.title}</span></td>
                   <td className="px-3 py-2.5">
                     {t.clauseRefs.length ? (
                       <span className="inline-flex flex-wrap gap-1">
                         {t.clauseRefs.map((c) => (
-                          <button key={c} onClick={() => navigate(`/sources/section/${c}`)} className="rounded bg-info-soft px-1.5 py-0 font-mono text-2xs font-semibold text-info hover:underline">{c}</button>
+                          <button key={c} onClick={(e) => { e.stopPropagation(); navigate(`/sources/section/${c}`) }} className="rounded bg-info-soft px-1.5 py-0 font-mono text-2xs font-semibold text-info hover:underline">{c}</button>
                         ))}
                       </span>
                     ) : (

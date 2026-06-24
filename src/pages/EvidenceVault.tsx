@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Download, Bot, User, FileText, FileCode, Image, ShieldCheck, ReceiptText, Layers } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
@@ -21,6 +22,7 @@ const TYPE_ICON: Record<Evidence['type'], React.ComponentType<{ className?: stri
 const TYPES: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attestation', 'Filing ack']
 
 export function EvidenceVault() {
+  const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
 
@@ -76,11 +78,27 @@ export function EvidenceVault() {
     },
     {
       key: 'links',
-      header: 'Linked to',
+      header: 'Linked to (walk upstream)',
       render: (e) => (
         <span className="inline-flex items-center gap-1.5 text-2xs">
-          <span className="rounded bg-info-soft px-1.5 py-0.5 font-medium text-info">{e.linkedControls.length} ctrl</span>
-          {e.linkedObligations.length > 0 && <span className="rounded bg-medium-soft px-1.5 py-0.5 font-medium text-medium">{e.linkedObligations.length} obl</span>}
+          {e.linkedObligations.length > 0 && (
+            <button
+              onClick={() => navigate(`/obligations/${e.linkedObligations[0]}`)}
+              title={`Up to obligation ${e.linkedObligations[0]}`}
+              className="rounded bg-medium-soft px-1.5 py-0.5 font-medium text-medium hover:underline"
+            >
+              {e.linkedObligations.length} obl
+            </button>
+          )}
+          {e.linkedControls.length > 0 && (
+            <button
+              onClick={() => navigate(`/controls/${e.linkedControls[0]}`)}
+              title={`Up to control ${e.linkedControls[0]}`}
+              className="rounded bg-info-soft px-1.5 py-0.5 font-medium text-info hover:underline"
+            >
+              {e.linkedControls.length} ctrl
+            </button>
+          )}
         </span>
       ),
     },

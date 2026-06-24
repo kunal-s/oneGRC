@@ -38,25 +38,31 @@ const tskId = (obligationId: string, seq: number) => TSK_IDS.get(`${obligationId
 const statusFromObligation = (s: Obligation['status']): Task['status'] =>
   s === 'Filed' ? 'Done' : s === 'Overdue' ? 'Overdue' : 'Pending'
 
-/** The tasks that satisfy an obligation (its sub-steps, or one synthesised task). */
-export function tasksForObligation(o: Obligation): Task[] {
+/** The tasks that satisfy an obligation (its sub-steps, or one synthesised task).
+ *  `taskEvidence` overlays session-attached proof (E0.3) onto the seed. */
+export function tasksForObligation(o: Obligation, taskEvidence?: Record<string, string>): Task[] {
+  const ev = (taskId: string, seed?: string) => taskEvidence?.[taskId] ?? seed
   if (o.subSteps && o.subSteps.length) {
-    return o.subSteps.map((st) => ({
-      id: tskId(o.id, st.seq),
-      obligationId: o.id,
-      seq: st.seq,
-      title: st.title,
-      clauseRefs: st.clauseRef ? [st.clauseRef] : [],
-      maker: st.maker,
-      checker: st.checker,
-      dueDate: st.dueDate,
-      status: st.status,
-      evidenceId: st.evidenceId,
-    }))
+    return o.subSteps.map((st) => {
+      const id = tskId(o.id, st.seq)
+      return {
+        id,
+        obligationId: o.id,
+        seq: st.seq,
+        title: st.title,
+        clauseRefs: st.clauseRef ? [st.clauseRef] : [],
+        maker: st.maker,
+        checker: st.checker,
+        dueDate: st.dueDate,
+        status: st.status,
+        evidenceId: ev(id, st.evidenceId),
+      }
+    })
   }
+  const id = tskId(o.id, 1)
   return [
     {
-      id: tskId(o.id, 1),
+      id,
       obligationId: o.id,
       seq: 1,
       title: o.requirement ?? `Complete and file: ${o.title}`,
@@ -65,9 +71,21 @@ export function tasksForObligation(o: Obligation): Task[] {
       checker: o.makerChecker.checker,
       dueDate: o.dueDate,
       status: statusFromObligation(o.status),
-      evidenceId: o.evidence[0],
+      evidenceId: ev(id, o.evidence[0]),
     },
   ]
+}
+
+/** Control ids that satisfy a given source clause (clause -> control, for the chain). */
+export function controlIdsForClause(clauseId: string): string[] {
+  return WORLD.controls
+    .filter((c) => c.sourceRefs?.includes(clauseId) || c.mappedFrameworkRefs.some((m) => m.sourceRef === clauseId))
+    .map((c) => c.id)
+}
+
+/** The control(s) a task ultimately maps to, via the clauses it satisfies. */
+export function controlIdsForTask(t: Task): string[] {
+  return Array.from(new Set(t.clauseRefs.flatMap(controlIdsForClause)))
 }
 
 /** The most recent fired reminder/escalation for an open task (its own ladder). */

@@ -35,25 +35,6 @@ export function refDisplayTitle(ref: string | SourceProvision): string {
   return inst ? `${inst.title} — ${r.title}` : r.title
 }
 
-/**
- * Reverse lookup — every obligation, policy and control that cites this clause.
- * Used by the source viewer's "What this source produced" section.
- */
-export function citingRecords(srcId: string): string[] {
-  const ids: string[] = []
-  for (const o of WORLD.obligations) {
-    if (o.sourceRefs?.includes(srcId)) ids.push(o.id)
-  }
-  for (const p of WORLD.policies) {
-    if (p.sourceRefs?.includes(srcId)) ids.push(p.id)
-  }
-  for (const c of WORLD.controls) {
-    if (c.sourceRefs?.includes(srcId) || c.mappedFrameworkRefs.some((m) => m.sourceRef === srcId)) {
-      ids.push(c.id)
-    }
-  }
-  return ids
-}
 
 // ── Clause pipeline (act → clause → control) ────────────────────────────────
 // Session overrides from the Save / Engage-specialist actions (reset on reload).

@@ -15,6 +15,7 @@ import { Policies } from '@/pages/Policies'
 import { PolicyDetail } from '@/pages/PolicyDetail'
 import { Obligations } from '@/pages/Obligations'
 import { ObligationDetail } from '@/pages/ObligationDetail'
+import { TaskDetail } from '@/pages/TaskDetail'
 import { RegChange } from '@/pages/RegChange'
 import { RegChangeDetail } from '@/pages/RegChangeDetail'
 import { Sources } from '@/pages/Sources'
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/clocks" element={<RegulatorClocks />} />
         <Route path="/obligations" element={<Obligations />} />
         <Route path="/obligations/:id" element={<ObligationDetail />} />
+        <Route path="/tasks/:id" element={<TaskDetail />} />
         <Route path="/reg-change" element={<RegChange />} />
         <Route path="/reg-change/:id" element={<RegChangeDetail />} />
         <Route path="/sources" element={<Sources />} />

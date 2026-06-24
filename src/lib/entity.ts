@@ -19,6 +19,7 @@ export function resolveEntity(id: string): EntityRef {
   if (id.startsWith('POL-')) return { id, route: `/policies/${id}`, label: getPolicy(id)?.title ?? id, type: 'Policy' }
   if (id.startsWith('ISS-')) return { id, route: `/issues/${id}`, label: getIssue(id)?.title ?? id, type: 'Issue' }
   if (id.startsWith('EVD-')) return { id, route: `/evidence`, label: getEvidence(id)?.title ?? id, type: 'Evidence' }
+  if (id.startsWith('TSK-')) return { id, route: `/tasks/${id}`, label: id, type: 'Task' }
   if (id.startsWith('AUD-')) return { id, route: `/audits/${id}`, label: getAudit(id)?.title ?? id, type: 'Audit' }
   if (id.startsWith('RCM-')) return { id, route: `/reg-change/${id}`, label: getRegChange(id)?.summary ?? id, type: 'Reg-change' }
   if (id.startsWith('DSAR-')) return { id, route: `/dpdp/dsar/${id}`, label: getDsar(id)?.type ?? id, type: 'DSAR' }
