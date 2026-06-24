@@ -22,9 +22,10 @@ export function TaskDetail() {
   const navigate = useNavigate()
   const scope = useScope()
   const selfId = useApp((s) => s.currentPersonId)()
-  const taskEvidence = useApp((s) => s.taskEvidence)
+  const taskWorkflow = useApp((s) => s.taskWorkflow)
   const getAnyEvidence = useApp((s) => s.getAnyEvidence)
   const attachTaskEvidence = useApp((s) => s.attachTaskEvidence)
+  const verifyTask = useApp((s) => s.verifyTask)
   const pushToast = useApp((s) => s.pushToast)
   const obligations = useEffectiveObligations()
 
@@ -32,7 +33,7 @@ export function TaskDetail() {
   let task: Task | undefined
   let obligation: Obligation | undefined
   for (const o of obligations) {
-    const t = tasksForObligation(o, taskEvidence).find((x) => x.id === id)
+    const t = tasksForObligation(o, taskWorkflow).find((x) => x.id === id)
     if (t) {
       task = t
       obligation = o
@@ -48,8 +49,14 @@ export function TaskDetail() {
   const control = controlId ? getControl(controlId) : undefined
   const evidence = task.evidenceId ? getAnyEvidence(task.evidenceId) : undefined
   const verified = task.status === 'Done'
-  const canAttach = selfId === task.maker || scope.seesAll
-  const ladder = task.status === 'Done' ? [] : ladderFor(task.id, task.dueDate, task.maker, task.checker)
+  // Maker may attach when assigned (or Compliance/admin). Checker may verify only
+  // after evidence exists, and never the person who attached it (separation of duties).
+  const canAttach = !evidence && (selfId === task.maker || scope.seesAll)
+  const attacher = task.attachedBy ?? task.maker
+  const canVerify = !!evidence && !verified && selfId !== attacher && (selfId === task.checker || scope.seesAll)
+  const ladder = verified ? [] : ladderFor(task.id, task.dueDate, task.maker, task.checker)
+
+  const scrollToEvidence = () => document.getElementById('task-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
   const onAttach = () => {
     const newId = attachTaskEvidence({
@@ -59,7 +66,11 @@ export function TaskDetail() {
       title: `${task!.title} — proof`,
       type: 'Filing ack',
     })
-    pushToast({ title: 'Evidence created & linked', description: `${newId} attached to ${task!.id}.`, variant: 'success' })
+    pushToast({ title: 'Evidence created & linked', description: `${newId} attached to ${task!.id}. Awaiting checker verification.`, variant: 'success' })
+  }
+  const onVerify = () => {
+    verifyTask({ taskId: task!.id, obligationId: obligation!.id })
+    pushToast({ title: 'Task verified', description: `${task!.id} checked and accepted.`, variant: 'success' })
   }
 
   return (
@@ -81,11 +92,15 @@ export function TaskDetail() {
         actions={
           <div className="flex items-center gap-2">
             <StatusChip status={task.status} />
-            {!evidence && (
+            {!evidence ? (
               <Button size="sm" disabled={!canAttach} title={canAttach ? undefined : `Only the maker (${maker.name}) can attach evidence.`} onClick={onAttach}>
                 <Paperclip className="size-4" /> Attach evidence
               </Button>
-            )}
+            ) : !verified ? (
+              <Button size="sm" disabled={!canVerify} title={canVerify ? undefined : `Verification is the checker's step (${checker.name}) and cannot be done by whoever attached the evidence.`} onClick={onVerify}>
+                <ClipboardCheck className="size-4" /> Verify
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -115,14 +130,30 @@ export function TaskDetail() {
           <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <ListChecks className="size-4 text-info" /> Maker &rarr; checker
           </h3>
-          <Step done role="Maker performs the task" personId={task.maker} note={evidence ? 'Evidence attached' : 'Awaiting action'} />
-          <div className="ml-3 h-3 border-l border-dashed border-border" />
-          <Step done={verified} role="Checker verifies" personId={task.checker} note={verified ? 'Verified' : evidence ? 'Pending verification' : 'Pending'} />
-          <p className="mt-3 text-2xs text-muted-foreground">Two-step maker-checker: the person who performs the task is not the person who verifies it.</p>
+          <Step
+            done={!!evidence || task.status === 'Done'}
+            role="Maker performs &amp; attaches evidence"
+            personId={task.attachedBy ?? task.maker}
+            at={task.attachedAt}
+            evidenceId={evidence ? task.evidenceId : undefined}
+            onEvidenceClick={evidence ? scrollToEvidence : undefined}
+            note={evidence ? 'Attached' : task.status === 'Done' ? 'Completed' : 'Awaiting action'}
+          />
+          <div className="ml-3.5 h-4 border-l border-dashed border-border" />
+          <Step
+            done={verified}
+            role="Checker verifies the evidence"
+            personId={task.verifiedBy ?? task.checker}
+            at={task.verifiedAt}
+            evidenceId={verified && evidence ? task.evidenceId : undefined}
+            onEvidenceClick={verified && evidence ? scrollToEvidence : undefined}
+            note={verified ? 'Verified' : evidence ? 'Pending verification' : 'Pending'}
+          />
+          <p className="mt-3 text-2xs text-muted-foreground">Two-step maker-checker: the person who attaches the evidence is never the person who verifies it. Each step is recorded with its actor, timestamp and a link to the evidence.</p>
         </div>
 
         {/* Evidence */}
-        <div className="card-surface p-4">
+        <div id="task-evidence" className="card-surface p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <FileCheck className="size-4 text-ok" /> Evidence
           </h3>
@@ -232,10 +263,26 @@ function ChainNode({
   )
 }
 
-function Step({ done, role, personId, note }: { done?: boolean; role: string; personId: string; note: string }) {
+function Step({
+  done,
+  role,
+  personId,
+  note,
+  at,
+  evidenceId,
+  onEvidenceClick,
+}: {
+  done?: boolean
+  role: string
+  personId: string
+  note: string
+  at?: string
+  evidenceId?: string
+  onEvidenceClick?: () => void
+}) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-full', done ? 'bg-ok-soft text-ok' : 'bg-muted text-muted-foreground')}>
+    <div className="flex items-start gap-2.5">
+      <span className={cn('mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full', done ? 'bg-ok-soft text-ok' : 'bg-muted text-muted-foreground')}>
         {done ? <CheckCircle2 className="size-4" /> : <Clock className="size-4" />}
       </span>
       <div className="min-w-0 flex-1">
@@ -243,8 +290,14 @@ function Step({ done, role, personId, note }: { done?: boolean; role: string; pe
         <div className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-foreground">
           <Avatar id={personId} size={18} /> {personName(personId)}
         </div>
+        {at && <div className="mt-0.5 text-2xs text-muted-foreground tnum">{fmtIST(at)}</div>}
+        {evidenceId && (
+          <button onClick={onEvidenceClick} className="mt-1 inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
+            <Paperclip className="size-3" /> {evidenceId}
+          </button>
+        )}
       </div>
-      <span className="shrink-0 text-2xs text-muted-foreground">{note}</span>
+      <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium', done ? 'bg-ok-soft text-ok' : 'bg-muted text-muted-foreground')}>{note}</span>
     </div>
   )
 }

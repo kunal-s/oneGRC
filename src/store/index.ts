@@ -9,6 +9,7 @@ import { dsarTotalSteps } from '@/lib/dsar'
 import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
 import { escalationSeedNotifications } from '@/lib/reminders'
+import type { TaskWorkflow } from '@/lib/tasks'
 
 /** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
 export interface TestRun {
@@ -158,13 +159,14 @@ interface AppState {
   notify: (n: Omit<NotificationItem, 'id' | 'at' | 'read'>) => void
   markNotificationsRead: () => void
 
-  // ── Task evidence (E0.3) ────────────────────────────────────────────────────
-  // The maker's action on a task: create an Evidence record and link it to the
-  // task (and its obligation/control). Session-only; merged on read into tasks.
+  // ── Task two-step maker-checker (E0.3 maker / E0.4 checker) ──────────────────
+  // The maker creates+links an Evidence record; a DIFFERENT checker verifies it.
+  // Each step records its actor + timestamp; session-only, merged on read.
   sessionEvidence: Evidence[]
-  taskEvidence: Record<string, string> // tskId -> evidence id
+  taskWorkflow: Record<string, TaskWorkflow> // tskId -> { evidenceId, maker, makerAt, checker, checkerAt }
   getAnyEvidence: (id: string) => Evidence | undefined
   attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type'] }) => string
+  verifyTask: (args: { taskId: string; obligationId: string }) => void
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
   // Maker submits, a different checker approves; status advances via overrides and
@@ -359,9 +361,9 @@ export const useApp = create<AppState>((set, get) => ({
   },
   markNotificationsRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
 
-  // ── Task evidence (E0.3) ────────────────────────────────────────────────────
+  // ── Task two-step maker-checker (E0.3 maker / E0.4 checker) ──────────────────
   sessionEvidence: [],
-  taskEvidence: {},
+  taskWorkflow: {},
   getAnyEvidence: (id) => getEvidence(id) ?? get().sessionEvidence.find((e) => e.id === id),
   attachTaskEvidence: ({ taskId, obligationId, controlId, title, type }) => {
     const actor = get().currentPersonId()
@@ -380,15 +382,28 @@ export const useApp = create<AppState>((set, get) => ({
     }
     set((s) => ({
       sessionEvidence: [...s.sessionEvidence, rec],
-      taskEvidence: { ...s.taskEvidence, [taskId]: id },
+      // Maker step: record the actor + timestamp alongside the evidence link.
+      taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...s.taskWorkflow[taskId], evidenceId: id, maker: actor, makerAt: NOW.toISOString() } },
     }))
     // Reflect the proof on the obligation record too (closes the evidence gap).
     const base = getObligation(obligationId) ?? get().sessionObligations.find((o) => o.id === obligationId)
     const curEv = get().obligationOverrides[obligationId]?.evidence ?? base?.evidence ?? []
     get().patchObligation(obligationId, { evidence: [...curEv, id] })
-    get().recordAction({ action: `Attached evidence to ${taskId}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
+    get().recordAction({ action: `Maker attached evidence to ${taskId}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
     get().notify({ title: 'Evidence attached', body: `${id} linked to task ${taskId}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
     return id
+  },
+  // Checker step: a different person verifies the maker's evidence. The action is
+  // recorded with actor + timestamp; the task then reads Done. Two steps only.
+  verifyTask: ({ taskId, obligationId }) => {
+    const actor = get().currentPersonId()
+    const prev = get().taskWorkflow[taskId]
+    if (!prev?.evidenceId) return // nothing to verify until the maker has attached
+    if (prev.checkerAt) return // already verified
+    if (actor === prev.maker) return // separation of duties — the attacher cannot verify
+    set((s) => ({ taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...prev, checker: actor, checkerAt: NOW.toISOString() } } }))
+    get().recordAction({ action: `Checker verified ${taskId}`, entityId: prev.evidenceId, route: `/tasks/${taskId}`, detail: `Verified evidence ${prev.evidenceId} on ${obligationId}` })
+    get().notify({ title: 'Task verified', body: `${taskId} verified by the checker; evidence ${prev.evidenceId} accepted.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
   },
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────

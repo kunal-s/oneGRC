@@ -29,8 +29,8 @@ export function ObligationDetail() {
 
   const internal = o.origin === 'Internal'
   const owner = PEOPLE_BY_ID[o.owner]
-  const taskEvidence = useApp((s) => s.taskEvidence)
-  const tasks = tasksForObligation(o, taskEvidence)
+  const taskWorkflow = useApp((s) => s.taskWorkflow)
+  const tasks = tasksForObligation(o, taskWorkflow)
   // The "done but not documented" gap, computed from the tasks (Req 2).
   const gap = tasks.some((t) => t.status === 'Done' && !t.evidenceId)
   const regChange = o.linkedRegChange ? getRegChange(o.linkedRegChange) : undefined

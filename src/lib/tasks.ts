@@ -10,17 +10,32 @@ import type { Obligation } from '@/types'
 import { WORLD } from '@/data'
 import { ladderFor, latestFired, type ReminderEvent } from '@/lib/reminders'
 
+// Session-tracked two-step maker-checker for a task (E0.4). The maker attaches
+// evidence; a different checker verifies it. Both actions carry actor + timestamp.
+export interface TaskWorkflow {
+  evidenceId?: string
+  maker?: string // who actually attached the evidence
+  makerAt?: string // ISO
+  checker?: string // who verified
+  checkerAt?: string // ISO
+}
+
 export interface Task {
   id: string // TSK id
   obligationId: string
   seq: number
   title: string
   clauseRefs: string[] // SourceProvision ids this task satisfies (TSK -> SRC)
-  maker: string // who must complete it
-  checker: string // who verifies it
+  maker: string // who must complete it (assigned)
+  checker: string // who verifies it (assigned)
   dueDate: string // ISO
   status: 'Done' | 'Pending' | 'Overdue'
   evidenceId?: string // proof, once done (kept for audit)
+  // Explicit two-step trail (E0.4): who did each step and when.
+  attachedBy?: string
+  attachedAt?: string
+  verifiedBy?: string
+  verifiedAt?: string
 }
 
 // Stable, readable TSK ids precomputed from the seed. Session-only obligations
@@ -39,40 +54,56 @@ const statusFromObligation = (s: Obligation['status']): Task['status'] =>
   s === 'Filed' ? 'Done' : s === 'Overdue' ? 'Overdue' : 'Pending'
 
 /** The tasks that satisfy an obligation (its sub-steps, or one synthesised task).
- *  `taskEvidence` overlays session-attached proof (E0.3) onto the seed. */
-export function tasksForObligation(o: Obligation, taskEvidence?: Record<string, string>): Task[] {
-  const ev = (taskId: string, seed?: string) => taskEvidence?.[taskId] ?? seed
-  if (o.subSteps && o.subSteps.length) {
-    return o.subSteps.map((st) => {
-      const id = tskId(o.id, st.seq)
-      return {
-        id,
-        obligationId: o.id,
-        seq: st.seq,
-        title: st.title,
-        clauseRefs: st.clauseRef ? [st.clauseRef] : [],
-        maker: st.maker,
-        checker: st.checker,
-        dueDate: st.dueDate,
-        status: st.status,
-        evidenceId: ev(id, st.evidenceId),
-      }
-    })
+ *  `workflow` overlays the session two-step maker-checker (evidence + verify). */
+export function tasksForObligation(o: Obligation, workflow?: Record<string, TaskWorkflow>): Task[] {
+  const apply = (base: Omit<Task, 'evidenceId' | 'attachedBy' | 'attachedAt' | 'verifiedBy' | 'verifiedAt'>, seedEvidence?: string): Task => {
+    const wf = workflow?.[base.id]
+    const evidenceId = wf?.evidenceId ?? seedEvidence
+    // A session-verified task is Done; otherwise its seed status stands.
+    const status: Task['status'] = wf?.checkerAt ? 'Done' : base.status
+    return {
+      ...base,
+      status,
+      evidenceId,
+      attachedBy: wf?.maker,
+      attachedAt: wf?.makerAt,
+      verifiedBy: wf?.checker,
+      verifiedAt: wf?.checkerAt,
+    }
   }
-  const id = tskId(o.id, 1)
+  if (o.subSteps && o.subSteps.length) {
+    return o.subSteps.map((st) =>
+      apply(
+        {
+          id: tskId(o.id, st.seq),
+          obligationId: o.id,
+          seq: st.seq,
+          title: st.title,
+          clauseRefs: st.clauseRef ? [st.clauseRef] : [],
+          maker: st.maker,
+          checker: st.checker,
+          dueDate: st.dueDate,
+          status: st.status,
+        },
+        st.evidenceId,
+      ),
+    )
+  }
   return [
-    {
-      id,
-      obligationId: o.id,
-      seq: 1,
-      title: o.requirement ?? `Complete and file: ${o.title}`,
-      clauseRefs: o.sourceRefs ?? [],
-      maker: o.makerChecker.maker,
-      checker: o.makerChecker.checker,
-      dueDate: o.dueDate,
-      status: statusFromObligation(o.status),
-      evidenceId: ev(id, o.evidence[0]),
-    },
+    apply(
+      {
+        id: tskId(o.id, 1),
+        obligationId: o.id,
+        seq: 1,
+        title: o.requirement ?? `Complete and file: ${o.title}`,
+        clauseRefs: o.sourceRefs ?? [],
+        maker: o.makerChecker.maker,
+        checker: o.makerChecker.checker,
+        dueDate: o.dueDate,
+        status: statusFromObligation(o.status),
+      },
+      o.evidence[0],
+    ),
   ]
 }
 
