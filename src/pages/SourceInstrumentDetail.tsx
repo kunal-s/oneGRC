@@ -25,14 +25,23 @@ function severityRank(s: SourceProvision['severity']): number {
 export function SourceInstrumentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const inst = id ? getInstrument(id) : undefined
+  const sessionInstruments = useApp((s) => s.sessionInstruments)
+  const sessionProvisions = useApp((s) => s.sessionProvisions)
+  const sessionInst = id ? sessionInstruments.find((i) => i.id === id) : undefined
+  const inst = (id ? getInstrument(id) : undefined) ?? sessionInst
   const overrides = useApp((s) => s.clauseOverrides)
   const addInstrumentChange = useApp((s) => s.addInstrumentChange)
   const canAdd = useCanAct({ kind: 'regchange.acknowledge' })
   const regChanges = useEffectiveRegChanges()
   const [adding, setAdding] = React.useState(false)
 
-  const clauses = inst ? provisionsForInstrument(inst.id).map((p) => effectiveClause(p, overrides)) : []
+  // Created (session) acts resolve clauses from the session store; seeded acts
+  // from the seed merged with clause-pipeline overrides.
+  const clauses = !inst
+    ? []
+    : sessionInst
+      ? sessionProvisions.filter((p) => p.instrumentId === inst.id)
+      : provisionsForInstrument(inst.id).map((p) => effectiveClause(p, overrides))
   const pendingChanges = inst ? regChanges.filter((r) => r.instrumentId === inst.id && r.status !== 'Closed') : []
 
   if (!inst) return <ComingSoon title="Act not found" />

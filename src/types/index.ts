@@ -91,6 +91,8 @@ export interface SourceInstrument {
   // Act-level overview shown at the top of the act detail (Sources pipeline).
   summary?: string // plain "what this act covers"
   applicability?: string // plain "how it affects SPF" — the applicability overview
+  departments?: Department[] // explicit routing for AI-created acts (E0.6 / 1.6); seed acts derive from owners
+  createdInSession?: boolean // minted via the in-app Create Source Act flow
 }
 
 // A scripted, deterministic action from an agent (here, the ingestion agent).

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download, Search, ChevronRight } from 'lucide-react'
+import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download, Search, ChevronRight, Sparkles } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
@@ -10,7 +10,9 @@ import { instrumentSummary, actStatus, type InstrumentSummary } from '@/lib/sour
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
 import { useScope, passesInstrumentDeptFilter } from '@/lib/access'
+import { useCanAct } from '@/lib/gating'
 import { DepartmentSelect, initialDepartment, ScopeEmpty } from '@/components/ScopeBanner'
+import { CreateSourceActWizard } from '@/components/CreateSourceActWizard'
 import { cn } from '@/lib/utils'
 import type { SourceInstrument } from '@/types'
 
@@ -33,25 +35,43 @@ export function Sources() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const overrides = useApp((s) => s.clauseOverrides)
+  const sessionInstruments = useApp((s) => s.sessionInstruments)
+  const sessionProvisions = useApp((s) => s.sessionProvisions)
+  const canCreate = useCanAct({ kind: 'clause.save' }) // Compliance + Company Secretary (1.6)
   const scope = useScope()
   const [dept, setDept] = React.useState(() => initialDepartment(scope))
   React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
   const [view, setView] = React.useState<'all' | Bucket>('all')
   const [q, setQ] = React.useState('')
+  const [createOpen, setCreateOpen] = React.useState(false)
+
+  // A created (session) act is visible to its routed departments + Compliance/admin.
+  const sessionVisible = (inst: SourceInstrument): boolean => {
+    if (scope.seesAll) return dept === 'All departments' || (inst.departments ?? []).includes(dept as never)
+    return (inst.departments ?? []).includes(scope.department as never)
+  }
 
   // Department access boundary (1.1): a source act is visible to a department
   // that owns records deriving from it; Compliance and the administrator see all
-  // (and can narrow via the dropdown).
-  const rows: Row[] = React.useMemo(
-    () =>
-      WORLD.instruments
-        .filter((inst) => passesInstrumentDeptFilter(inst.id, scope, dept))
-        .map((inst) => {
-          const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
-          return { ...base, bucket: bucketOf(base) }
-        }),
-    [overrides, scope, dept],
-  )
+  // (and can narrow via the dropdown). Session-created acts route explicitly.
+  const rows: Row[] = React.useMemo(() => {
+    const sessionRows: Row[] = sessionInstruments
+      .filter(sessionVisible)
+      .map((inst) => {
+        const provs = sessionProvisions.filter((p) => p.instrumentId === inst.id)
+        const summary: InstrumentSummary = { clauses: provs.length, reviewable: provs.length, applicable: provs.length, saved: 0, awaiting: provs.length }
+        const base = { inst, summary, act: 'In review' as const }
+        return { ...base, bucket: 'needs' as Bucket }
+      })
+    const seedRows: Row[] = WORLD.instruments
+      .filter((inst) => passesInstrumentDeptFilter(inst.id, scope, dept))
+      .map((inst) => {
+        const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
+        return { ...base, bucket: bucketOf(base) }
+      })
+    return [...sessionRows, ...seedRows]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrides, scope, dept, sessionInstruments, sessionProvisions])
 
   const totalClauses = WORLD.sources.length
   const awaiting = rows.reduce((n, r) => n + r.summary.awaiting, 0)
@@ -103,11 +123,18 @@ export function Sources() {
           </>
         }
         actions={
-          <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Source register exported', description: 'source-library-register.csv.', variant: 'success' })}>
-            <Download className="size-4" /> Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" disabled={!canCreate} title={canCreate ? undefined : 'Source-act creation is restricted to Compliance and the Company Secretary.'} onClick={() => setCreateOpen(true)}>
+              <Sparkles className="size-4" /> Create source act
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Source register exported', description: 'source-library-register.csv.', variant: 'success' })}>
+              <Download className="size-4" /> Export
+            </Button>
+          </div>
         }
       />
+
+      <CreateSourceActWizard open={createOpen} onClose={() => setCreateOpen(false)} />
 
       <StatGroup className="mb-4" stats={stats} />
 
@@ -145,6 +172,7 @@ export function Sources() {
                 <span>·</span>
                 <span>{r.inst.authority}</span>
                 <span className="rounded bg-info-soft px-1.5 py-0 font-medium text-info">{r.inst.instrumentType}</span>
+                {r.inst.createdInSession && <span className="rounded bg-accent/15 px-1.5 py-0 font-medium text-accent-foreground">created · AI-assisted</span>}
                 <span>·</span>
                 <span>updated {fmtDate(r.inst.dateOfIssue)}</span>
               </div>

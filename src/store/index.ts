@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar, Evidence,
+  SourceInstrument, SourceProvision, Department,
 } from '@/types'
+import type { ExtractedAct } from '@/lib/sources/ingest'
 import { ROLES, PEOPLE_BY_ID } from '@/data/people'
 import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, getEvidence, MARQUEE } from '@/data'
 import { provisionsForInstrument } from '@/lib/sources'
@@ -129,6 +131,13 @@ interface AppState {
   // Officer override of applicability (applicable / not applicable).
   setClauseApplicability: (provisionId: string, applicable: boolean, basis?: string) => void
 
+  // ── AI-assisted Source Act creation (E0.6 / 1.6) ────────────────────────────
+  // The accepted act + clauses become session-held tracked sources, routed to
+  // departments. Every step is audit-trailed. Role-gated in the UI to Compliance.
+  sessionInstruments: SourceInstrument[]
+  sessionProvisions: SourceProvision[]
+  createSourceAct: (args: { extracted: ExtractedAct; acceptedIdx: number[]; departments: Department[]; entry: 'url' | 'upload' }) => string
+
   // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
   // Each slice holds per-id partial overrides merged over the seed on read via
   // src/lib/effective.ts. Pipeline/workflow actions write here only; the seed is
@@ -207,6 +216,7 @@ let auditSeq = 0
 let notifSeq = 0
 let regChangeSeq = 0
 let evidenceSeq = 0
+let sourceActSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'EXEC',
@@ -293,6 +303,60 @@ export const useApp = create<AppState>((set, get) => ({
     const prev = get().clauseOverrides[provisionId] ?? {}
     const merged: ClauseOverride = { ...prev, applicable, applicabilityBasis: basis, status: applicable ? prev.status : 'Not applicable' }
     set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+  },
+
+  // ── AI-assisted Source Act creation (E0.6 / 1.6) ────────────────────────────
+  sessionInstruments: [],
+  sessionProvisions: [],
+  createSourceAct: ({ extracted, acceptedIdx, departments, entry }) => {
+    const n = ++sourceActSeq
+    const instId = `INST-NEW-${String(n).padStart(2, '0')}`
+    const accepted = acceptedIdx.map((i) => extracted.clauses[i]).filter(Boolean)
+    const provisions: SourceProvision[] = accepted.map((c, k) => {
+      const pid = `SRC-NEW-${n}-${k + 1}`
+      return {
+        id: pid,
+        instrumentId: instId,
+        provision: c.provision,
+        title: c.title,
+        citation: c.citation,
+        sourceExtract: c.whatItMeans,
+        nameOfCompliance: c.nameOfCompliance,
+        briefDescription: c.nameOfCompliance,
+        whatItMeans: c.whatItMeans,
+        keyParts: c.keyParts,
+        penaltyTiers: c.penaltyTiers.map((t) => ({ ...t, sourceRef: pid })),
+        severity: c.severity,
+        frequency: c.frequency,
+        applicable: c.applicable,
+        applicabilityBasis: c.applicabilityBasis,
+        status: 'Recommended',
+      }
+    })
+    const instrument: SourceInstrument = {
+      id: instId,
+      title: extracted.title,
+      authority: extracted.authority,
+      instrumentType: extracted.instrumentType,
+      dateOfIssue: NOW.toISOString(),
+      sourceChannel: entry === 'upload' ? 'Manual upload' : 'Regulator site',
+      sourceLink: extracted.sourceLink,
+      status: 'In force',
+      summary: extracted.summary,
+      applicability: extracted.applicability,
+      departments,
+      createdInSession: true,
+    }
+    set((s) => ({
+      sessionInstruments: [...s.sessionInstruments, instrument],
+      sessionProvisions: [...s.sessionProvisions, ...provisions],
+    }))
+    // Audit-trail the full workflow (1.6): extraction, each acceptance, routing.
+    get().recordAction({ action: `AI extraction accepted — created source act ${instId}`, entityId: instId, route: `/sources/${instId}`, detail: `${extracted.title} · ${entry === 'upload' ? 'document upload' : 'name + URL'}` })
+    for (const p of provisions) get().recordAction({ action: `Accepted clause ${p.provision}`, entityId: p.id, route: `/sources/section/${p.id}`, detail: `${p.nameOfCompliance} (${instId})` })
+    get().recordAction({ action: `Routed ${instId} to ${departments.join(', ') || 'Compliance only'}`, entityId: instId, route: `/sources/${instId}`, detail: extracted.title })
+    get().notify({ title: 'Source act created', body: `${instId} — ${extracted.title}: ${provisions.length} clause(s) accepted, routed to ${departments.join(', ') || 'Compliance'}.`, severity: 'info', entityId: instId, route: `/sources/${instId}` })
+    return instId
   },
 
   // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
