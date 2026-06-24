@@ -12,6 +12,7 @@ import { personName } from '@/data/people'
 import { nextInstance } from '@/lib/recurrence'
 import { escalationSeedNotifications } from '@/lib/reminders'
 import type { TaskWorkflow } from '@/lib/tasks'
+import type { AgentRunResult, ProposedAction } from '@/lib/agents'
 
 /** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
 export interface TestRun {
@@ -110,6 +111,17 @@ interface AppState {
 
   copilotOpen: boolean
   setCopilotOpen: (v: boolean) => void
+
+  // ── Agentic runs (Phase 0.5) — Agents tab in the Copilot slide-over ──────────
+  // Runs are deterministic proposals; approving an action reuses an existing
+  // mutation (approve-to-apply). Each run and approval is audit-trailed.
+  copilotTab: 'ask' | 'agents'
+  setCopilotTab: (t: 'ask' | 'agents') => void
+  agentScope?: string // a clause id to pre-scope the mapping run (contextual entry)
+  openAgents: (clauseId?: string) => void
+  agentRuns: AgentRunResult[]
+  recordAgentRun: (r: AgentRunResult) => void
+  approveAgentAction: (run: AgentRunResult, action: ProposedAction) => void
 
   artifacts: Artifact[]
   addArtifact: (a: Omit<Artifact, 'id'>) => string
@@ -246,6 +258,25 @@ export const useApp = create<AppState>((set, get) => ({
 
   copilotOpen: false,
   setCopilotOpen: (v) => set({ copilotOpen: v }),
+
+  // ── Agentic runs (Phase 0.5) ────────────────────────────────────────────────
+  copilotTab: 'ask',
+  setCopilotTab: (t) => set({ copilotTab: t }),
+  agentScope: undefined,
+  openAgents: (clauseId) => set({ copilotOpen: true, copilotTab: 'agents', agentScope: clauseId }),
+  agentRuns: [],
+  recordAgentRun: (r) => {
+    if (get().agentRuns.some((x) => x.runId === r.runId)) return
+    set((s) => ({ agentRuns: [r, ...s.agentRuns] }))
+    get().recordAction({ action: `Agent run — ${r.agent}`, entityId: r.scopeId, route: r.scopeId ? `/sources/section/${r.scopeId}` : undefined, detail: `${r.findings.length} finding(s), ${r.proposedActions.length} proposed action(s) — awaiting human approval` })
+  },
+  approveAgentAction: (run, action) => {
+    const a = action.apply
+    if (a.op === 'saveClauseToControl') get().saveClauseToControl(a.provisionId, a.controlId)
+    else get().createControlForClause(a.provisionId, { title: a.title, owner: a.owner, frequency: a.frequency, description: a.description })
+    get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
+    get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+  },
 
   artifacts: [],
   addArtifact: (a) => {

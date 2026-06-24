@@ -30,6 +30,7 @@ export function SourceSectionDetail() {
   const completeSpecialist = useApp((s) => s.completeSpecialist)
   const pushToast = useApp((s) => s.pushToast)
   const setCopilotOpen = useApp((s) => s.setCopilotOpen)
+  const openAgents = useApp((s) => s.openAgents)
   const [saving, setSaving] = React.useState(false)
 
   if (!base) return <ComingSoon title="Clause not found" />
@@ -173,6 +174,11 @@ export function SourceSectionDetail() {
                     {!inSpecialist && (
                       <button onClick={() => { engageSpecialist(p.id); pushToast({ title: 'Specialist engaged', description: `${p.id} routed to outside counsel for review.`, variant: 'info' }) }} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-info/40 hover:bg-info-soft/40">
                         <UserSearch className="size-3.5" /> Engage specialist
+                      </button>
+                    )}
+                    {p.applicable !== false && (
+                      <button onClick={() => openAgents(p.id)} className="inline-flex items-center gap-1.5 rounded-md border border-info/40 bg-info-soft/40 px-2.5 py-1.5 text-xs font-medium text-info transition-colors hover:bg-info-soft">
+                        <Sparkles className="size-3.5" /> Propose mapping
                       </button>
                     )}
                   </div>
