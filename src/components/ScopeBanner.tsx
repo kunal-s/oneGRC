@@ -1,35 +1,47 @@
-import { Building2, Eye } from 'lucide-react'
-import { useScope } from '@/lib/access'
+import { Building2 } from 'lucide-react'
+import { useScope, departmentFilterOptions, type Scope } from '@/lib/access'
 import { cn } from '@/lib/utils'
 
 /**
- * The persistent department-scope strip (enhancement plan 1.1). It states, in
- * plain language, whether the current user sees every department (Compliance /
- * Administrator) or only their own — so the access boundary is visible, not
- * implied. `entity` names what the surrounding list holds (e.g. "obligations").
+ * Compact department selector (enhancement plan 1.1). Replaces the verbose scope
+ * banner: the dropdown itself communicates the access boundary. Compliance and the
+ * administrator can narrow to one department or see all; a department-locked user
+ * sees only their own (the control is fixed and disabled).
  */
-export function ScopeBanner({ entity, className }: { entity: string; className?: string }) {
+export function DepartmentSelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: string
+  onChange: (v: string) => void
+  className?: string
+}) {
   const scope = useScope()
+  const options = departmentFilterOptions(scope)
   return (
-    <div
-      className={cn(
-        'mb-3 flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs',
-        scope.seesAll ? 'border-info/30 bg-info-soft/40' : 'border-border bg-muted/40',
-        className,
-      )}
-    >
-      {scope.seesAll ? <Eye className="size-3.5 shrink-0 text-info" /> : <Building2 className="size-3.5 shrink-0 text-muted-foreground" />}
-      {scope.seesAll ? (
-        <span className="text-foreground">
-          <span className="font-medium">All departments.</span> Compliance and Administrator see every {entity} across the firm.
-        </span>
-      ) : (
-        <span className="text-foreground">
-          <span className="font-medium">Department scope · {scope.department}.</span> You see only the {entity} owned by your department; other departments are not shown.
-        </span>
-      )}
-    </div>
+    <label className={cn('inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs', className)}>
+      <Building2 className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="text-muted-foreground">Department</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={!scope.seesAll}
+        className="max-w-[200px] bg-transparent text-xs font-medium text-foreground outline-none disabled:cursor-default"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </label>
   )
+}
+
+/** The initial selected value for a DepartmentSelect, given the active scope. */
+export function initialDepartment(scope: Scope): string {
+  return departmentFilterOptions(scope)[0]
 }
 
 /** Shown in place of a list when a department legitimately has no records of a

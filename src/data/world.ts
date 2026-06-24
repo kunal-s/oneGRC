@@ -2,6 +2,7 @@ import type {
   Risk,
   Control,
   Obligation,
+  ObligationSubStep,
   Incident,
   Policy,
   Issue,
@@ -25,7 +26,7 @@ import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
 import { PEOPLE } from './people'
 import { SOURCES, INSTRUMENTS, sourceForRegulator, sourceForFramework } from './sources'
-import { ist, NOW_MS, minsFromNow, daysFromNow } from '@/lib/time'
+import { NOW_MS, MARQUEE_DETECTED_MS, minsFromNow, daysFromNow } from '@/lib/time'
 
 const iso = (d: Date) => d.toISOString()
 
@@ -319,7 +320,9 @@ const INCIDENT_TITLES: { t: string; sev: Severity; src: Incident['source'] }[] =
 ]
 
 function marqueeTimeline(): TimelineEvent[] {
-  const d = (h: number, m: number, s = 0) => iso(ist(2026, 6, 10, h, m, s))
+  // Timeline anchored to the (evergreen) detection moment; offsets preserve the
+  // original 02:14-based cadence relative to detection.
+  const d = (h: number, m: number, s = 0) => iso(new Date(MARQUEE_DETECTED_MS + ((h - 2) * 3600 + (m - 14) * 60 + s) * 1000))
   return [
     { at: d(2, 14, 0), actor: 'Splunk SIEM', channel: 'Splunk SIEM', kind: 'detect', text: 'Splunk SIEM correlation fired: mass file-encryption + SMB lateral movement on SPF-FA-DB-02 (rule "Ransomware — bulk file rename").' },
     { at: d(2, 15, 30), actor: 'Sankalp ServiceDesk', channel: 'Sankalp ServiceDesk', kind: 'triage', text: 'P1 ticket auto-raised in Sankalp ServiceDesk (ITSM) and bridged to OneGRC as INC-2026-0411.' },
@@ -337,14 +340,14 @@ function marqueeTimeline(): TimelineEvent[] {
 }
 
 function buildMarquee(): Incident {
-  const detected = iso(ist(2026, 6, 10, 2, 14, 0))
+  const detected = iso(new Date(MARQUEE_DETECTED_MS))
   const tracks: RegulatorTrack[] = [
     {
       regulator: 'CERT-In',
       clockLabel: 'CERT-In · 6-hour incident report',
       windowHours: 6,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 10, 8, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 6 * 3600000)),
       status: 'At risk',
       output: 'CERT-In Incident Report — Annexure I (Direction 20(3)/2022)',
     },
@@ -353,7 +356,7 @@ function buildMarquee(): Incident {
       clockLabel: 'PFRDA · 48-hour ICS intimation',
       windowHours: 48,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 12, 2, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 48 * 3600000)),
       status: 'On track',
       output: 'PFRDA ICS incident intimation + quarterly Annexure (subscriber-impacting)',
     },
@@ -362,7 +365,7 @@ function buildMarquee(): Incident {
       clockLabel: 'DPDP Board · ~72-hour breach intimation',
       windowHours: 72,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 13, 2, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 72 * 3600000)),
       status: 'On track',
       output: 'DPDP personal-data-breach intimation to Board & affected principals',
     },
@@ -385,7 +388,7 @@ function buildMarquee(): Incident {
     linkedIssues: [],
     evidence: [],
     summary:
-      'Splunk SIEM correlated mass file-encryption with SMB lateral movement on the fund-accounting database SPF-FA-DB-02 at 02:14 IST and auto-raised a P1 ticket in Sankalp ServiceDesk (the in-house ITSM); affected assets were enriched from the ServiceDesk CMDB. CrowdStrike EDR auto-isolated the host and SecOps contained lateral movement within 17 minutes. Because the event is subscriber-impacting and involves personal data, OneGRC auto-classified it Critical (PFRDA ICS 2024) and opened three regulator tracks on one clock — CERT-In (6h), PFRDA (48h), DPDP Board (~72h) — driving three regulator outputs from a single incident record and one evidence trail.',
+      'Splunk SIEM correlated mass file-encryption with SMB lateral movement on the fund-accounting database SPF-FA-DB-02 in the early hours and auto-raised a P1 ticket in Sankalp ServiceDesk (the in-house ITSM); affected assets were enriched from the ServiceDesk CMDB. CrowdStrike EDR auto-isolated the host and SecOps contained lateral movement within 17 minutes. Because the event is subscriber-impacting and involves personal data, OneGRC auto-classified it Critical (PFRDA ICS 2024) and opened three regulator tracks on one clock — CERT-In (6h), PFRDA (48h), DPDP Board (~72h) — driving three regulator outputs from a single incident record and one evidence trail.',
   }
 }
 
@@ -970,7 +973,7 @@ const COMPLIANCE_CONTROLS: Control[] = [
     description:
       'Detect a personal-data breach and run one notification runbook to two regulators — intimate the Data Protection Board and affected subscribers within the DPDP window, and report to CERT-In within six hours.',
     frequency: 'Continuous',
-    nextDue: ist(2026, 6, 30).toISOString(),
+    nextDue: daysFromNow(20),
     sourceRefs: ['SRC-DPDP-2025', 'SRC-CERTIN-2022'],
   },
   {
@@ -988,7 +991,7 @@ const COMPLIANCE_CONTROLS: Control[] = [
     linkedIssues: [],
     description: 'Encryption, access control and continuous monitoring over subscriber personal data on the CRA and KYC stores.',
     frequency: 'Continuous',
-    nextDue: ist(2026, 6, 30).toISOString(),
+    nextDue: daysFromNow(20),
     sourceRefs: ['SRC-DPDP-8-5'],
   },
   {
@@ -1006,7 +1009,7 @@ const COMPLIANCE_CONTROLS: Control[] = [
     linkedIssues: [],
     description: 'Pre-trade approved-universe check and single-issuer / group exposure-limit monitoring on the NPS scheme portfolios, minuted at the Investment Committee.',
     frequency: 'Weekly',
-    nextDue: ist(2026, 6, 26).toISOString(),
+    nextDue: daysFromNow(16),
     sourceRefs: ['SRC-PFRDA-INV-2025', 'SRC-PFRDA-INV-COMMITTEE'],
   },
   {
@@ -1027,7 +1030,7 @@ const COMPLIANCE_CONTROLS: Control[] = [
     linkedIssues: [],
     description: '180-day in-India log retention across Splunk SIEM and CrowdStrike EDR, with NTP clock synchronisation to NIC/NPL sources.',
     frequency: 'Continuous',
-    nextDue: ist(2026, 6, 30).toISOString(),
+    nextDue: daysFromNow(20),
     sourceRefs: ['SRC-CERTIN-LOGS'],
   },
   {
@@ -1046,7 +1049,7 @@ const COMPLIANCE_CONTROLS: Control[] = [
     description:
       'Deduct Maharashtra profession tax at the Schedule I slab from monthly payroll, deposit it to the State by the statutory date, and file the PT return — PTRC maintained; supports the monthly remittance duty (OBL-LAB-JUN26-02).',
     frequency: 'Monthly',
-    nextDue: ist(2026, 6, 30).toISOString(),
+    nextDue: daysFromNow(20),
     sourceRefs: ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8'],
   },
 ]
@@ -1072,12 +1075,63 @@ const CURATED_EVIDENCE: Evidence[] = [
   { id: 'EVD-44601', title: 'Monthly PT challan — payment acknowledgement (May 2026)', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 26 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
   { id: 'EVD-44602', title: 'PT return filing acknowledgement', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 24 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
   { id: 'EVD-44603', title: 'Payroll PT deduction register — Schedule I slabs', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 25 * 86400000 - 4200000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'Payroll system' },
+  { id: 'EVD-44607', title: 'Payroll PT deduction register — current cycle (Schedule I slabs)', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 1 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-04'], frameworkRefs: [], source: 'Payroll system' },
   // DPDP worked controls
   { id: 'EVD-44604', title: 'Breach-notification runbook — CERT-In 6h + DPDP Board', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 12 * 86400000)), capturedBy: 'priya', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: [], frameworkRefs: ['ISO 27001', 'NIST CSF'], source: 'Manual upload' },
   { id: 'EVD-44605', title: 'KYC-store encryption & access-control config export', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 4 * 86400000 - 1800000)), capturedBy: 'CCM (auto)', auto: true, linkedControls: ['CTRL-COMP-SEC-01'], linkedObligations: [], frameworkRefs: ['ISO 27001'], source: 'AWS Security Hub' },
   { id: 'EVD-44606', title: 'Consent ledger reconciliation — Q1 FY2026-27', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 9 * 86400000)), capturedBy: 'anjali', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: ['OBL-DPDP-JUN26-01'], frameworkRefs: [], source: 'Consent & Privacy platform' },
 ]
 evidence.push(...CURATED_EVIDENCE)
+
+// ── Multi-step (deduction-type) obligation curation (enhancement plan 3) ──────
+// Professional-tax remittance is satisfied by a sequence of actions across two
+// departments: HR & Labour deducts (s.4) and files the return (s.6); Finance &
+// Tax deposits the tax (s.8). Each action is its own maker-checker task with
+// evidence. OBL-LAB-JUN26-04 is the live (in-progress) worked example; -02 is the
+// completed prior cycle for contrast.
+function curatePtSubSteps() {
+  const mk = (
+    oblId: string,
+    dueMs: number,
+    steps: { seq: number; title: string; clause: string; maker: string; checker: string; offsetDays: number; status: ObligationSubStep['status']; ev?: string; dep?: number }[],
+  ): ObligationSubStep[] =>
+    steps.map((s) => ({
+      id: `${oblId}-S${s.seq}`,
+      seq: s.seq,
+      title: s.title,
+      clauseRef: s.clause,
+      maker: s.maker,
+      checker: s.checker,
+      dueDate: new Date(dueMs + s.offsetDays * 86400000).toISOString(),
+      status: s.status,
+      evidenceId: s.ev,
+      dependsOnSeq: s.dep,
+    }))
+
+  const live = obligations.find((o) => o.id === 'OBL-LAB-JUN26-04')
+  if (live) {
+    live.dueDate = daysFromNow(4)
+    live.status = 'Due'
+    live.makerChecker = { maker: 'farhan', checker: 'anjali', state: 'Drafted' }
+    live.sourceRefs = ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+    live.subSteps = mk('OBL-LAB-JUN26-04', new Date(live.dueDate).getTime(), [
+      { seq: 1, title: 'Deduct profession tax from payroll (Schedule I slabs)', clause: 'SRC-PT-4', maker: 'farhan', checker: 'deepa', offsetDays: -4, status: 'Done', ev: 'EVD-44607' },
+      { seq: 2, title: 'Deposit profession tax with the State (PT challan)', clause: 'SRC-PT-8', maker: 'deepa', checker: 'anjali', offsetDays: -1, status: 'Pending', dep: 1 },
+      { seq: 3, title: 'File the monthly PT return', clause: 'SRC-PT-6', maker: 'farhan', checker: 'vikram', offsetDays: 0, status: 'Pending', dep: 2 },
+    ])
+  }
+
+  const prior = obligations.find((o) => o.id === 'OBL-LAB-JUN26-02')
+  if (prior) {
+    prior.sourceRefs = ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+    prior.subSteps = mk('OBL-LAB-JUN26-02', new Date(prior.dueDate).getTime(), [
+      { seq: 1, title: 'Deduct profession tax from payroll (Schedule I slabs)', clause: 'SRC-PT-4', maker: 'farhan', checker: 'deepa', offsetDays: -4, status: 'Done', ev: 'EVD-44603' },
+      { seq: 2, title: 'Deposit profession tax with the State (PT challan)', clause: 'SRC-PT-8', maker: 'deepa', checker: 'anjali', offsetDays: -1, status: 'Done', ev: 'EVD-44601', dep: 1 },
+      { seq: 3, title: 'File the monthly PT return', clause: 'SRC-PT-6', maker: 'farhan', checker: 'vikram', offsetDays: 0, status: 'Done', ev: 'EVD-44602', dep: 2 },
+    ])
+  }
+}
+curatePtSubSteps()
 
 // ── cross-linking pass ──────────────────────────────────────────────────────
 function crossLink() {

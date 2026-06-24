@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Inbox, AlarmClock, Siren, ArrowUpRight } from 'lucide-react'
+import { AlarmClock, Siren, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
 import { WORLD } from '@/data'
@@ -28,36 +28,17 @@ export function NeedsMe({ className }: { className?: string }) {
 
   const mine = React.useMemo(() => WORLD.queue.filter((q) => q.role === role), [role])
   const overdue = mine.filter((t) => new Date(t.due).getTime() < NOW_MS)
-  const onClock = mine.filter((t) => t.kind === 'Incident action')
   // Most urgent: earliest due among overdue, else earliest due overall.
   const top = [...mine].sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())[0]
   const nearest = INCIDENT_PERSONAS.includes(role) ? nearestTrack() : undefined
 
   return (
-    <div className={cn('flex h-9 shrink-0 items-center gap-1 border-b border-border bg-muted/50 px-3', className)}>
-      <Chip
-        icon={<Inbox className="size-3.5" />}
-        label="Needs me"
-        value={mine.length}
-        tone="neutral"
-        onClick={() => navigate('/queue')}
-      />
+    <div className={cn('flex h-9 shrink-0 items-center gap-2 border-b border-border bg-muted/50 px-3', className)}>
       {overdue.length > 0 && (
-        <>
-          <Sep />
-          <Chip icon={<AlarmClock className="size-3.5" />} label="Overdue" value={overdue.length} tone="warn" onClick={() => navigate('/queue')} />
-        </>
-      )}
-      {onClock.length > 0 && (
-        <>
-          <Sep />
-          <Chip icon={<Siren className="size-3.5" />} label="On the clock" value={onClock.length} tone="danger" onClick={() => navigate('/queue')} />
-        </>
+        <Chip icon={<AlarmClock className="size-3.5" />} label="Overdue" value={overdue.length} tone="warn" onClick={() => navigate('/queue')} />
       )}
       {nearest && (
-        <>
-          <Sep />
-          <button
+        <button
             onClick={() => navigate(`/incidents/${nearest.incidentId}`)}
             className="flex items-center gap-2 rounded-md px-2.5 py-1 transition-colors hover:bg-background"
           >
@@ -69,7 +50,6 @@ export function NeedsMe({ className }: { className?: string }) {
               <RegulatorClockInline track={nearest.track} />
             </span>
           </button>
-        </>
       )}
       {top && (
         <button
@@ -83,10 +63,6 @@ export function NeedsMe({ className }: { className?: string }) {
       )}
     </div>
   )
-}
-
-function Sep() {
-  return <span className="h-4 w-px bg-border" />
 }
 
 function Chip({

@@ -218,6 +218,24 @@ export interface Control {
   sourceRefs?: string[] // SourceProvision ids — provenance for this control
 }
 
+// One action that must be taken to satisfy an obligation (enhancement plan 3 /
+// functional spec 5.4). A deduction-type duty (PF / PT / TDS) is a sequence:
+// deduct -> pay -> file the return. Each sub-step is its own mini-task with a
+// maker, a checker, a due date and the evidence that proves it — and different
+// departments can own different steps (e.g. HR & Labour deducts, Finance pays).
+export interface ObligationSubStep {
+  id: string // 'OBL-LAB-JUN26-04-S1'
+  seq: number // 1-based order
+  title: string // 'Deduct profession tax from payroll (Schedule I)'
+  clauseRef?: string // SourceProvision id this action discharges (e.g. SRC-PT-4)
+  maker: string // person id who performs the action
+  checker: string // person id who verifies it (two-step maker-checker)
+  dueDate: string // ISO — the by-when for this step
+  status: 'Done' | 'Pending' | 'Overdue'
+  evidenceId?: string // the proof, once done (kept for audit)
+  dependsOnSeq?: number // prerequisite step (sequential); absent = may run in parallel
+}
+
 export interface Obligation {
   id: string
   regulator: Regulator
@@ -235,6 +253,7 @@ export interface Obligation {
   applicability?: string // whether/why it applies to SPF + the basis — shown as "Applies because"
   origin?: 'External' | 'Internal' // External = statutory/regulator; Internal = policy-driven duty the firm set itself
   policySource?: string // for internal duties: the policy that mandates it (shown instead of a regulator)
+  subSteps?: ObligationSubStep[] // ordered actions to satisfy a multi-step (deduction-type) duty
 }
 
 export interface RegulatorTrack {

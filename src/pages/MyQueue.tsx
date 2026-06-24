@@ -12,7 +12,6 @@ import { useApp } from '@/store'
 import { WORLD } from '@/data'
 import { ROLES, PEOPLE, PEOPLE_BY_ID, personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
-import { ScopeBanner } from '@/components/ScopeBanner'
 import { reminderEngineSummary } from '@/lib/reminders'
 import type { QueueTask } from '@/types'
 
@@ -113,8 +112,6 @@ export function MyQueue() {
           </div>
         }
       />
-
-      <ScopeBanner entity="tasks" />
 
       <button
         onClick={() => navigate('/obligations')}

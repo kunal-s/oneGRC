@@ -11,17 +11,19 @@ import { WORLD } from '@/data'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
-import { useScope, ownerInScope } from '@/lib/access'
-import { ScopeBanner, ScopeEmpty } from '@/components/ScopeBanner'
+import { useScope, passesDeptFilter } from '@/lib/access'
+import { DepartmentSelect, initialDepartment, ScopeEmpty } from '@/components/ScopeBanner'
 import type { Policy } from '@/types'
 
 export function Policies() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const scope = useScope()
+  const [dept, setDept] = React.useState(() => initialDepartment(scope))
+  React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
   // Department access boundary (1.1): scope to the user's department; Compliance
-  // and the administrator see every policy.
-  const policies = React.useMemo(() => WORLD.policies.filter((p) => ownerInScope(p.owner, scope)), [scope])
+  // and the administrator see every policy (and can narrow via the dropdown).
+  const policies = React.useMemo(() => WORLD.policies.filter((p) => passesDeptFilter(p.owner, scope, dept)), [scope, dept])
 
   const categories = React.useMemo(() => Array.from(new Set(policies.map((p) => p.category))).sort(), [policies])
   const owners = React.useMemo(() => Array.from(new Set(policies.map((p) => personName(p.owner)))).sort(), [policies])
@@ -118,9 +120,8 @@ export function Policies() {
         }
       />
 
-      <ScopeBanner entity="policies" />
-
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <DepartmentSelect value={dept} onChange={setDept} />
         <span className="rounded-md border border-border bg-background px-2.5 py-1">
           Published <span className="font-semibold tnum text-ok">{policies.filter((p) => p.status === 'Published').length}</span>
         </span>

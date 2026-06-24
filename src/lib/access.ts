@@ -93,3 +93,27 @@ export function instrumentInScope(instrumentId: string, scope: Scope): boolean {
   if (!scope.department) return false
   return departmentsForInstrument(instrumentId).has(scope.department)
 }
+
+// ── Department selector (replaces the verbose scope banner) ───────────────────
+// A compact dropdown communicates the scope and (for Compliance / admin) lets
+// them narrow to one department. A department-locked user sees only their own
+// department, so the control is fixed to it.
+export const ALL_DEPARTMENTS_LABEL = 'All departments'
+
+export function departmentFilterOptions(scope: Scope): string[] {
+  return scope.seesAll ? [ALL_DEPARTMENTS_LABEL, ...DEPARTMENTS] : [scope.department ?? 'Unassigned']
+}
+
+/** Owner-derived records: passes the hard boundary AND the selected filter. */
+export function passesDeptFilter(ownerId: string | undefined, scope: Scope, selected: string): boolean {
+  if (!ownerInScope(ownerId, scope)) return false
+  if (!scope.seesAll || selected === ALL_DEPARTMENTS_LABEL) return true
+  return departmentOfPerson(ownerId) === selected
+}
+
+/** Source acts: passes the hard boundary AND the selected department filter. */
+export function passesInstrumentDeptFilter(instrumentId: string, scope: Scope, selected: string): boolean {
+  if (!instrumentInScope(instrumentId, scope)) return false
+  if (!scope.seesAll || selected === ALL_DEPARTMENTS_LABEL) return true
+  return departmentsForInstrument(instrumentId).has(selected as Department)
+}

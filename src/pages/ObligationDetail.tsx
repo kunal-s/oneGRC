@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck, ScrollText, BellRing, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Upload, Send, CheckCircle2, GitPullRequestArrow, ArrowUpRight, FileCheck, ScrollText, BellRing, AlertTriangle, ListChecks, ArrowRight, Paperclip } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { EvidenceList } from '@/components/EvidenceList'
@@ -9,10 +9,11 @@ import { MakerCheckerChain } from '@/components/MakerChecker'
 import { SourceList } from '@/components/SourceRef'
 import { RegulatorChip } from '@/lib/regulators'
 import { cn } from '@/lib/utils'
-import { getRegChange, WORLD } from '@/data'
+import { getRegChange, getEvidence, WORLD } from '@/data'
 import { PEOPLE_BY_ID, personName } from '@/data/people'
-import { reminderEvents } from '@/lib/reminders'
-import { fmtIST, fmtRelative, NOW_MS } from '@/lib/time'
+import { reminderEvents, subStepLadder, latestFired } from '@/lib/reminders'
+import { fmtIST, fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
+import type { ObligationSubStep } from '@/types'
 import { useApp } from '@/store'
 import { useEffectiveObligation } from '@/lib/effective'
 import { useCanAct } from '@/lib/gating'
@@ -96,6 +97,10 @@ export function ObligationDetail() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="space-y-4">
+          {o.subSteps && o.subSteps.length > 0 && (
+            <SatisfyStepsCard steps={o.subSteps} navigate={navigate} />
+          )}
+
           <div className="card-surface p-4">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Maker-checker</h3>
             <MakerCheckerChain mc={o.makerChecker} />
@@ -204,20 +209,91 @@ export function ObligationDetail() {
               </button>
               <p className="mt-2 text-2xs text-muted-foreground">This obligation was created/updated automatically when the change was ingested.</p>
             </div>
-          ) : (
-            <div className="card-surface p-3.5 text-2xs leading-relaxed text-muted-foreground">
-              <span className="font-medium text-foreground">No open change.</span> This obligation is steady-state; any
-              future statutory amendment from the RegTech feeds will update it here automatically.
-            </div>
-          )}
-
-          <div className="card-surface p-3.5 text-2xs leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">One calendar.</span> This filing sits alongside every other
-            regulator's deadlines on the same calendar, with the same maker-checker discipline and the same evidence
-            vault — no separate spreadsheet per regulator.
-          </div>
+          ) : null}
         </div>
       </div>
+    </div>
+  )
+}
+
+// "What it takes to satisfy this" — the ordered actions (sub-steps), each a task
+// with its own maker, checker, due date, status and evidence. Different
+// departments can own different steps (HR & Labour deducts/files; Finance pays).
+function SatisfyStepsCard({ steps, navigate }: { steps: ObligationSubStep[]; navigate: (to: string) => void }) {
+  const done = steps.filter((s) => s.status === 'Done').length
+  return (
+    <div className="card-surface p-4">
+      <div className="mb-1 flex items-center justify-between">
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <ListChecks className="size-4 text-info" /> What it takes to satisfy this
+        </h3>
+        <span className="text-2xs font-medium text-muted-foreground tnum">{done} of {steps.length} done</span>
+      </div>
+      <p className="mb-3 text-2xs text-muted-foreground">
+        Ordered actions, each a maker-checker task with its own due date and evidence. Reminders and escalations chase the owner of each step.
+      </p>
+      <ol className="space-y-2.5">
+        {steps.map((s) => {
+          const ev = s.evidenceId ? getEvidence(s.evidenceId) : undefined
+          const overdue = s.status === 'Overdue'
+          const pending = s.status === 'Pending'
+          const fired = pending || overdue ? latestFired(subStepLadder(s)) : undefined
+          return (
+            <li key={s.id} className="rounded-md border border-border bg-background p-2.5">
+              <div className="flex items-start gap-2.5">
+                <span
+                  className={cn(
+                    'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-2xs font-semibold',
+                    s.status === 'Done' ? 'bg-ok-soft text-ok' : overdue ? 'bg-critical-soft text-critical' : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {s.status === 'Done' ? <CheckCircle2 className="size-3.5" /> : s.seq}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-sm font-medium text-foreground">{s.title}</span>
+                    {s.clauseRef && (
+                      <button
+                        onClick={() => navigate(`/sources/section/${s.clauseRef}`)}
+                        className="rounded bg-info-soft px-1.5 py-0 font-mono text-2xs font-semibold text-info hover:underline"
+                      >
+                        {s.clauseRef}
+                      </button>
+                    )}
+                    <span className={cn('ml-auto rounded px-1.5 py-0.5 text-2xs font-semibold', s.status === 'Done' ? 'bg-ok-soft text-ok' : overdue ? 'bg-critical-soft text-critical' : 'bg-muted text-muted-foreground')}>
+                      {s.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Avatar id={s.maker} size={14} /> {personName(s.maker)}
+                      <span className="text-muted-foreground/70">does</span>
+                      <ArrowRight className="size-3" />
+                      <Avatar id={s.checker} size={14} /> {personName(s.checker)}
+                      <span className="text-muted-foreground/70">verifies</span>
+                    </span>
+                    <span className="text-muted-foreground/50">·</span>
+                    <span className={cn(overdue && 'font-medium text-critical')}>by {fmtDate(s.dueDate)} ({fmtRelative(s.dueDate)})</span>
+                  </div>
+                  <div className="mt-1.5">
+                    {ev ? (
+                      <span className="inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok">
+                        <Paperclip className="size-3" /> {ev.id} — {ev.title}
+                      </span>
+                    ) : fired ? (
+                      <span className="inline-flex items-center gap-1 rounded border border-medium/30 bg-medium-soft/50 px-1.5 py-0.5 text-2xs text-medium">
+                        <BellRing className="size-3" /> {fired.kind === 'escalation' ? `Escalated · ${fired.intervalLabel} → ${fired.targetRole}` : `Reminder sent · ${fired.intervalLabel}`}
+                      </span>
+                    ) : (
+                      <span className="text-2xs text-muted-foreground">Awaiting action — evidence not yet attached.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
     </div>
   )
 }

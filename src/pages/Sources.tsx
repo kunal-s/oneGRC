@@ -9,8 +9,8 @@ import { WORLD } from '@/data'
 import { instrumentSummary, actStatus, type InstrumentSummary } from '@/lib/sources'
 import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
-import { useScope, instrumentInScope } from '@/lib/access'
-import { ScopeBanner, ScopeEmpty } from '@/components/ScopeBanner'
+import { useScope, passesInstrumentDeptFilter } from '@/lib/access'
+import { DepartmentSelect, initialDepartment, ScopeEmpty } from '@/components/ScopeBanner'
 import { cn } from '@/lib/utils'
 import type { SourceInstrument } from '@/types'
 
@@ -34,20 +34,23 @@ export function Sources() {
   const pushToast = useApp((s) => s.pushToast)
   const overrides = useApp((s) => s.clauseOverrides)
   const scope = useScope()
+  const [dept, setDept] = React.useState(() => initialDepartment(scope))
+  React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
   const [view, setView] = React.useState<'all' | Bucket>('all')
   const [q, setQ] = React.useState('')
 
   // Department access boundary (1.1): a source act is visible to a department
-  // that owns records deriving from it; Compliance and the administrator see all.
+  // that owns records deriving from it; Compliance and the administrator see all
+  // (and can narrow via the dropdown).
   const rows: Row[] = React.useMemo(
     () =>
       WORLD.instruments
-        .filter((inst) => instrumentInScope(inst.id, scope))
+        .filter((inst) => passesInstrumentDeptFilter(inst.id, scope, dept))
         .map((inst) => {
           const base = { inst, summary: instrumentSummary(inst.id, overrides), act: actStatus(inst.id, overrides) }
           return { ...base, bucket: bucketOf(base) }
         }),
-    [overrides, scope],
+    [overrides, scope, dept],
   )
 
   const totalClauses = WORLD.sources.length
@@ -106,12 +109,13 @@ export function Sources() {
         }
       />
 
-      <ScopeBanner entity="source acts" />
-
       <StatGroup className="mb-4" stats={stats} />
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <SavedViews views={views} active={view} onSelect={(v) => setView(v as 'all' | Bucket)} />
+        <div className="flex flex-wrap items-center gap-2">
+          <DepartmentSelect value={dept} onChange={setDept} />
+          <SavedViews views={views} active={view} onSelect={(v) => setView(v as 'all' | Bucket)} />
+        </div>
         <label className="flex h-8 w-64 items-center gap-2 rounded-md border border-border bg-muted/40 px-2.5 text-muted-foreground focus-within:bg-background">
           <Search className="size-3.5" />
           <input

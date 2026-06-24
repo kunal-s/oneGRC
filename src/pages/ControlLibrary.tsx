@@ -16,8 +16,8 @@ import { useApp } from '@/store'
 import { ReportMenu } from '@/components/kit/ReportMenu'
 import { reportsForModule } from '@/components/kit/reports'
 import { useEffectiveControls } from '@/lib/effective'
-import { useScope, ownerInScope } from '@/lib/access'
-import { ScopeBanner, ScopeEmpty } from '@/components/ScopeBanner'
+import { useScope, passesDeptFilter } from '@/lib/access'
+import { DepartmentSelect, initialDepartment, ScopeEmpty } from '@/components/ScopeBanner'
 import { pct } from '@/lib/format'
 import type { Control } from '@/types'
 
@@ -30,12 +30,14 @@ export function ControlLibrary() {
   const selfId = useApp((s) => s.currentPersonId)()
   const clauseOverrides = useApp((s) => s.clauseOverrides)
   const scope = useScope()
+  const [dept, setDept] = React.useState(() => initialDepartment(scope))
+  React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
   const [view, setView] = React.useState<ViewId>('all')
 
   const rawControls = useEffectiveControls()
   // Department access boundary (1.1): scope the library to the user's department;
-  // Compliance and the administrator see all controls.
-  const allControls = React.useMemo(() => rawControls.filter((c) => ownerInScope(c.owner, scope)), [rawControls, scope])
+  // Compliance and the administrator see all controls (and can narrow via the dropdown).
+  const allControls = React.useMemo(() => rawControls.filter((c) => passesDeptFilter(c.owner, scope, dept)), [rawControls, scope, dept])
 
   // How many clauses / acts each control satisfies (Sources pipeline).
   const satisfies = React.useMemo(() => {
@@ -197,7 +199,9 @@ export function ControlLibrary() {
         }
       />
 
-      <ScopeBanner entity="controls" />
+      <div className="mb-3">
+        <DepartmentSelect value={dept} onChange={setDept} />
+      </div>
 
       {!scope.seesAll && allControls.length === 0 ? (
         <ScopeEmpty entity="controls" />
