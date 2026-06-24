@@ -567,9 +567,10 @@ function buildObligations(): Obligation[] {
     const maker = r.pick(def.team)
     const checker = r.pick(def.reg === 'PFRDA' ? ['meera', 'anjali'] : ['anjali', 'vikram', 'meera'])
     // Filed cycles carry an actual filed date — mostly on time, ~20% late (E2.3).
+    // Derived from the loop index only (no RNG draw) so obligation ids stay stable.
     const filedAt =
       status === 'Filed'
-        ? iso(new Date(new Date(dueDate).getTime() + (i % 5 === 0 ? r.int(2, 12) : -r.int(0, 4)) * 86400000))
+        ? iso(new Date(new Date(dueDate).getTime() + (i % 5 === 0 ? 3 + (i % 7) : -(i % 4)) * 86400000))
         : undefined
     obligations.push({
       id,

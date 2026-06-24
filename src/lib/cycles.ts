@@ -3,7 +3,7 @@
 // A filed cycle is "on time" if it was filed on or before its due date, else
 // "late". For recurring duties we also synthesise the recent cycles so the
 // obligation detail can show, period by period, whether each was met on time.
-import type { Obligation } from '@/types'
+import type { Obligation, Control, Evidence } from '@/types'
 import { NOW_MS } from '@/lib/time'
 
 const MONTHS: Record<string, number> = { Monthly: 1, Quarterly: 3, 'Half-yearly': 6, Annual: 12 }
@@ -25,7 +25,7 @@ function stepBack(dueMs: number, frequency: string, n: number): number {
     d.setUTCMonth(d.getUTCMonth() - m * n)
     return d.getTime()
   }
-  if (frequency === 'Weekly') return dueMs - n * 7 * DAY
+  if (frequency === 'Weekly' || frequency === 'Daily' || frequency === 'Continuous') return dueMs - n * 7 * DAY
   if (frequency === 'Fortnightly') return dueMs - n * 14 * DAY
   return dueMs - n * 30 * DAY
 }
@@ -41,8 +41,8 @@ function periodLabel(ms: number, frequency: string): string {
   const d = new Date(ms + (5 * 60 + 30) * 60000)
   const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]
   if (frequency === 'Annual') return `${d.getUTCFullYear()}`
-  if (frequency === 'Quarterly' || frequency === 'Half-yearly') return `${mon} ${d.getUTCFullYear()}`
-  return `${mon} ${d.getUTCFullYear()}`
+  if (frequency === 'Monthly' || frequency === 'Quarterly' || frequency === 'Half-yearly') return `${mon} ${d.getUTCFullYear()}`
+  return `${d.getUTCDate()} ${mon} ${d.getUTCFullYear()}` // weekly / fortnightly / daily / continuous
 }
 
 /** The current cycle plus a few synthesised prior cycles, each with its timing.
@@ -68,4 +68,33 @@ export function recentCycles(o: Obligation, count = 4): Cycle[] {
     })
   }
   return cycles
+}
+
+// ── Control evidence ledger (E3.1) ───────────────────────────────────────────
+// Period by period, for a control: what was due, the evidence filed for that
+// period, whether it was on time, and the result. Replaces the synthesized
+// flat test-history with a cycle ledger tied to real evidence.
+export interface LedgerRow {
+  period: string
+  dueDate: string
+  evidenceId?: string
+  capturedAt?: string
+  timing: Timing
+  result: Control['result']
+}
+
+export function controlLedger(control: Control, evidence: Evidence[], count = 6): LedgerRow[] {
+  const sorted = [...evidence].sort((a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime())
+  const rows: LedgerRow[] = []
+  for (let i = 0; i < count; i++) {
+    const dueMs = stepBack(NOW_MS, control.frequency, i)
+    const ev = sorted[i]
+    const capturedAt = ev?.capturedAt
+    const timing: Timing = !capturedAt ? 'pending' : new Date(capturedAt).getTime() <= dueMs ? 'on-time' : 'late'
+    // Current period reflects the live result; priors pass, with one prior dip if
+    // the control is currently not clean (mirrors the real escalation story).
+    const result: Control['result'] = i === 0 ? control.result : i === 2 && control.result !== 'Pass' ? 'Partial' : 'Pass'
+    rows.push({ period: periodLabel(dueMs, control.frequency), dueDate: new Date(dueMs).toISOString(), evidenceId: ev?.id, capturedAt, timing, result })
+  }
+  return rows
 }

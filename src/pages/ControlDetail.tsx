@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, Clock } from 'lucide-react'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, Clock, CalendarClock, Paperclip } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPill } from '@/components/FrameworkPill'
@@ -12,8 +13,9 @@ import { SeverityBadge } from '@/components/SeverityBadge'
 import { SourceList, SourceChip } from '@/components/SourceRef'
 import { getIssue, getInstrument, WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
+import { controlLedger, filingTiming } from '@/lib/cycles'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
-import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
+import { fmtDate, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
 import { useEffectiveControl } from '@/lib/effective'
 import { useCanAct } from '@/lib/gating'
@@ -64,11 +66,17 @@ export function ControlDetail() {
   // Sources pipeline — the clauses (across acts) this control satisfies.
   const satisfied = clausesForControl(control.id, clauseOverrides)
   const satisfiedByAct = groupByAct(satisfied)
+  // The obligations this control satisfies (control -> clause -> obligation), so a
+  // user can walk control -> obligation -> evidence (E-E4).
+  const satisfiedClauseIds = new Set(satisfied.map((c) => c.id))
+  const obligationsSatisfied = WORLD.obligations.filter((o) => o.sourceRefs?.some((r) => satisfiedClauseIds.has(r)))
+  // Period-by-period evidence ledger (E3.1).
+  const ledger = controlLedger(control, evidence)
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'mappings', label: 'Mappings', count: control.frameworks.length },
-    { key: 'history', label: 'Test history', count: testHistory.length },
+    { key: 'history', label: 'Evidence ledger', count: ledger.length },
     { key: 'evidence', label: 'Evidence', count: evidence.length },
     { key: 'issues', label: 'Issues', count: issues.length },
   ]
@@ -283,6 +291,31 @@ export function ControlDetail() {
         </div>
       )}
 
+      {tab === 'overview' && obligationsSatisfied.length > 0 && (
+        <div className="card-surface mt-4 p-4">
+          <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <CalendarClock className="size-4 text-info" /> Obligations this control satisfies
+          </h3>
+          <p className="mb-3 text-2xs text-muted-foreground">
+            The duties this control discharges — walk control &rarr; obligation &rarr; evidence to prove each period.
+          </p>
+          <div className="space-y-1">
+            {obligationsSatisfied.map((o) => {
+              const t = filingTiming(o)
+              return (
+                <button key={o.id} onClick={() => navigate(`/obligations/${o.id}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+                  <span className="font-mono text-2xs font-semibold text-info">{o.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{o.title}</span>
+                  <StatusChip status={o.status} />
+                  {o.status === 'Filed' && <span className={cn('rounded px-1.5 py-0 text-2xs font-medium', t === 'late' ? 'bg-medium-soft text-medium' : 'bg-ok-soft text-ok')}>{t === 'late' ? 'late' : 'on time'}</span>}
+                  <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {tab === 'mappings' && (
         <div className="card-surface p-4">
           <h3 className="mb-1 text-sm font-semibold text-foreground">Cross-framework mapping</h3>
@@ -314,24 +347,42 @@ export function ControlDetail() {
 
       {tab === 'history' && (
         <div className="card-surface overflow-hidden">
+          <div className="border-b border-border px-4 py-2.5">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <CalendarClock className="size-4 text-info" /> Evidence ledger · period by period
+            </h3>
+            <p className="mt-0.5 text-2xs text-muted-foreground">For each cycle: what was due, the evidence filed, whether it was on time, and the result.</p>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2">Run date (IST)</th>
+                <th className="px-4 py-2">Period</th>
+                <th className="px-4 py-2">Due</th>
+                <th className="px-4 py-2">Evidence filed</th>
+                <th className="px-4 py-2">On time</th>
                 <th className="px-4 py-2">Result</th>
-                <th className="px-4 py-2">Method</th>
-                <th className="px-4 py-2">Tester</th>
-                <th className="px-4 py-2">Note</th>
               </tr>
             </thead>
             <tbody>
-              {testHistory.map((h, i) => (
+              {ledger.map((row, i) => (
                 <tr key={i} className="border-b border-border/70 last:border-0">
-                  <td className="px-4 py-2 text-xs text-foreground">{fmtIST(h.at)}</td>
-                  <td className="px-4 py-2"><StatusChip status={h.result} /></td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.method}</td>
-                  <td className="px-4 py-2 text-xs text-foreground">{h.tester}</td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.note}</td>
+                  <td className="px-4 py-2 text-xs text-foreground">{row.period}{i === 0 && <span className="ml-1 text-2xs text-muted-foreground">· current</span>}</td>
+                  <td className="px-4 py-2 text-xs tnum text-muted-foreground">{fmtDate(row.dueDate)}</td>
+                  <td className="px-4 py-2">
+                    {row.evidenceId ? (
+                      <button onClick={() => openDrawer({ kind: 'evidence-view', payload: { evidenceId: row.evidenceId } })} className="inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
+                        <Paperclip className="size-3" /> {row.evidenceId} · {row.capturedAt ? fmtDate(row.capturedAt) : ''}
+                      </button>
+                    ) : (
+                      <span className="text-2xs text-muted-foreground">— no evidence</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={cn('rounded px-1.5 py-0.5 text-2xs font-medium', row.timing === 'on-time' ? 'bg-ok-soft text-ok' : row.timing === 'late' ? 'bg-medium-soft text-medium' : 'bg-muted text-muted-foreground')}>
+                      {row.timing === 'on-time' ? 'On time' : row.timing === 'late' ? 'Late' : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2"><StatusChip status={row.result} /></td>
                 </tr>
               ))}
             </tbody>
