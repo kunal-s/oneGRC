@@ -1,5 +1,8 @@
 import { useApp } from '@/store'
+import { departmentOfPerson } from '@/data/people'
 import type { RoleKey } from '@/types'
+
+const COMPLIANCE_DEPT = 'Compliance and Company Secretarial'
 
 /**
  * Central role + maker-checker gating. Replaces ad hoc `role === 'X'` checks
@@ -45,6 +48,12 @@ const ABLE: Record<GrcAction['kind'], RoleKey[]> = {
 
 /** Resolve an action against a persona + the current person (for maker-checker). */
 export function canAct(role: RoleKey, selfId: string, action: GrcAction): boolean {
+  // Clause authority (accept / specialist / applicability) is restricted to the
+  // Compliance & Company Secretarial department (spec 4 / enhancement plan 1.6),
+  // not merely the CCO role — Investment Compliance and the DPO also hold CCO.
+  if (action.kind === 'clause.save' || action.kind === 'clause.specialist' || action.kind === 'clause.applicability') {
+    return departmentOfPerson(selfId) === COMPLIANCE_DEPT
+  }
   const allowed = ABLE[action.kind]?.includes(role)
   if (!allowed) return false
   // Separation of duties: the maker cannot approve / sign off their own item.

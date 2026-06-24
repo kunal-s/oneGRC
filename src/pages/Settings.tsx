@@ -12,7 +12,8 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/Drawer'
 import { cn } from '@/lib/utils'
-import { PEOPLE, personName } from '@/data/people'
+import { PEOPLE, personName, DEFAULT_DEPARTMENT_HEADS } from '@/data/people'
+import { DEPARTMENTS } from '@/lib/access'
 import { fmtRelative, fmtIST, minsFromNow } from '@/lib/time'
 import { inCrore, inGroup } from '@/lib/format'
 import { resolveEntity } from '@/lib/entity'
@@ -147,8 +148,14 @@ function OrganisationSection() {
 // ── 2 · Users & Roles ───────────────────────────────────────────────────────
 function UsersRolesSection() {
   const pushToast = useApp((s) => s.pushToast)
+  const recordAction = useApp((s) => s.recordAction)
   const canConfig = useCanAct({ kind: 'admin.configure' })
   const [invite, setInvite] = React.useState(false)
+
+  const changeHead = (dept: string) => {
+    recordAction({ action: `Department-head change requested · ${dept}`, detail: 'Routed to maker-checker; current head retained until approved.' })
+    pushToast({ title: 'Sent for approval', description: `Department-head change for ${dept} routed to maker-checker.`, variant: 'success' })
+  }
 
   const columns: Column<Person>[] = [
     {
@@ -156,6 +163,15 @@ function UsersRolesSection() {
       render: (p) => <span className="inline-flex items-center gap-2"><Avatar id={p.id} size={22} /><span className="text-sm text-foreground">{p.name}</span></span>,
     },
     { key: 'title', header: 'Title', sortValue: (p) => p.title, render: (p) => <span className="text-xs text-foreground">{p.title}</span> },
+    {
+      key: 'department', header: 'Department', sortValue: (p) => p.department,
+      render: (p) => (
+        <span className="inline-flex items-center gap-1 text-xs text-foreground">
+          {p.department}
+          {DEFAULT_DEPARTMENT_HEADS[p.department] === p.id && <span className="rounded bg-accent/15 px-1 py-0 text-2xs font-medium text-accent-foreground">head</span>}
+        </span>
+      ),
+    },
     {
       key: 'role', header: 'Access role', sortValue: (p) => ROLE_LABEL[p.role],
       render: (p) => <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-2xs font-medium text-foreground">{ROLE_LABEL[p.role]}</span>,
@@ -188,10 +204,39 @@ function UsersRolesSection() {
         />
       </div>
 
+      <Card title="Department heads · master authority">
+        <p className="mb-3 text-2xs text-muted-foreground">
+          Each department has a named head — the master authority who sees every record in the department and may act on any of them
+          (including stepping in on the owner's behalf), with the action audit-trailed. Each head is selectable from the persona switcher for validation.
+        </p>
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {DEPARTMENTS.map((d) => {
+            const head = DEFAULT_DEPARTMENT_HEADS[d]
+            return (
+              <div key={d} className="flex items-center gap-2.5 rounded-lg border border-border bg-background p-3">
+                <Avatar id={head} size={28} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">{d}</div>
+                  <div className="text-2xs text-muted-foreground">Head: {personName(head)}</div>
+                </div>
+                <button
+                  disabled={!canConfig}
+                  title={canConfig ? undefined : NOT_ADMIN_TITLE}
+                  onClick={() => changeHead(d)}
+                  className="text-2xs font-medium text-info hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                >
+                  Change head
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
       <Card title="Platform roles">
         <p className="mb-3 text-2xs text-muted-foreground">
-          Access is role-based across the three lines of defence. The seven personas marked <span className="font-medium text-foreground">persona switcher</span> are
-          selectable from the top bar and change the landing dashboard, My Queue, the visible navigation and which approvals appear.
+          Access is role-based across the three lines of defence. Personas — one per department head, plus the Executive and the Administrator — are
+          selectable from the top bar and change the landing dashboard, My Queue, the department-scoped views and which approvals appear.
         </p>
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {ROLE_DEFS.map((r) => (

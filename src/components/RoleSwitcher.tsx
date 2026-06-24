@@ -2,12 +2,12 @@ import * as React from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/store'
-import { ROLES, PEOPLE_BY_ID } from '@/data/people'
+import { PERSONAS, PEOPLE_BY_ID } from '@/data/people'
 import { Avatar } from './Avatar'
 
 export function RoleSwitcher() {
-  const role = useApp((s) => s.role)
-  const setRole = useApp((s) => s.setRole)
+  const personId = useApp((s) => s.personId)
+  const setPersona = useApp((s) => s.setPersona)
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
 
@@ -19,8 +19,8 @@ export function RoleSwitcher() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
 
-  const current = ROLES.find((r) => r.key === role)!
-  const person = PEOPLE_BY_ID[current.person]
+  const current = PERSONAS.find((p) => p.id === personId) ?? PERSONAS[0]
+  const person = PEOPLE_BY_ID[current.id]
 
   return (
     <div className="relative" ref={ref}>
@@ -28,10 +28,10 @@ export function RoleSwitcher() {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-md border border-border bg-background py-1 pl-1 pr-2 transition-colors hover:bg-muted"
       >
-        <Avatar id={current.person} size={26} />
+        <Avatar id={current.id} size={26} />
         <span className="hidden text-left lg:block">
           <span className="block text-xs font-semibold leading-tight text-foreground">{current.label}</span>
-          <span className="block text-2xs leading-tight text-muted-foreground">{person.name}</span>
+          <span className="block text-2xs leading-tight text-muted-foreground">{person.name} · {person.department}</span>
         </span>
         <ChevronDown className="size-3.5 text-muted-foreground" />
       </button>
@@ -40,14 +40,14 @@ export function RoleSwitcher() {
           <div className="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
             Switch persona
           </div>
-          {ROLES.map((r) => {
-            const p = PEOPLE_BY_ID[r.person]
-            const active = r.key === role
+          {PERSONAS.map((r) => {
+            const p = PEOPLE_BY_ID[r.id]
+            const active = r.id === personId
             return (
               <button
-                key={r.key}
+                key={r.id}
                 onClick={() => {
-                  setRole(r.key)
+                  setPersona(r.id)
                   setOpen(false)
                 }}
                 className={cn(
@@ -55,11 +55,11 @@ export function RoleSwitcher() {
                   active && 'bg-info-soft/60',
                 )}
               >
-                <Avatar id={r.person} size={28} />
+                <Avatar id={r.id} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-foreground">{r.label}</div>
                   <div className="text-2xs text-muted-foreground">
-                    {p.name} · {p.lod}
+                    {p.name} · {p.department}
                   </div>
                 </div>
                 {active && <Check className="size-4 text-info" />}

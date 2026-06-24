@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar, Evidence,
 } from '@/types'
-import { ROLES } from '@/data/people'
+import { ROLES, PEOPLE_BY_ID } from '@/data/people'
 import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, getEvidence, MARQUEE } from '@/data'
 import { provisionsForInstrument } from '@/lib/sources'
 import { dsarTotalSteps } from '@/lib/dsar'
@@ -90,7 +90,9 @@ export interface Artifact {
 
 interface AppState {
   role: RoleKey
+  personId: string // the active persona (1.1 / E0.5) — drives the access boundary
   setRole: (role: RoleKey) => void
+  setPersona: (personId: string) => void // select a persona; role stays synced
   currentPersonId: () => string
 
   toasts: Toast[]
@@ -205,8 +207,12 @@ let evidenceSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
   role: 'EXEC',
-  setRole: (role) => set({ role }),
-  currentPersonId: () => ROLES.find((r) => r.key === get().role)?.person ?? 'meera',
+  personId: 'meera',
+  // Selecting a persona sets the active person AND keeps role synced (role still
+  // drives the queue + gating; the person drives the department access boundary).
+  setPersona: (personId) => set({ personId, role: PEOPLE_BY_ID[personId]?.role ?? 'EXEC' }),
+  setRole: (role) => set({ role, personId: ROLES.find((r) => r.key === role)?.person ?? get().personId }),
+  currentPersonId: () => get().personId,
 
   toasts: [],
   pushToast: (t) => {

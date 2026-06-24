@@ -72,3 +72,20 @@ export const ROLES: { key: RoleKey; person: string; label: string }[] = [
   { key: 'AUDITOR', person: 'sunita', label: 'Auditor' },
   { key: 'ADMIN', person: 'imran', label: 'Administrator' },
 ]
+
+// The persona switcher options (1.1 / E0.5): one selectable persona per
+// department — its named head, the master authority — plus the Executive landing
+// and the Administrator. This is what makes every department's scoped view and
+// head authority testable in the dropdown. Each persona's RoleKey drives the
+// queue/gating; its department drives the access boundary.
+export const PERSONAS: { id: string; label: string }[] = [
+  { id: 'meera', label: 'Executive · CRO' },
+  { id: 'anjali', label: 'Compliance Manager' },
+  { id: 'arvind', label: 'Investment Compliance' },
+  { id: 'priya', label: 'Data Protection Officer' },
+  { id: 'rajesh', label: 'IT & Information Security' },
+  { id: 'deepa', label: 'Finance & Tax' },
+  { id: 'farhan', label: 'HR & Labour' },
+  { id: 'sunita', label: 'Internal Audit' },
+  { id: 'imran', label: 'Administrator' },
+]
