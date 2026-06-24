@@ -115,8 +115,7 @@ export function TaskDetail() {
       {/* Proof chain — step upstream (why / what proves it) and downstream (the proof). */}
       <div className="card-surface mb-4 p-3.5">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Proof chain · click a node to step through</h3>
-          <span className="text-2xs text-muted-foreground">&#9664; upstream: why / what proves it · downstream: the proof &#9654;</span>
+          <h3 className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Proof chain</h3>
         </div>
         <div className="flex flex-wrap items-stretch gap-1.5">
           <ChainNode icon={<ScrollText className="size-3.5" />} kind="Source clause" id={task.clauseRefs[0]} extra={task.clauseRefs.length > 1 ? task.clauseRefs.length - 1 : 0} onClick={task.clauseRefs[0] ? () => navigate(`/sources/section/${task!.clauseRefs[0]}`) : undefined} />
@@ -157,7 +156,6 @@ export function TaskDetail() {
             onEvidenceClick={verified && evidence ? scrollToEvidence : undefined}
             note={verified ? 'Verified' : evidence ? 'Pending verification' : 'Pending'}
           />
-          <p className="mt-3 text-2xs text-muted-foreground">Two-step maker-checker: the person who attaches the evidence is never the person who verifies it. Each step is recorded with its actor, timestamp and a link to the evidence.</p>
         </div>
 
         {/* Evidence */}
@@ -186,7 +184,6 @@ export function TaskDetail() {
               {isDeptHead && <p className="mt-1.5 text-2xs text-muted-foreground">You are the {departmentOfPerson(task.maker)} head — you may step in for {maker.name}.</p>}
             </div>
           )}
-          <p className="mt-2 text-2xs text-muted-foreground">Creating the evidence record links it to this task, its obligation and its control, and writes to the audit log.</p>
         </div>
 
         {/* Reminders & escalations */}

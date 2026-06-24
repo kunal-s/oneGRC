@@ -70,7 +70,7 @@ export interface Toast {
 
 export interface DrawerState {
   open: boolean
-  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'export-pdf' | 'source-viewer' | 'generic' | null
+  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'evidence-view' | 'export-pdf' | 'source-viewer' | 'generic' | null
   title?: string
   payload?: unknown
 }
@@ -169,6 +169,9 @@ interface AppState {
   getAnyEvidence: (id: string) => Evidence | undefined
   attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type']; onBehalfOf?: string }) => string
   verifyTask: (args: { taskId: string; obligationId: string }) => void
+  // Manual evidence upload (e.g. the Evidence Vault "Attach" action) — creates a
+  // real session evidence record so the submit is not a no-op.
+  addManualEvidence: (args?: { title?: string; type?: Evidence['type']; obligationId?: string; controlId?: string }) => string
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
   // Maker submits, a different checker approves; status advances via overrides and
@@ -412,6 +415,27 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...prev, checker: actor, checkerAt: NOW.toISOString() } } }))
     get().recordAction({ action: `Checker verified ${taskId}`, entityId: prev.evidenceId, route: `/tasks/${taskId}`, detail: `Verified evidence ${prev.evidenceId} on ${obligationId}` })
     get().notify({ title: 'Task verified', body: `${taskId} verified by the checker; evidence ${prev.evidenceId} accepted.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
+  },
+
+  addManualEvidence: (args) => {
+    const actor = get().currentPersonId()
+    const id = `EVD-S-${String(++evidenceSeq).padStart(3, '0')}`
+    const rec: Evidence = {
+      id,
+      title: args?.title || 'Manual evidence upload',
+      type: args?.type ?? 'Attestation',
+      capturedAt: NOW.toISOString(),
+      capturedBy: actor,
+      auto: false,
+      linkedControls: args?.controlId ? [args.controlId] : [],
+      linkedObligations: args?.obligationId ? [args.obligationId] : [],
+      frameworkRefs: [],
+      source: 'Manual upload',
+    }
+    set((s) => ({ sessionEvidence: [...s.sessionEvidence, rec] }))
+    get().recordAction({ action: `Uploaded evidence ${id}`, entityId: id, route: '/evidence', detail: rec.title })
+    get().notify({ title: 'Evidence uploaded', body: `${id} — ${rec.title} added to the Evidence Vault.`, severity: 'info', entityId: id, route: '/evidence' })
+    return id
   },
 
   // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────

@@ -25,6 +25,9 @@ export function EvidenceVault() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
+  const sessionEvidence = useApp((s) => s.sessionEvidence)
+  // Session-uploaded evidence appears alongside the seeded vault.
+  const allEvidence = React.useMemo(() => [...sessionEvidence, ...WORLD.evidence], [sessionEvidence])
 
   const auto = WORLD.evidence.filter((e) => e.auto).length
   const autoPct = Math.round((auto / WORLD.evidence.length) * 100)
@@ -153,12 +156,13 @@ export function EvidenceVault() {
       </div>
 
       <DataTable
-        data={WORLD.evidence}
+        data={allEvidence}
         columns={columns}
         searchKeys={['id', 'title', 'source']}
         searchPlaceholder="Search evidence id, title or source…"
         filters={filters}
         initialSort={{ key: 'capturedAt', dir: 'desc' }}
+        onRowClick={(e) => openDrawer({ kind: 'evidence-view', payload: { evidenceId: e.id } })}
       />
     </div>
   )

@@ -95,10 +95,12 @@ export const NAV_VISIBILITY: Record<string, RoleKey[]> = {
   '/issues': ['EXEC', 'RISK', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
   '/evidence': ['EXEC', 'CCO', 'ANALYST', 'CTRLOWNER', 'AUDITOR'],
   '/integrations': ['EXEC', 'ADMIN'],
-  '/settings': ['CCO', 'ADMIN'],
+  '/settings': ALL, // Settings is always in the menu (read-only for non-admins)
 }
 
 function visibleTo(to: string, role: RoleKey): boolean {
+  // The administrator has full access to every screen.
+  if (role === 'ADMIN') return true
   const v = NAV_VISIBILITY[to]
   return v ? v.includes(role) : true
 }

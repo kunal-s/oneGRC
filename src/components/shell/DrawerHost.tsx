@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom'
-import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, Paperclip, Upload, History } from 'lucide-react'
+import { Download, FileCheck2, Send, ShieldAlert, ScrollText, ExternalLink, ArrowUpRight, Paperclip, Upload, History } from 'lucide-react'
 import { useApp } from '@/store'
 import { Drawer } from '../Drawer'
 import { Button } from '../ui/Button'
 import { MARQUEE, getSource, getInstrument } from '@/data'
+import { personName } from '@/data/people'
 import { fmtDate, fmtIST } from '@/lib/time'
 import { maskPran } from '@/lib/format'
 
@@ -21,8 +22,18 @@ export function DrawerHost() {
   const drawer = useApp((s) => s.drawer)
   const close = useApp((s) => s.closeDrawer)
   const pushToast = useApp((s) => s.pushToast)
+  const getAnyEvidence = useApp((s) => s.getAnyEvidence)
+  const addManualEvidence = useApp((s) => s.addManualEvidence)
 
   const inc = MARQUEE
+
+  // ── Evidence viewer (E0.3) — a clickable record with its upstream links ──────
+  const evidenceId = (drawer.payload as { evidenceId?: string })?.evidenceId
+  const ev = evidenceId ? getAnyEvidence(evidenceId) : undefined
+  const goto = (route: string) => {
+    close()
+    navigate(route)
+  }
 
   // ── Source viewer (Epic 1; normalized Epic 15) — provision + parent instrument
   const sourceId = (drawer.payload as { sourceId?: string })?.sourceId
@@ -222,18 +233,79 @@ export function DrawerHost() {
     </div>
   )
 
+  const evidenceViewBody = ev && (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border p-3">
+        <Field label="Evidence id" value={ev.id} />
+        <Field label="Title" value={ev.title} />
+        <Field label="Type" value={ev.type} />
+        <Field label="Captured by" value={ev.auto ? 'CCM (auto)' : personName(ev.capturedBy)} />
+        <Field label="Captured at" value={fmtIST(ev.capturedAt)} />
+        <Field label="Source" value={ev.source} />
+        {ev.frameworkRefs.length > 0 && <Field label="Frameworks" value={ev.frameworkRefs.join(', ')} />}
+      </div>
+      <div>
+        <div className="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Proves — walk upstream</div>
+        <div className="space-y-1">
+          {ev.linkedObligations.map((oid) => (
+            <button key={oid} onClick={() => goto(`/obligations/${oid}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+              <span className="font-mono text-2xs font-semibold text-medium">{oid}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-foreground">Obligation it discharges</span>
+              <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+          {ev.linkedControls.map((cid) => (
+            <button key={cid} onClick={() => goto(`/controls/${cid}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+              <span className="font-mono text-2xs font-semibold text-info">{cid}</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-foreground">Control it proves</span>
+              <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
+            </button>
+          ))}
+          {ev.linkedObligations.length === 0 && ev.linkedControls.length === 0 && (
+            <div className="text-2xs text-muted-foreground">Not yet linked to an obligation or control.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+
+  const evidenceUploadBody = (
+    <div className="space-y-3">
+      <div className="rounded-md border border-info/30 bg-info-soft/50 p-3 text-xs">
+        Attach a file as evidence. On upload it is recorded in the Evidence Vault with a captured-by and timestamp.
+      </div>
+      <div className="rounded-lg border border-dashed border-border p-6 text-center">
+        <Paperclip className="mx-auto size-7 text-muted-foreground" />
+        <div className="mt-2 text-sm text-foreground">Drop a file or choose from disk</div>
+        <div className="mt-0.5 text-2xs text-muted-foreground">PDF, PNG, log or config export · stored against this record</div>
+      </div>
+    </div>
+  )
+
   const map: Record<string, { title: string; subtitle: string; body: React.ReactNode; cta: string; icon: React.ReactNode }> = {
     'cert-in-report': { title: 'CERT-In Incident Report', subtitle: `${inc.id} · Annexure I draft`, body: certInBody, cta: 'Sign off & submit', icon: <ShieldAlert className="size-4" /> },
     'pfrda-notify': { title: 'Notify PFRDA', subtitle: `${inc.id} · ICS intimation`, body: pfrdaBody, cta: 'Send intimation', icon: <Send className="size-4" /> },
     'dpdp-track': { title: 'DPDP Breach Track', subtitle: `${inc.id} · Data Protection Board`, body: dpdpBody, cta: 'Open DPDP track', icon: <ShieldAlert className="size-4" /> },
     'export-pdf': { title: drawer.title ?? 'Export', subtitle: 'Document ready', body: exportBody, cta: 'Download', icon: <Download className="size-4" /> },
     'source-viewer': { title: inst?.title ?? 'Source', subtitle: src ? `${inst?.authority ?? ''} · ${src.provision}` : '', body: sourceBody ?? <div className="text-sm text-muted-foreground">Source not found.</div>, cta: 'Done', icon: <ScrollText className="size-4" /> },
+    'evidence-view': { title: ev?.id ?? 'Evidence', subtitle: ev?.title ?? '', body: evidenceViewBody ?? <div className="text-sm text-muted-foreground">Evidence not found.</div>, cta: 'Done', icon: <Paperclip className="size-4" /> },
+    'evidence-upload': { title: drawer.title ?? 'Attach evidence', subtitle: 'Upload to the Evidence Vault', body: evidenceUploadBody, cta: 'Upload', icon: <Paperclip className="size-4" /> },
     generic: { title: drawer.title ?? 'Details', subtitle: '', body: <div className="text-sm text-muted-foreground">Action recorded.</div>, cta: 'Done', icon: null },
   }
 
   const cfg = drawer.kind ? map[drawer.kind] ?? map.generic : map.generic
-  // The source viewer is read-only — no mocked "action" CTA, just close.
-  const readOnly = drawer.kind === 'source-viewer'
+  // Read-only drawers — no mocked "action" CTA, just close.
+  const readOnly = drawer.kind === 'source-viewer' || drawer.kind === 'evidence-view'
+  const onPrimary = () => {
+    if (drawer.kind === 'evidence-upload') {
+      const p = (drawer.payload as { obligationId?: string; controlId?: string; title?: string }) ?? {}
+      const id = addManualEvidence({ title: p.title, obligationId: p.obligationId, controlId: p.controlId })
+      pushToast({ title: 'Evidence uploaded', description: `${id} added to the Evidence Vault.`, variant: 'success' })
+    } else {
+      pushToast({ title: cfg.cta, description: 'Action completed.', variant: 'success' })
+    }
+    close()
+  }
 
   return (
     <Drawer
@@ -247,13 +319,7 @@ export function DrawerHost() {
             Close
           </Button>
           {!readOnly && (
-            <Button
-              size="sm"
-              onClick={() => {
-                pushToast({ title: cfg.cta, description: 'Action completed.', variant: 'success' })
-                close()
-              }}
-            >
+            <Button size="sm" onClick={onPrimary}>
               {cfg.icon}
               {cfg.cta}
             </Button>
