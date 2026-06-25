@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import type { Evidence } from '@/types'
 import { fmtRelative, fmtIST } from '@/lib/time'
 import { personName } from '@/data/people'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '@/store'
 
 const ICON: Record<Evidence['type'], React.ComponentType<{ className?: string }>> = {
@@ -24,7 +25,7 @@ export function EvidenceList({
   className?: string
   max?: number
 }) {
-  const openDrawer = useApp((s) => s.openDrawer)
+  const navigate = useNavigate()
   const getAnyEvidence = useApp((s) => s.getAnyEvidence)
   const list = (items ?? (ids ?? []).map((id) => getAnyEvidence(id)).filter(Boolean) as Evidence[])
   const shown = max ? list.slice(0, max) : list
@@ -35,7 +36,7 @@ export function EvidenceList({
         return (
           <button
             key={ev.id}
-            onClick={() => openDrawer({ kind: 'evidence-view', payload: { evidenceId: ev.id } })}
+            onClick={() => navigate(`/evidence/${ev.id}`)}
             className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-info-soft/30"
           >
             <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">

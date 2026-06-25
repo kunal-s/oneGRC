@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, Clock, CalendarClock, Paperclip } from 'lucide-react'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, CalendarClock, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
@@ -15,12 +15,12 @@ import { getIssue, getInstrument, WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
 import { controlLedger, filingTiming } from '@/lib/cycles'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
-import { fmtDate, NOW_MS } from '@/lib/time'
+import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
 import { useEffectiveControl } from '@/lib/effective'
 import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
-import type { Control, SourceProvision } from '@/types'
+import type { SourceProvision } from '@/types'
 
 const RESULT_ICON = {
   Pass: <CheckCircle2 className="size-4 text-ok" />,
@@ -47,8 +47,7 @@ export function ControlDetail() {
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
   const retestControl = useApp((s) => s.retestControl)
-  const sessionTests = useApp((s) => (id ? s.controlTests[id] : undefined))
-  const sessionControl = useApp((s) => s.getSessionControl(id ?? ''))
+  const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
   const clauseOverrides = useApp((s) => s.clauseOverrides)
   const canRetest = useCanAct({ kind: 'control.retest' })
   const control = useEffectiveControl(id ?? '')
@@ -59,10 +58,6 @@ export function ControlDetail() {
   const evidence = WORLD.evidence.filter((e) => e.linkedControls.includes(control.id))
   const issues = control.linkedIssues.map((i) => getIssue(i)).filter(Boolean)
   const owner = PEOPLE_BY_ID[control.owner]
-  // A control created this session from a clause has no operating history yet —
-  // show only the tests actually recorded, never a fabricated back-history.
-  const isNewlyCreated = Boolean(sessionControl)
-  const testHistory = [...(sessionTests ?? []), ...(isNewlyCreated ? [] : buildTestHistory(control))]
   // Sources pipeline — the clauses (across acts) this control satisfies.
   const satisfied = clausesForControl(control.id, clauseOverrides)
   const satisfiedByAct = groupByAct(satisfied)
@@ -205,56 +200,7 @@ export function ControlDetail() {
         </div>
       )}
 
-      {tab === 'overview' && (
-        <div className="card-surface mt-4 p-4">
-          <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <ShieldCheck className="size-4 text-info" /> Implementation &amp; assurance
-          </h3>
-          <p className="mb-3 text-2xs text-muted-foreground">How OneGRC verifies this control is implemented and operating — the checks an auditor relies on.</p>
-          <div className="space-y-1.5">
-            <CheckRow
-              state="done"
-              title="Design & ownership"
-              detail={`Owned by ${owner.name} (${owner.lod}); satisfies ${satisfied.length} clause${satisfied.length === 1 ? '' : 's'} across ${satisfiedByAct.length} act${satisfiedByAct.length === 1 ? '' : 's'}.`}
-            />
-            <CheckRow
-              state={testHistory.length ? 'done' : 'pending'}
-              title="Control testing"
-              detail={
-                testHistory.length
-                  ? `${control.automation === 'CCM' ? 'Continuous (CCM)' : 'Manual'} testing on a ${control.frequency} cadence — last result ${control.result} on ${fmtDate(control.lastTested)}; next due ${control.nextDue ? fmtDate(control.nextDue) : '—'}.`
-                  : `Not yet tested. First ${control.automation === 'CCM' ? 'monitoring run' : 'test'} ${control.nextDue ? `due ${fmtDate(control.nextDue)}` : 'to be scheduled'}.`
-              }
-            />
-            <CheckRow
-              state={control.automation === 'CCM' ? 'done' : 'info'}
-              title="Continuous monitoring"
-              detail={control.automation === 'CCM' && control.ccmRuleId ? `Monitored continuously by CCM rule ${control.ccmRuleId}.` : 'Tested manually on its cadence — not continuously monitored.'}
-            />
-            <CheckRow
-              state={evidence.length ? 'done' : 'pending'}
-              title="Evidence of operation"
-              detail={evidence.length ? `${evidence.length} evidence item${evidence.length === 1 ? '' : 's'} captured proving the control operated.` : 'No evidence captured yet — attach the first proof.'}
-            />
-            <CheckRow
-              state="info"
-              title="Independent audit"
-              detail="Available for independent testing — an auditor pulls the proof from the evidence trail rather than chasing it across inboxes."
-            />
-          </div>
-          {isNewlyCreated && testHistory.length === 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-medium/30 bg-medium-soft/40 px-3 py-2 text-2xs text-medium">
-              <Clock className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1">Newly created from a clause — record the first test and attach evidence to move it from <span className="font-medium">designed</span> to <span className="font-medium">operating</span>.</span>
-              {canRetest && (
-                <Button size="sm" variant="outline" onClick={() => retestControl(control.id)}>
-                  Record first test
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Implementation & assurance card removed per request */}
 
       {tab === 'overview' && satisfied.length > 0 && (
         <div className="card-surface mt-4 p-4">
@@ -370,7 +316,7 @@ export function ControlDetail() {
                   <td className="px-4 py-2 text-xs tnum text-muted-foreground">{fmtDate(row.dueDate)}</td>
                   <td className="px-4 py-2">
                     {row.evidenceId ? (
-                      <button onClick={() => openDrawer({ kind: 'evidence-view', payload: { evidenceId: row.evidenceId } })} className="inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
+                      <button onClick={() => navigate(`/evidence/${row.evidenceId}`)} className="inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
                         <Paperclip className="size-3" /> {row.evidenceId} · {row.capturedAt ? fmtDate(row.capturedAt) : ''}
                       </button>
                     ) : (
@@ -398,7 +344,7 @@ export function ControlDetail() {
               <span className="text-2xs text-muted-foreground">
                 {evidence.filter((e) => e.auto).length} auto-captured · {evidence.filter((e) => !e.auto).length} manual
               </span>
-              <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'evidence-upload', title: `Attach evidence — ${control.id}` })}>
+              <Button variant="outline" size="sm" onClick={() => { setEvidenceDraft({ controlId: control.id }); navigate('/evidence/new') }}>
                 Attach evidence
               </Button>
             </div>
@@ -469,54 +415,3 @@ function Attr({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-interface TestRun {
-  at: string
-  result: Control['result']
-  method: string
-  tester: string
-  note: string
-}
-
-function CheckRow({ state, title, detail }: { state: 'done' | 'pending' | 'info'; title: string; detail: string }) {
-  const icon =
-    state === 'done' ? <CheckCircle2 className="size-4 text-ok" /> : state === 'pending' ? <Clock className="size-4 text-medium" /> : <MinusCircle className="size-4 text-muted-foreground" />
-  return (
-    <div className="flex items-start gap-2.5 rounded-md border border-border bg-background px-3 py-2">
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <div className="min-w-0">
-        <div className="text-xs font-medium text-foreground">{title}</div>
-        <div className="text-2xs leading-relaxed text-muted-foreground">{detail}</div>
-      </div>
-    </div>
-  )
-}
-
-function buildTestHistory(control: Control): TestRun[] {
-  const auto = control.automation === 'CCM'
-  const method = auto ? `Automated (${control.frequency})` : 'Manual test'
-  const tester = auto ? 'CCM (auto)' : personName(control.owner)
-  const runs: TestRun[] = []
-  const intervalDays = auto ? 7 : 30
-  // most recent run reflects current result
-  for (let i = 0; i < 6; i++) {
-    const at = new Date(NOW_MS - i * intervalDays * 86400000 - (auto ? 0 : 3) * 3600000).toISOString()
-    const result: Control['result'] = i === 0 ? control.result : i === 2 && control.result !== 'Pass' ? 'Partial' : 'Pass'
-    runs.push({
-      at,
-      result,
-      method,
-      tester,
-      note:
-        i === 0
-          ? control.result === 'Fail'
-            ? 'Exceptions detected in population — issue auto-spawned'
-            : control.result === 'Partial'
-              ? 'Minor exceptions — remediation tracked'
-              : 'No exceptions across population'
-          : result === 'Pass'
-            ? 'Passed — evidence auto-captured'
-            : 'Exceptions cleared on re-test',
-    })
-  }
-  return runs
-}

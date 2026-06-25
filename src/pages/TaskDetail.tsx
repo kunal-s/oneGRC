@@ -24,7 +24,7 @@ export function TaskDetail() {
   const selfId = useApp((s) => s.currentPersonId)()
   const taskWorkflow = useApp((s) => s.taskWorkflow)
   const getAnyEvidence = useApp((s) => s.getAnyEvidence)
-  const attachTaskEvidence = useApp((s) => s.attachTaskEvidence)
+  const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
   const verifyTask = useApp((s) => s.verifyTask)
   const pushToast = useApp((s) => s.pushToast)
   const obligations = useEffectiveObligations()
@@ -62,18 +62,12 @@ export function TaskDetail() {
   const canVerify = !!evidence && !verified && selfId !== attacher && (selfId === task.checker || scope.seesAll)
   const ladder = verified ? [] : ladderFor(task.id, task.dueDate, task.maker, task.checker)
 
-  const scrollToEvidence = () => document.getElementById('task-evidence')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const openEvidence = () => task.evidenceId && navigate(`/evidence/${task.evidenceId}`)
 
   const onAttach = () => {
-    const newId = attachTaskEvidence({
-      taskId: task!.id,
-      obligationId: obligation!.id,
-      controlId,
-      title: `${task!.title} — proof`,
-      type: 'Filing ack',
-      onBehalfOf: actingOnBehalf ? task!.maker : undefined,
-    })
-    pushToast({ title: actingOnBehalf ? 'Evidence attached on behalf of the owner' : 'Evidence created & linked', description: `${newId} attached to ${task!.id}. Awaiting checker verification.`, variant: 'success' })
+    // Go to the dedicated evidence screen with the expected guidance, then submit.
+    setEvidenceDraft({ taskId: task!.id, obligationId: obligation!.id, controlId, onBehalfOf: actingOnBehalf ? task!.maker : undefined })
+    navigate('/evidence/new')
   }
   const onVerify = () => {
     verifyTask({ taskId: task!.id, obligationId: obligation!.id })
@@ -126,7 +120,7 @@ export function TaskDetail() {
           <Arrow />
           <ChainNode icon={<ClipboardCheck className="size-3.5" />} kind="This task" id={task.id} current />
           <Arrow />
-          <ChainNode icon={<Paperclip className="size-3.5" />} kind="Evidence" id={evidence?.id} placeholder="none yet" tone="ok" />
+          <ChainNode icon={<Paperclip className="size-3.5" />} kind="Evidence" id={evidence?.id} placeholder="none yet" tone="ok" onClick={evidence ? openEvidence : undefined} />
         </div>
       </div>
 
@@ -143,7 +137,7 @@ export function TaskDetail() {
             at={task.attachedAt}
             subNote={task.attachedOnBehalfOf ? `on behalf of ${personName(task.attachedOnBehalfOf)} (department head step-in)` : undefined}
             evidenceId={evidence ? task.evidenceId : undefined}
-            onEvidenceClick={evidence ? scrollToEvidence : undefined}
+            onEvidenceClick={evidence ? openEvidence : undefined}
             note={evidence ? 'Attached' : task.status === 'Done' ? 'Completed' : 'Awaiting action'}
           />
           <div className="ml-3.5 h-4 border-l border-dashed border-border" />
@@ -153,7 +147,7 @@ export function TaskDetail() {
             personId={task.verifiedBy ?? task.checker}
             at={task.verifiedAt}
             evidenceId={verified && evidence ? task.evidenceId : undefined}
-            onEvidenceClick={verified && evidence ? scrollToEvidence : undefined}
+            onEvidenceClick={verified && evidence ? openEvidence : undefined}
             note={verified ? 'Verified' : evidence ? 'Pending verification' : 'Pending'}
           />
         </div>

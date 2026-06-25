@@ -4,6 +4,7 @@ import { Download, Bot, User, FileText, FileCode, Image, ShieldCheck, ReceiptTex
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
 import { FrameworkPills } from '@/components/FrameworkPill'
+import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
 import { WORLD } from '@/data'
 import { personName } from '@/data/people'
@@ -24,10 +25,13 @@ const TYPES: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attest
 export function EvidenceVault() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const openDrawer = useApp((s) => s.openDrawer)
+  const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
+  const evidenceWorkflow = useApp((s) => s.evidenceWorkflow)
   const sessionEvidence = useApp((s) => s.sessionEvidence)
   // Session-uploaded evidence appears alongside the seeded vault.
   const allEvidence = React.useMemo(() => [...sessionEvidence, ...WORLD.evidence], [sessionEvidence])
+  // Seed evidence is historical (Verified); session evidence carries its workflow.
+  const statusOf = (e: Evidence): 'Submitted' | 'Verified' => evidenceWorkflow[e.id]?.status ?? 'Verified'
 
   const auto = WORLD.evidence.filter((e) => e.auto).length
   const autoPct = Math.round((auto / WORLD.evidence.length) * 100)
@@ -106,6 +110,12 @@ export function EvidenceVault() {
       ),
     },
     {
+      key: 'status',
+      header: 'Status',
+      sortValue: (e) => statusOf(e),
+      render: (e) => <StatusChip status={statusOf(e)} />,
+    },
+    {
       key: 'frameworks',
       header: 'Frameworks',
       sortValue: (e) => e.frameworkRefs.length,
@@ -114,6 +124,7 @@ export function EvidenceVault() {
   ]
 
   const filters: TableFilter<Evidence>[] = [
+    { key: 'status', label: 'Status', options: ['Submitted', 'Verified'], predicate: (e, v) => statusOf(e) === v },
     { key: 'type', label: 'Type', options: TYPES, predicate: (e, v) => e.type === v },
     { key: 'capture', label: 'Capture', options: ['CCM (auto)', 'Manual'], predicate: (e, v) => (v === 'CCM (auto)' ? e.auto : !e.auto) },
     { key: 'source', label: 'Source', options: sources, predicate: (e, v) => e.source === v },
@@ -134,7 +145,7 @@ export function EvidenceVault() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'evidence-upload', title: 'Attach evidence' })}>
+            <Button variant="outline" size="sm" onClick={() => { setEvidenceDraft(null); navigate('/evidence/new') }}>
               Attach
             </Button>
             <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Evidence index exported', description: 'evidence-vault-index.csv.', variant: 'success' })}>
@@ -162,7 +173,7 @@ export function EvidenceVault() {
         searchPlaceholder="Search evidence id, title or source…"
         filters={filters}
         initialSort={{ key: 'capturedAt', dir: 'desc' }}
-        onRowClick={(e) => openDrawer({ kind: 'evidence-view', payload: { evidenceId: e.id } })}
+        onRowClick={(e) => navigate(`/evidence/${e.id}`)}
       />
     </div>
   )

@@ -40,6 +40,15 @@ export interface AuditEntry {
   detail?: string
 }
 
+/** The submit -> verify lifecycle carried by an evidence artifact (E3.3). */
+export interface EvidenceWorkflow {
+  status: 'Submitted' | 'Verified'
+  submittedBy?: string
+  submittedAt?: string
+  verifiedBy?: string
+  verifiedAt?: string
+}
+
 /** A user notification (Epic 1.3). Seeded baseline + session appends. */
 export interface NotificationItem {
   id: string
@@ -190,6 +199,17 @@ interface AppState {
   getAnyEvidence: (id: string) => Evidence | undefined
   attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type']; onBehalfOf?: string }) => string
   verifyTask: (args: { taskId: string; obligationId: string }) => void
+
+  // ── Evidence lifecycle (E3.3) ───────────────────────────────────────────────
+  // Evidence is the artifact with one submit -> verify lifecycle. The maker
+  // submits (attach); a different checker verifies (separation of duties). Seed
+  // evidence is historical (Verified); session-created evidence is Submitted.
+  evidenceWorkflow: Record<string, EvidenceWorkflow>
+  getEvidenceStatus: (id: string) => 'Submitted' | 'Verified'
+  verifyEvidence: (evidenceId: string) => void
+  // Context for the "attach evidence" screen (what the new evidence will prove).
+  evidenceDraft: { taskId?: string; obligationId?: string; controlId?: string; onBehalfOf?: string } | null
+  setEvidenceDraft: (d: { taskId?: string; obligationId?: string; controlId?: string; onBehalfOf?: string } | null) => void
   // Manual evidence upload (e.g. the Evidence Vault "Attach" action) — creates a
   // real session evidence record so the submit is not a no-op.
   addManualEvidence: (args?: { title?: string; type?: Evidence['type']; obligationId?: string; controlId?: string }) => string
@@ -503,6 +523,8 @@ export const useApp = create<AppState>((set, get) => ({
       // Maker step: record the actor + timestamp alongside the evidence link.
       // onBehalfOf is set when a department head steps in for the assigned owner.
       taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...s.taskWorkflow[taskId], evidenceId: id, maker: actor, makerAt: NOW.toISOString(), onBehalfOf } },
+      // The evidence is now Submitted by the maker, awaiting checker verification.
+      evidenceWorkflow: { ...s.evidenceWorkflow, [id]: { status: 'Submitted', submittedBy: actor, submittedAt: NOW.toISOString() } },
     }))
     // Reflect the proof on the obligation record too (closes the evidence gap).
     const base = getObligation(obligationId) ?? get().sessionObligations.find((o) => o.id === obligationId)
@@ -513,17 +535,32 @@ export const useApp = create<AppState>((set, get) => ({
     get().notify({ title: onBehalfOf ? 'Evidence attached (head step-in)' : 'Evidence attached', body: `${id} linked to task ${taskId}${onBehalfNote}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
     return id
   },
-  // Checker step: a different person verifies the maker's evidence. The action is
-  // recorded with actor + timestamp; the task then reads Done. Two steps only.
-  verifyTask: ({ taskId, obligationId }) => {
+  // Checker step: verifying a task verifies its evidence (the single lifecycle).
+  verifyTask: ({ taskId }) => {
+    const evidenceId = get().taskWorkflow[taskId]?.evidenceId
+    if (evidenceId) get().verifyEvidence(evidenceId)
+  },
+
+  // ── Evidence lifecycle (E3.3) ───────────────────────────────────────────────
+  evidenceWorkflow: {},
+  getEvidenceStatus: (id) => get().evidenceWorkflow[id]?.status ?? (getEvidence(id) ? 'Verified' : 'Submitted'),
+  evidenceDraft: null,
+  setEvidenceDraft: (d) => set({ evidenceDraft: d }),
+  verifyEvidence: (evidenceId) => {
     const actor = get().currentPersonId()
-    const prev = get().taskWorkflow[taskId]
-    if (!prev?.evidenceId) return // nothing to verify until the maker has attached
-    if (prev.checkerAt) return // already verified
-    if (actor === prev.maker) return // separation of duties — the attacher cannot verify
-    set((s) => ({ taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...prev, checker: actor, checkerAt: NOW.toISOString() } } }))
-    get().recordAction({ action: `Checker verified ${taskId}`, entityId: prev.evidenceId, route: `/tasks/${taskId}`, detail: `Verified evidence ${prev.evidenceId} on ${obligationId}` })
-    get().notify({ title: 'Task verified', body: `${taskId} verified by the checker; evidence ${prev.evidenceId} accepted.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
+    const wf = get().evidenceWorkflow[evidenceId]
+    if (wf?.status === 'Verified') return // already verified
+    if (wf?.submittedBy && actor === wf.submittedBy) return // separation of duties
+    set((s) => ({
+      evidenceWorkflow: { ...s.evidenceWorkflow, [evidenceId]: { ...(s.evidenceWorkflow[evidenceId] ?? { status: 'Submitted' }), status: 'Verified', verifiedBy: actor, verifiedAt: NOW.toISOString() } },
+    }))
+    // Reflect on the owning task (if any) so the task reads verified / Done.
+    const tw = get().taskWorkflow
+    const tskId = Object.keys(tw).find((k) => tw[k].evidenceId === evidenceId)
+    if (tskId) set((s) => ({ taskWorkflow: { ...s.taskWorkflow, [tskId]: { ...s.taskWorkflow[tskId], checker: actor, checkerAt: NOW.toISOString() } } }))
+    const ev = get().getAnyEvidence(evidenceId)
+    get().recordAction({ action: `Checker verified evidence ${evidenceId}`, entityId: evidenceId, route: `/evidence/${evidenceId}`, detail: ev?.title })
+    get().notify({ title: 'Evidence verified', body: `${evidenceId} verified by ${personName(actor)}.`, severity: 'info', entityId: evidenceId, route: `/evidence/${evidenceId}` })
   },
 
   addManualEvidence: (args) => {
@@ -541,9 +578,12 @@ export const useApp = create<AppState>((set, get) => ({
       frameworkRefs: [],
       source: 'Manual upload',
     }
-    set((s) => ({ sessionEvidence: [...s.sessionEvidence, rec] }))
-    get().recordAction({ action: `Uploaded evidence ${id}`, entityId: id, route: '/evidence', detail: rec.title })
-    get().notify({ title: 'Evidence uploaded', body: `${id} — ${rec.title} added to the Evidence Vault.`, severity: 'info', entityId: id, route: '/evidence' })
+    set((s) => ({
+      sessionEvidence: [...s.sessionEvidence, rec],
+      evidenceWorkflow: { ...s.evidenceWorkflow, [id]: { status: 'Submitted', submittedBy: actor, submittedAt: NOW.toISOString() } },
+    }))
+    get().recordAction({ action: `Submitted evidence ${id}`, entityId: id, route: `/evidence/${id}`, detail: rec.title })
+    get().notify({ title: 'Evidence submitted', body: `${id} — ${rec.title} submitted; awaiting checker verification.`, severity: 'info', entityId: id, route: `/evidence/${id}` })
     return id
   },
 

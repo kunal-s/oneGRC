@@ -28,6 +28,7 @@ import { AuditDetail } from '@/pages/AuditDetail'
 import { Issues } from '@/pages/Issues'
 import { IssueDetail } from '@/pages/IssueDetail'
 import { EvidenceVault } from '@/pages/EvidenceVault'
+import { EvidenceDetail } from '@/pages/EvidenceDetail'
 import { Integrations } from '@/pages/Integrations'
 import { Settings } from '@/pages/Settings'
 import { ComingSoon } from '@/pages/ComingSoon'
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="/issues" element={<Issues />} />
         <Route path="/issues/:id" element={<IssueDetail />} />
         <Route path="/evidence" element={<EvidenceVault />} />
+        <Route path="/evidence/:id" element={<EvidenceDetail />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<ComingSoon title="Not found" />} />
