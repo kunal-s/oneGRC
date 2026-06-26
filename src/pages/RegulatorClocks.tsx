@@ -4,10 +4,10 @@ import { PageHeader } from '@/components/PageHeader'
 import { RegulatorClock } from '@/components/RegulatorClock'
 import { StatusChip } from '@/components/StatusChip'
 import { cn } from '@/lib/utils'
-import { WORLD } from '@/data'
 import { activeTracks } from '@/lib/clocks'
 import { countdownTo, fmtIST, fmtRelative } from '@/lib/time'
 import { useLiveNow } from '@/lib/useInterval'
+import { useEffectiveObligations } from '@/lib/effective'
 import { personName } from '@/data/people'
 import type { Obligation } from '@/types'
 
@@ -48,8 +48,9 @@ function ObligationClock({ o }: { o: Obligation }) {
 export function RegulatorClocks() {
   const navigate = useNavigate()
   const tracks = activeTracks()
+  const obligations = useEffectiveObligations()
 
-  const obligationClocks = WORLD.obligations
+  const obligationClocks = obligations
     .filter((o) => o.status === 'Overdue' || o.status === 'Due' || o.status === 'In review')
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 12)
@@ -123,7 +124,7 @@ export function RegulatorClocks() {
 
       <div className="mt-4 text-center text-2xs text-muted-foreground">
         Live countdowns · {tracks.length} incident clocks ·{' '}
-        {WORLD.obligations.filter((o) => o.status === 'Overdue').length} overdue obligations ·{' '}
+        {obligations.filter((o) => o.status === 'Overdue').length} overdue obligations ·{' '}
         {fmtRelative(tracks[0]?.track.deadline ?? new Date().toISOString())} to the nearest deadline
       </div>
     </div>

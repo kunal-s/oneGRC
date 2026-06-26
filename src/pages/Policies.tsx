@@ -11,15 +11,23 @@ import { WORLD } from '@/data'
 import { personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
+import { useScope, passesDeptFilter } from '@/lib/access'
+import { DepartmentSelect, initialDepartment, ScopeEmpty } from '@/components/ScopeBanner'
 import type { Policy } from '@/types'
 
 export function Policies() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
+  const scope = useScope()
+  const [dept, setDept] = React.useState(() => initialDepartment(scope))
+  React.useEffect(() => setDept(initialDepartment(scope)), [scope.seesAll, scope.department])
+  // Department access boundary (1.1): scope to the user's department; Compliance
+  // and the administrator see every policy (and can narrow via the dropdown).
+  const policies = React.useMemo(() => WORLD.policies.filter((p) => passesDeptFilter(p.owner, scope, dept)), [scope, dept])
 
-  const categories = React.useMemo(() => Array.from(new Set(WORLD.policies.map((p) => p.category))).sort(), [])
-  const owners = React.useMemo(() => Array.from(new Set(WORLD.policies.map((p) => personName(p.owner)))).sort(), [])
-  const reviewDue = WORLD.policies.filter((p) => new Date(p.nextReview).getTime() < NOW_MS).length
+  const categories = React.useMemo(() => Array.from(new Set(policies.map((p) => p.category))).sort(), [policies])
+  const owners = React.useMemo(() => Array.from(new Set(policies.map((p) => personName(p.owner)))).sort(), [policies])
+  const reviewDue = policies.filter((p) => new Date(p.nextReview).getTime() < NOW_MS).length
 
   const columns: Column<Policy>[] = [
     {
@@ -100,7 +108,7 @@ export function Policies() {
       <PageHeader
         eyebrow="Risk & Control"
         title="Policies"
-        description={`${WORLD.policies.length} versioned policies — each owned, approved and mapped to the controls that operationalise it, with review cadence tracked.`}
+        description={`${policies.length} versioned policies — each owned, approved and mapped to the controls that operationalise it, with review cadence tracked.`}
         actions={
           <Button
             variant="outline"
@@ -113,11 +121,12 @@ export function Policies() {
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <DepartmentSelect value={dept} onChange={setDept} />
         <span className="rounded-md border border-border bg-background px-2.5 py-1">
-          Published <span className="font-semibold tnum text-ok">{WORLD.policies.filter((p) => p.status === 'Published').length}</span>
+          Published <span className="font-semibold tnum text-ok">{policies.filter((p) => p.status === 'Published').length}</span>
         </span>
         <span className="rounded-md border border-border bg-background px-2.5 py-1">
-          In review <span className="font-semibold tnum text-info">{WORLD.policies.filter((p) => p.status === 'In review').length}</span>
+          In review <span className="font-semibold tnum text-info">{policies.filter((p) => p.status === 'In review').length}</span>
         </span>
         {reviewDue > 0 && (
           <span className="rounded-md border border-critical/30 bg-critical-soft px-2.5 py-1 text-critical">
@@ -126,15 +135,19 @@ export function Policies() {
         )}
       </div>
 
-      <DataTable
-        data={WORLD.policies}
-        columns={columns}
-        searchKeys={['id', 'title', 'category', (p) => personName(p.owner)]}
-        searchPlaceholder="Search policy title, category or owner…"
-        filters={filters}
-        initialSort={{ key: 'id', dir: 'asc' }}
-        onRowClick={(p) => navigate(`/policies/${p.id}`)}
-      />
+      {!scope.seesAll && policies.length === 0 ? (
+        <ScopeEmpty entity="policies" />
+      ) : (
+        <DataTable
+          data={policies}
+          columns={columns}
+          searchKeys={['id', 'title', 'category', (p) => personName(p.owner)]}
+          searchPlaceholder="Search policy title, category or owner…"
+          filters={filters}
+          initialSort={{ key: 'id', dir: 'asc' }}
+          onRowClick={(p) => navigate(`/policies/${p.id}`)}
+        />
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import type {
   Risk,
   Control,
   Obligation,
+  ObligationSubStep,
   Incident,
   Policy,
   Issue,
@@ -24,7 +25,8 @@ import type {
 import { Rand } from './rng'
 import { ISO_REFS, NIST_REFS, PCI_REFS, PFRDA_REFS, type Ref } from './refs'
 import { PEOPLE } from './people'
-import { ist, NOW_MS, minsFromNow, daysFromNow } from '@/lib/time'
+import { SOURCES, INSTRUMENTS, sourceForRegulator, sourceForFramework } from './sources'
+import { NOW_MS, MARQUEE_DETECTED_MS, minsFromNow, daysFromNow } from '@/lib/time'
 
 const iso = (d: Date) => d.toISOString()
 
@@ -318,7 +320,9 @@ const INCIDENT_TITLES: { t: string; sev: Severity; src: Incident['source'] }[] =
 ]
 
 function marqueeTimeline(): TimelineEvent[] {
-  const d = (h: number, m: number, s = 0) => iso(ist(2026, 6, 10, h, m, s))
+  // Timeline anchored to the (evergreen) detection moment; offsets preserve the
+  // original 02:14-based cadence relative to detection.
+  const d = (h: number, m: number, s = 0) => iso(new Date(MARQUEE_DETECTED_MS + ((h - 2) * 3600 + (m - 14) * 60 + s) * 1000))
   return [
     { at: d(2, 14, 0), actor: 'Splunk SIEM', channel: 'Splunk SIEM', kind: 'detect', text: 'Splunk SIEM correlation fired: mass file-encryption + SMB lateral movement on SPF-FA-DB-02 (rule "Ransomware — bulk file rename").' },
     { at: d(2, 15, 30), actor: 'Sankalp ServiceDesk', channel: 'Sankalp ServiceDesk', kind: 'triage', text: 'P1 ticket auto-raised in Sankalp ServiceDesk (ITSM) and bridged to OneGRC as INC-2026-0411.' },
@@ -336,14 +340,14 @@ function marqueeTimeline(): TimelineEvent[] {
 }
 
 function buildMarquee(): Incident {
-  const detected = iso(ist(2026, 6, 10, 2, 14, 0))
+  const detected = iso(new Date(MARQUEE_DETECTED_MS))
   const tracks: RegulatorTrack[] = [
     {
       regulator: 'CERT-In',
       clockLabel: 'CERT-In · 6-hour incident report',
       windowHours: 6,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 10, 8, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 6 * 3600000)),
       status: 'At risk',
       output: 'CERT-In Incident Report — Annexure I (Direction 20(3)/2022)',
     },
@@ -352,7 +356,7 @@ function buildMarquee(): Incident {
       clockLabel: 'PFRDA · 48-hour ICS intimation',
       windowHours: 48,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 12, 2, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 48 * 3600000)),
       status: 'On track',
       output: 'PFRDA ICS incident intimation + quarterly Annexure (subscriber-impacting)',
     },
@@ -361,7 +365,7 @@ function buildMarquee(): Incident {
       clockLabel: 'DPDP Board · ~72-hour breach intimation',
       windowHours: 72,
       clockStartedAt: detected,
-      deadline: iso(ist(2026, 6, 13, 2, 14, 0)),
+      deadline: iso(new Date(MARQUEE_DETECTED_MS + 72 * 3600000)),
       status: 'On track',
       output: 'DPDP personal-data-breach intimation to Board & affected principals',
     },
@@ -384,7 +388,7 @@ function buildMarquee(): Incident {
     linkedIssues: [],
     evidence: [],
     summary:
-      'Splunk SIEM correlated mass file-encryption with SMB lateral movement on the fund-accounting database SPF-FA-DB-02 at 02:14 IST and auto-raised a P1 ticket in Sankalp ServiceDesk (the in-house ITSM); affected assets were enriched from the ServiceDesk CMDB. CrowdStrike EDR auto-isolated the host and SecOps contained lateral movement within 17 minutes. Because the event is subscriber-impacting and involves personal data, OneGRC auto-classified it Critical (PFRDA ICS 2024) and opened three regulator tracks on one clock — CERT-In (6h), PFRDA (48h), DPDP Board (~72h) — driving three regulator outputs from a single incident record and one evidence trail.',
+      'Splunk SIEM correlated mass file-encryption with SMB lateral movement on the fund-accounting database SPF-FA-DB-02 in the early hours and auto-raised a P1 ticket in Sankalp ServiceDesk (the in-house ITSM); affected assets were enriched from the ServiceDesk CMDB. CrowdStrike EDR auto-isolated the host and SecOps contained lateral movement within 17 minutes. Because the event is subscriber-impacting and involves personal data, OneGRC auto-classified it Critical (PFRDA ICS 2024) and opened three regulator tracks on one clock — CERT-In (6h), PFRDA (48h), DPDP Board (~72h) — driving three regulator outputs from a single incident record and one evidence trail.',
   }
 }
 
@@ -493,25 +497,33 @@ function buildIncidents(): Incident[] {
 }
 
 // ── Obligations (180; 9 overdue, 23 due ≤30 days) ───────────────────────────
-const OBLIGATION_DEFS: { reg: Regulator; title: string; freq: string; ref: string; team: string[] }[] = [
-  { reg: 'PFRDA', title: 'Quarterly compliance return (Annexure)', freq: 'Quarterly', ref: 'PFRDA/2025/05/ICS/01', team: ['anjali', 'arvind'] },
-  { reg: 'PFRDA', title: 'Monthly NAV & AUM statement', freq: 'Monthly', ref: 'PFRDA-NAV', team: ['arvind', 'sanjay'] },
-  { reg: 'PFRDA', title: 'Half-yearly ICS self-assessment', freq: 'Half-yearly', ref: 'ICS-50', team: ['anjali', 'rajesh'] },
-  { reg: 'PFRDA', title: 'Annual cyber-security audit submission', freq: 'Annual', ref: 'ICS-50', team: ['rajesh', 'sunita'] },
-  { reg: 'PFRDA', title: 'Investment committee minutes filing', freq: 'Quarterly', ref: 'ICS-46', team: ['arvind', 'vikram'] },
-  { reg: 'PFRDA', title: 'Exposure-limit breach report', freq: 'Event-based', ref: 'ICS-40', team: ['sanjay', 'arvind'] },
-  { reg: 'CERT-In', title: 'Cyber incident summary report', freq: 'Monthly', ref: '20(3)/2022', team: ['rajesh', 'karthik'] },
-  { reg: 'CERT-In', title: 'Log retention & NTP sync attestation', freq: 'Quarterly', ref: '20(3)/2022', team: ['karthik', 'rohan'] },
-  { reg: 'DPDP', title: 'Consent records reconciliation', freq: 'Quarterly', ref: 'DPDP-Rules-2025', team: ['priya', 'anjali'] },
-  { reg: 'DPDP', title: 'DSAR fulfilment status report', freq: 'Monthly', ref: 'DPDP-Rules-2025', team: ['priya'] },
-  { reg: 'GST', title: 'GSTR-3B monthly return', freq: 'Monthly', ref: 'GSTR-3B', team: ['deepa'] },
-  { reg: 'GST', title: 'GSTR-1 outward supplies', freq: 'Monthly', ref: 'GSTR-1', team: ['deepa'] },
-  { reg: 'GST', title: 'GSTR-9C reconciliation statement', freq: 'Annual', ref: 'GSTR-9C', team: ['deepa'] },
-  { reg: 'Labour', title: 'PF & ESI monthly challan', freq: 'Monthly', ref: 'EPFO', team: ['farhan'] },
-  { reg: 'Labour', title: 'Professional tax remittance', freq: 'Monthly', ref: 'PT', team: ['farhan'] },
-  { reg: 'Companies Act', title: 'Board meeting & minutes', freq: 'Quarterly', ref: 'CA-2013-173', team: ['vikram'] },
-  { reg: 'Companies Act', title: 'Audit committee meeting', freq: 'Quarterly', ref: 'CA-2013-177', team: ['vikram', 'sunita'] },
-  { reg: 'Companies Act', title: 'Annual return MGT-7 filing', freq: 'Annual', ref: 'MGT-7', team: ['vikram', 'farhan'] },
+const OBLIGATION_DEFS: {
+  reg: Regulator
+  title: string
+  freq: string
+  ref: string
+  team: string[]
+  requirement: string
+  applicability: string
+}[] = [
+  { reg: 'PFRDA', title: 'Quarterly compliance return (Annexure)', freq: 'Quarterly', ref: 'PFRDA/2025/05/ICS/01', team: ['anjali', 'arvind'], requirement: 'File the quarterly compliance Annexure with PFRDA within the prescribed window, certified by the Compliance Officer.', applicability: 'SPF is a PFRDA-registered NPS Pension Fund Manager (Category I Regulated Entity) and must report on the PFRDA ICS compliance cadence.' },
+  { reg: 'PFRDA', title: 'Monthly NAV & AUM statement', freq: 'Monthly', ref: 'PFRDA-NAV', team: ['arvind', 'sanjay'], requirement: 'Submit the monthly scheme-wise NAV and AUM statement to PFRDA and the NPS Trust, reconciled to the CRA records.', applicability: 'SPF manages NPS Scheme E/C/G/A across Tier I & II and must report scheme NAV/AUM as a PFM.' },
+  { reg: 'PFRDA', title: 'Half-yearly ICS self-assessment', freq: 'Half-yearly', ref: 'ICS-50', team: ['anjali', 'rajesh'], requirement: 'Complete the half-yearly Information & Cyber Security self-assessment against the PFRDA ICS Guidelines and place it before the board.', applicability: 'As a PFRDA intermediary, SPF must maintain and self-attest a board-approved ICS posture aligned to ISO 27001 / NIST CSF.' },
+  { reg: 'PFRDA', title: 'Annual cyber-security audit submission', freq: 'Annual', ref: 'ICS-50', team: ['rajesh', 'sunita'], requirement: 'Submit the annual cyber-security audit report (CERT-In empanelled auditor) to PFRDA with the closure status of findings.', applicability: 'PFRDA ICS Guidelines require regulated intermediaries to undergo and file an annual independent IS audit.' },
+  { reg: 'PFRDA', title: 'Investment committee minutes filing', freq: 'Quarterly', ref: 'ICS-46', team: ['arvind', 'vikram'], requirement: 'Record and file the Investment Committee minutes evidencing the periodic review of the approved investment universe.', applicability: 'The PFRDA Master Circular on Investment Guidelines requires SPF to review its portfolio and universe and minute it at the Investment Committee.' },
+  { reg: 'PFRDA', title: 'Exposure-limit breach report', freq: 'Event-based', ref: 'ICS-40', team: ['sanjay', 'arvind'], requirement: 'Report any breach of prescribed investment exposure limits to PFRDA, with the cause and the corrective action taken.', applicability: 'SPF’s scheme portfolios are bound by PFRDA investment exposure limits; breaches are reportable events for a PFM.' },
+  { reg: 'CERT-In', title: 'Cyber incident summary report', freq: 'Monthly', ref: '20(3)/2022', team: ['rajesh', 'karthik'], requirement: 'Report cyber incidents to CERT-In within six hours of detection and provide the periodic incident summary.', applicability: 'As a body corporate operating ICT systems in India, SPF is bound by CERT-In Direction 20(3)/2022.' },
+  { reg: 'CERT-In', title: 'Log retention & NTP sync attestation', freq: 'Quarterly', ref: '20(3)/2022', team: ['karthik', 'rohan'], requirement: 'Maintain logs for a rolling 180 days within Indian jurisdiction and keep ICT system clocks synchronised to NTP; attest the same.', applicability: 'CERT-In Direction 20(3)/2022 mandates in-India 180-day log retention and NTP synchronisation for SPF’s systems.' },
+  { reg: 'DPDP', title: 'Consent records reconciliation', freq: 'Quarterly', ref: 'DPDP-Rules-2025', team: ['priya', 'anjali'], requirement: 'Reconcile the consent ledger for subscriber personal data and evidence a valid lawful basis for each processing purpose.', applicability: 'SPF is a Data Fiduciary processing PRAN/KYC/nominee data and must maintain consent under the DPDP Act, 2023 r/w DPDP Rules, 2025.' },
+  { reg: 'DPDP', title: 'DSAR fulfilment status report', freq: 'Monthly', ref: 'DPDP-Rules-2025', team: ['priya'], requirement: 'Track and report Data Principal request (access/correction/erasure) fulfilment within the prescribed timelines.', applicability: 'As a Data Fiduciary, SPF must honour Data Principal rights for subscriber personal data under the DPDP framework.' },
+  { reg: 'GST', title: 'GSTR-3B monthly return', freq: 'Monthly', ref: 'GSTR-3B', team: ['deepa'], requirement: 'File the monthly GSTR-3B summary return and discharge the net tax liability by the due date.', applicability: 'SPF is a GST-registered person and must furnish GSTR-3B under Section 39 of the CGST Act, 2017.' },
+  { reg: 'GST', title: 'GSTR-1 outward supplies', freq: 'Monthly', ref: 'GSTR-1', team: ['deepa'], requirement: 'File the monthly GSTR-1 statement of outward supplies (management/advisory fees) by the due date.', applicability: 'SPF is a GST-registered person and must report outward supplies under Section 37 / Section 39 of the CGST Act, 2017.' },
+  { reg: 'GST', title: 'GSTR-9C reconciliation statement', freq: 'Annual', ref: 'GSTR-9C', team: ['deepa'], requirement: 'File the annual GSTR-9 return with the GSTR-9C reconciliation statement reconciling the books to the returns.', applicability: 'SPF’s aggregate turnover crosses the GSTR-9C threshold, attracting the annual reconciliation requirement.' },
+  { reg: 'Labour', title: 'PF & ESI monthly challan', freq: 'Monthly', ref: 'EPFO', team: ['farhan'], requirement: 'Remit employee/employer provident-fund contributions via the monthly ECR challan by the statutory due date.', applicability: 'SPF is a covered establishment under the EPF & MP Act, 1952; late deposit attracts damages (s.14B) and interest (s.7Q).' },
+  { reg: 'Labour', title: 'Professional tax remittance', freq: 'Monthly', ref: 'PT', team: ['farhan'], requirement: 'Deduct and remit state professional tax on employee salaries and file the periodic PT return.', applicability: 'SPF employs staff in states levying professional tax and must deduct and deposit it as an employer.' },
+  { reg: 'Companies Act', title: 'Board meeting & minutes', freq: 'Quarterly', ref: 'CA-2013-173', team: ['vikram'], requirement: 'Convene at least four board meetings a year with the maximum gap prescribed, and record and sign the minutes.', applicability: 'SPF is a company incorporated under the Companies Act, 2013 and bound by the Section 173 board-cadence requirement.' },
+  { reg: 'Companies Act', title: 'Audit committee meeting', freq: 'Quarterly', ref: 'CA-2013-177', team: ['vikram', 'sunita'], requirement: 'Hold the Audit Committee meetings, review the financials and internal controls, and minute the proceedings.', applicability: 'SPF meets the Section 177 thresholds and must constitute and operate an Audit Committee.' },
+  { reg: 'Companies Act', title: 'Annual return MGT-7 filing', freq: 'Annual', ref: 'MGT-7', team: ['vikram', 'farhan'], requirement: 'File the annual return in Form MGT-7 with the Registrar of Companies within the period specified after the AGM.', applicability: 'Section 92(5) of the Companies Act, 2013 requires SPF to file its annual return; delay attracts a per-day penalty.' },
 ]
 
 function obligationCode(reg: Regulator): string {
@@ -554,6 +566,12 @@ function buildObligations(): Obligation[] {
     else dueDate = iso(new Date(NOW_MS - r.int(5, 120) * 86400000))
     const maker = r.pick(def.team)
     const checker = r.pick(def.reg === 'PFRDA' ? ['meera', 'anjali'] : ['anjali', 'vikram', 'meera'])
+    // Filed cycles carry an actual filed date — mostly on time, ~20% late (E2.3).
+    // Derived from the loop index only (no RNG draw) so obligation ids stay stable.
+    const filedAt =
+      status === 'Filed'
+        ? iso(new Date(new Date(dueDate).getTime() + (i % 5 === 0 ? 3 + (i % 7) : -(i % 4)) * 86400000))
+        : undefined
     obligations.push({
       id,
       regulator: def.reg,
@@ -562,6 +580,7 @@ function buildObligations(): Obligation[] {
       dueDate,
       owner: maker,
       status,
+      filedAt,
       makerChecker: {
         maker,
         checker,
@@ -576,8 +595,50 @@ function buildObligations(): Obligation[] {
       },
       evidence: [],
       reference: def.ref,
+      requirement: def.requirement,
+      applicability: def.applicability,
+      origin: 'External',
     })
   }
+
+  // Internal, policy-driven duties - handled identically to statutory filings
+  // (spec 5.2 / Req 2). Statuses are chosen so they do NOT change the curated
+  // 9-overdue / 23-due anchors. One is deliberately completed-but-lacking-evidence
+  // to make the "done but not documented" gap visible.
+  obligations.push(
+    {
+      id: 'OBL-INT-INVREV-Q1', regulator: 'PFRDA', title: 'Quarterly investment-policy holdings review', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS + 9 * 86400000)), owner: 'arvind', status: 'In review',
+      makerChecker: { maker: 'arvind', checker: 'meera', state: 'Submitted' }, evidence: [], reference: 'IP-REV-Q1',
+      requirement: 'Review the firm holdings against the board-approved investment policy and minute it at the Investment Committee.',
+      applicability: 'Set by the firm’s own investment policy, not a single statute.', origin: 'Internal',
+      policySource: 'Board-approved Investment Policy', sourceRefs: ['SRC-PFRDA-INV-COMMITTEE'],
+    },
+    {
+      id: 'OBL-INT-INVREV-PREVQ', regulator: 'PFRDA', title: 'Quarterly investment-policy holdings review (prior cycle)', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS - 84 * 86400000)), owner: 'arvind', status: 'Filed',
+      makerChecker: { maker: 'arvind', checker: 'meera', state: 'Approved' }, evidence: ['EVD-44420'], reference: 'IP-REV-PREVQ',
+      requirement: 'Review the firm holdings against the board-approved investment policy and minute it at the Investment Committee.',
+      applicability: 'Set by the firm’s own investment policy, not a single statute.', origin: 'Internal',
+      policySource: 'Board-approved Investment Policy', sourceRefs: ['SRC-PFRDA-INV-COMMITTEE'],
+    },
+    {
+      id: 'OBL-INT-CONSENT-H1', regulator: 'DPDP', title: 'Half-yearly consent-ledger reconciliation', frequency: 'Half-yearly',
+      dueDate: iso(new Date(NOW_MS + 16 * 86400000)), owner: 'priya', status: 'In review',
+      makerChecker: { maker: 'priya', checker: 'anjali', state: 'Submitted' }, evidence: ['EVD-44400'], reference: 'DP-CONSENT-H1',
+      requirement: 'Reconcile the consent ledger against active processing and remediate gaps.',
+      applicability: 'Set by the firm’s own data-protection policy.', origin: 'Internal',
+      policySource: 'Data Protection & Privacy Policy', sourceRefs: ['SRC-DPDP-6'],
+    },
+    {
+      id: 'OBL-INT-ACCESS-Q1', regulator: 'CERT-In', title: 'Quarterly privileged-access recertification', frequency: 'Quarterly',
+      dueDate: iso(new Date(NOW_MS - 100 * 86400000)), owner: 'rohan', status: 'Filed',
+      makerChecker: { maker: 'rohan', checker: 'rajesh', state: 'Approved' }, evidence: ['EVD-44192'], reference: 'IS-ACCESS-Q1',
+      requirement: 'Recertify privileged access to the CRA interface and fund-accounting systems.',
+      applicability: 'Set by the firm’s own information-security policy.', origin: 'Internal',
+      policySource: 'Information Security Policy',
+    },
+  )
   return obligations
 }
 
@@ -699,7 +760,7 @@ function buildEvidence(controls: Control[], obligations: Obligation[]): Evidence
   const r = new Rand(600)
   const ev: Evidence[] = []
   const types: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attestation', 'Filing ack']
-  const sources = ['AWS Security Hub', 'Splunk SIEM', 'Qualys VM', 'CrowdStrike EDR', 'Okta/AD', 'Sankalp ServiceDesk', 'OneTrust', 'ClearTax']
+  const sources = ['AWS Security Hub', 'Splunk SIEM', 'Qualys VM', 'CrowdStrike EDR', 'Okta/AD', 'Sankalp ServiceDesk', 'Consent & Privacy platform', 'ClearTax']
   for (let i = 0; i < 600; i++) {
     const id = `EVD-${44000 + i}`
     const auto = i < 420 // 70%
@@ -805,14 +866,14 @@ function buildRegChanges(): RegulatoryChange[] {
   const r = new Rand(90)
   const changes: RegulatoryChange[] = []
   const feed: { summary: string; reg: Regulator; src: RegulatoryChange['source']; detail: string }[] = [
-    { summary: 'GSTR-3B table 4 ITC reporting format revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'CBIC notification revises the GSTR-3B Table 4 auto-population and ITC reversal disclosure. The monthly GSTR-3B obligation template and the reconciliation control are auto-updated; owner Deepa Iyer alerted.' },
+    { summary: 'GSTR-3B table 4 ITC reporting format revised', reg: 'GST', src: 'Regulatory Intelligence feed', detail: 'CBIC notification revises the GSTR-3B Table 4 auto-population and ITC reversal disclosure. The monthly GSTR-3B obligation template and the reconciliation control are auto-updated; owner Deepa Iyer alerted.' },
     { summary: 'PFRDA revises scheme-wise exposure caps for Scheme E', reg: 'PFRDA', src: 'PFRDA circular', detail: 'PFRDA circular tightens single-issuer and sectoral exposure caps for Scheme E. The exposure-limit monitoring control and the quarterly investment return obligation are auto-updated; owners Arvind Patel and Sanjay Verma alerted.' },
-    { summary: 'CERT-In reiterates 6-hour reporting & log retention', reg: 'CERT-In', src: 'Lexplosion Komrisk', detail: 'Advisory reiterates Direction 20(3)/2022 — 6-hour incident reporting, 180-day in-India log retention and NTP synchronization.' },
-    { summary: 'DPDP Rules 2025 notify consent-manager obligations', reg: 'DPDP', src: 'Lexplosion Komrisk', detail: 'DPDP Rules 2025 operationalize consent-manager registration and breach intimation timelines.' },
-    { summary: 'Companies Act — CSR disclosure amendment', reg: 'Companies Act', src: 'TeamLease RegTech', detail: 'MCA amends CSR reporting in the board report.' },
-    { summary: 'Labour codes — wage definition clarification', reg: 'Labour', src: 'TeamLease RegTech', detail: 'Clarification on wage definition impacting PF contribution computation.' },
+    { summary: 'CERT-In reiterates 6-hour reporting & log retention', reg: 'CERT-In', src: 'Regulatory Intelligence feed', detail: 'Advisory reiterates Direction 20(3)/2022 — 6-hour incident reporting, 180-day in-India log retention and NTP synchronization.' },
+    { summary: 'DPDP Rules 2025 notify consent-manager obligations', reg: 'DPDP', src: 'Regulatory Intelligence feed', detail: 'DPDP Rules 2025 operationalize consent-manager registration and breach intimation timelines.' },
+    { summary: 'Companies Act — CSR disclosure amendment', reg: 'Companies Act', src: 'Regulatory Intelligence feed', detail: 'MCA amends CSR reporting in the board report.' },
+    { summary: 'Labour codes — wage definition clarification', reg: 'Labour', src: 'Regulatory Intelligence feed', detail: 'Clarification on wage definition impacting PF contribution computation.' },
     { summary: 'PFRDA committee cadence guidance updated', reg: 'PFRDA', src: 'PFRDA circular', detail: 'Guidance on Risk, Audit, Investment and NRC committee frequency and minute-keeping.' },
-    { summary: 'GST e-invoicing threshold revised', reg: 'GST', src: 'TeamLease RegTech', detail: 'e-invoicing applicability threshold revised.' },
+    { summary: 'GST e-invoicing threshold revised', reg: 'GST', src: 'Regulatory Intelligence feed', detail: 'e-invoicing applicability threshold revised.' },
   ]
   const statuses: RegulatoryChange['status'][] = ['Assessed', 'In progress', 'Closed']
   for (let i = 0; i < 90; i++) {
@@ -868,16 +929,18 @@ function buildDsars(): Dsar[] {
     status: 'On hold',
     owner: 'priya',
     note: 'Subscriber requests erasure. PFRDA mandates 10-year retention of pension records — erasure withheld for statutory data; marketing/CRM consent revoked and purged. Worked erasure-vs-retention case.',
+    step: 4, // located, retention-checked, erased-what-allowed, logged — awaiting audit record + DPO sign-off
   })
   const types: Dsar['type'][] = ['Access', 'Erasure', 'Correction', 'Nomination']
   for (let i = 0; i < 13; i++) {
+    const status = r.weighted<Dsar['status']>([['Open', 3], ['In review', 3], ['On hold', 1]])
     dsars.push({
       id: `DSAR-2026-00${48 + i}`,
       pran: `1100${r.int(1000, 9999)}${r.int(1000, 9999)}`,
       type: r.pick(types),
       raisedAt: iso(new Date(NOW_MS - r.int(1, 25) * 86400000)),
       dueDate: iso(new Date(NOW_MS + r.int(3, 28) * 86400000)),
-      status: r.weighted<Dsar['status']>([['Open', 3], ['In review', 3], ['On hold', 1]]),
+      status,
       owner: 'priya',
       note: r.pick([
         'Access request — compiling data inventory across CRA and KYC stores.',
@@ -885,6 +948,7 @@ function buildDsars(): Dsar[] {
         'Nomination update routed to CRA (Protean) interface.',
         'Access request — identity verification completed.',
       ]),
+      step: status === 'In review' ? 2 : status === 'On hold' ? 1 : 1,
     })
   }
   return dsars
@@ -892,6 +956,112 @@ function buildDsars(): Dsar[] {
 
 // ── exported world ──────────────────────────────────────────────────────────
 const controls = buildControls()
+
+// ── Compliance controls (Sources pipeline) — tracked controls that satisfy
+// statutory clauses saved from the Source Library. CTRL-COMP-DPB-01 is shared:
+// it satisfies clauses from two acts (DPDP §8(6) + CERT-In 6-hour reporting).
+const COMPLIANCE_CONTROLS: Control[] = [
+  {
+    id: 'CTRL-COMP-DPB-01',
+    title: 'Personal-data-breach detection & notification',
+    frameworks: ['ISO 27001', 'NIST CSF'],
+    mappedFrameworkRefs: [
+      { framework: 'ISO 27001', ref: 'A.5.24 (incident management)' },
+      { framework: 'NIST CSF', ref: 'RS.CO (Respond — Communications)' },
+    ],
+    owner: 'priya',
+    type: 'Detective',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 12 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 9,
+    linkedRisks: [],
+    linkedIssues: [],
+    description:
+      'Detect a personal-data breach and run one notification runbook to two regulators — intimate the Data Protection Board and affected subscribers within the DPDP window, and report to CERT-In within six hours.',
+    frequency: 'Continuous',
+    nextDue: daysFromNow(20),
+    sourceRefs: ['SRC-DPDP-2025', 'SRC-CERTIN-2022'],
+  },
+  {
+    id: 'CTRL-COMP-SEC-01',
+    title: 'Personal-data security safeguards',
+    frameworks: ['ISO 27001'],
+    mappedFrameworkRefs: [{ framework: 'ISO 27001', ref: 'A.8.24 (cryptography) / A.5.15 (access control)' }],
+    owner: 'priya',
+    type: 'Preventive',
+    automation: 'CCM',
+    lastTested: iso(new Date(NOW_MS - 4 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 14,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: 'Encryption, access control and continuous monitoring over subscriber personal data on the CRA and KYC stores.',
+    frequency: 'Continuous',
+    nextDue: daysFromNow(20),
+    sourceRefs: ['SRC-DPDP-8-5'],
+  },
+  {
+    id: 'CTRL-COMP-INV-01',
+    title: 'Investment universe & exposure monitoring',
+    frameworks: ['PFRDA ICS'],
+    mappedFrameworkRefs: [{ framework: 'PFRDA ICS', ref: 'Investment guidelines — universe & exposure' }],
+    owner: 'arvind',
+    type: 'Preventive',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 6 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 7,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: 'Pre-trade approved-universe check and single-issuer / group exposure-limit monitoring on the NPS scheme portfolios, minuted at the Investment Committee.',
+    frequency: 'Weekly',
+    nextDue: daysFromNow(16),
+    sourceRefs: ['SRC-PFRDA-INV-2025', 'SRC-PFRDA-INV-COMMITTEE'],
+  },
+  {
+    id: 'CTRL-COMP-LOG-01',
+    title: 'Log retention & NTP time-sync',
+    frameworks: ['NIST CSF', 'ISO 27001'],
+    mappedFrameworkRefs: [
+      { framework: 'NIST CSF', ref: 'PR.PS (Platform Security — logging)' },
+      { framework: 'ISO 27001', ref: 'A.8.15 (logging)' },
+    ],
+    owner: 'karthik',
+    type: 'Detective',
+    automation: 'CCM',
+    lastTested: iso(new Date(NOW_MS - 3 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 11,
+    linkedRisks: [],
+    linkedIssues: [],
+    description: '180-day in-India log retention across Splunk SIEM and CrowdStrike EDR, with NTP clock synchronisation to NIC/NPL sources.',
+    frequency: 'Continuous',
+    nextDue: daysFromNow(20),
+    sourceRefs: ['SRC-CERTIN-LOGS'],
+  },
+  {
+    id: 'CTRL-COMP-PT-01',
+    title: 'Profession-tax deduction, remittance & return',
+    frameworks: [],
+    mappedFrameworkRefs: [],
+    owner: 'farhan',
+    type: 'Preventive',
+    automation: 'Manual',
+    lastTested: iso(new Date(NOW_MS - 9 * 86400000)),
+    result: 'Pass',
+    evidenceCount: 4,
+    linkedRisks: [],
+    linkedIssues: [],
+    description:
+      'Deduct Maharashtra profession tax at the Schedule I slab from monthly payroll, deposit it to the State by the statutory date, and file the PT return — PTRC maintained; supports the monthly remittance duty (OBL-LAB-JUN26-02).',
+    frequency: 'Monthly',
+    nextDue: daysFromNow(20),
+    sourceRefs: ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8'],
+  },
+]
+controls.push(...COMPLIANCE_CONTROLS)
+
 const risks = buildRisks(controls)
 const incidents = buildIncidents()
 const obligations = buildObligations()
@@ -902,6 +1072,75 @@ const audits = buildAudits()
 const regChanges = buildRegChanges()
 const dataAssets = buildDataAssets()
 const dsars = buildDsars()
+
+// Curated, named evidence pinned to the worked demo records so their Evidence tabs
+// show relevant proof (not just the random pool). The cross-link pass below pushes
+// each item's linkedObligations into that obligation's evidence list automatically.
+const CURATED_EVIDENCE: Evidence[] = [
+  // Maharashtra profession-tax chain (CTRL-COMP-PT-01 / OBL-LAB-JUN26-02)
+  { id: 'EVD-44600', title: 'PTRC registration certificate — Maharashtra', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 210 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: [], frameworkRefs: [], source: 'Manual upload' },
+  { id: 'EVD-44601', title: 'Monthly PT challan — payment acknowledgement (May 2026)', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 26 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
+  { id: 'EVD-44602', title: 'PT return filing acknowledgement', type: 'Filing ack', capturedAt: iso(new Date(NOW_MS - 24 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'mahagst portal' },
+  { id: 'EVD-44603', title: 'Payroll PT deduction register — Schedule I slabs', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 25 * 86400000 - 4200000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-02'], frameworkRefs: [], source: 'Payroll system' },
+  { id: 'EVD-44607', title: 'Payroll PT deduction register — current cycle (Schedule I slabs)', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 1 * 86400000)), capturedBy: 'farhan', auto: false, linkedControls: ['CTRL-COMP-PT-01'], linkedObligations: ['OBL-LAB-JUN26-04'], frameworkRefs: [], source: 'Payroll system' },
+  // DPDP worked controls
+  { id: 'EVD-44604', title: 'Breach-notification runbook — CERT-In 6h + DPDP Board', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 12 * 86400000)), capturedBy: 'priya', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: [], frameworkRefs: ['ISO 27001', 'NIST CSF'], source: 'Manual upload' },
+  { id: 'EVD-44605', title: 'KYC-store encryption & access-control config export', type: 'Config export', capturedAt: iso(new Date(NOW_MS - 4 * 86400000 - 1800000)), capturedBy: 'CCM (auto)', auto: true, linkedControls: ['CTRL-COMP-SEC-01'], linkedObligations: [], frameworkRefs: ['ISO 27001'], source: 'AWS Security Hub' },
+  { id: 'EVD-44606', title: 'Consent ledger reconciliation — Q1 FY2026-27', type: 'Attestation', capturedAt: iso(new Date(NOW_MS - 9 * 86400000)), capturedBy: 'anjali', auto: false, linkedControls: ['CTRL-COMP-DPB-01'], linkedObligations: ['OBL-DPDP-JUN26-01'], frameworkRefs: [], source: 'Consent & Privacy platform' },
+]
+evidence.push(...CURATED_EVIDENCE)
+
+// ── Multi-step (deduction-type) obligation curation (enhancement plan 3) ──────
+// Professional-tax remittance is satisfied by a sequence of actions across two
+// departments: HR & Labour deducts (s.4) and files the return (s.6); Finance &
+// Tax deposits the tax (s.8). Each action is its own maker-checker task with
+// evidence. OBL-LAB-JUN26-04 is the live (in-progress) worked example; -02 is the
+// completed prior cycle for contrast.
+function curatePtSubSteps() {
+  const mk = (
+    oblId: string,
+    dueMs: number,
+    steps: { seq: number; title: string; clause: string; maker: string; checker: string; offsetDays: number; status: ObligationSubStep['status']; ev?: string; dep?: number }[],
+  ): ObligationSubStep[] =>
+    steps.map((s) => ({
+      id: `${oblId}-S${s.seq}`,
+      seq: s.seq,
+      title: s.title,
+      clauseRef: s.clause,
+      maker: s.maker,
+      checker: s.checker,
+      dueDate: new Date(dueMs + s.offsetDays * 86400000).toISOString(),
+      status: s.status,
+      evidenceId: s.ev,
+      dependsOnSeq: s.dep,
+    }))
+
+  const live = obligations.find((o) => o.id === 'OBL-LAB-JUN26-04')
+  if (live) {
+    live.dueDate = daysFromNow(4)
+    live.status = 'Due'
+    live.makerChecker = { maker: 'farhan', checker: 'anjali', state: 'Drafted' }
+    live.sourceRefs = ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+    live.subSteps = mk('OBL-LAB-JUN26-04', new Date(live.dueDate).getTime(), [
+      { seq: 1, title: 'Deduct profession tax from payroll (Schedule I slabs)', clause: 'SRC-PT-4', maker: 'farhan', checker: 'deepa', offsetDays: -4, status: 'Done', ev: 'EVD-44607' },
+      { seq: 2, title: 'Deposit profession tax with the State (PT challan)', clause: 'SRC-PT-8', maker: 'deepa', checker: 'anjali', offsetDays: -1, status: 'Pending', dep: 1 },
+      { seq: 3, title: 'File the monthly PT return', clause: 'SRC-PT-6', maker: 'farhan', checker: 'vikram', offsetDays: 0, status: 'Pending', dep: 2 },
+    ])
+  }
+
+  const prior = obligations.find((o) => o.id === 'OBL-LAB-JUN26-02')
+  if (prior) {
+    prior.sourceRefs = ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+    // Worked example: this cycle was filed two days before its due date — on time.
+    prior.filedAt = iso(new Date(new Date(prior.dueDate).getTime() - 2 * 86400000))
+    prior.subSteps = mk('OBL-LAB-JUN26-02', new Date(prior.dueDate).getTime(), [
+      { seq: 1, title: 'Deduct profession tax from payroll (Schedule I slabs)', clause: 'SRC-PT-4', maker: 'farhan', checker: 'deepa', offsetDays: -4, status: 'Done', ev: 'EVD-44603' },
+      { seq: 2, title: 'Deposit profession tax with the State (PT challan)', clause: 'SRC-PT-8', maker: 'deepa', checker: 'anjali', offsetDays: -1, status: 'Done', ev: 'EVD-44601', dep: 1 },
+      { seq: 3, title: 'File the monthly PT return', clause: 'SRC-PT-6', maker: 'farhan', checker: 'vikram', offsetDays: 0, status: 'Done', ev: 'EVD-44602', dep: 2 },
+    ])
+  }
+}
+curatePtSubSteps()
 
 // ── cross-linking pass ──────────────────────────────────────────────────────
 function crossLink() {
@@ -990,10 +1229,19 @@ function crossLink() {
     pfrdaChange.impactedObligations = obligations.filter((o) => o.regulator === 'PFRDA').slice(0, 2).map((o) => o.id)
     pfrdaChange.impactedControls = controls.filter((c) => /exposure|investment limit/i.test(c.title)).slice(0, 2).map((c) => c.id)
   }
-  // generic linkage for the rest
-  for (const ch of regChanges) {
+  // generic linkage for the rest - every change shows a real (if modest) impact
+  // picture on both obligations and controls (Epic 3.1).
+  const fwForReg: Record<string, string> = { PFRDA: 'PFRDA ICS', 'CERT-In': 'NIST CSF', DPDP: 'ISO 27001', GST: 'ISO 27001', Labour: 'ISO 27001', 'Companies Act': 'ISO 27001' }
+  for (let i = 0; i < regChanges.length; i++) {
+    const ch = regChanges[i]
     if (ch.impactedObligations.length === 0)
-      ch.impactedObligations = obligations.filter((o) => o.regulator === ch.regulator).slice(0, 1).map((o) => o.id)
+      ch.impactedObligations = obligations.filter((o) => o.regulator === ch.regulator && o.origin !== 'Internal').slice(0, 2).map((o) => o.id)
+    if (ch.impactedControls.length === 0) {
+      const fw = fwForReg[ch.regulator]
+      const pool = controls.filter((c) => c.frameworks.includes(fw as Control['frameworks'][number]))
+      // deterministic, varied pick per change so impacts are not all identical
+      ch.impactedControls = (pool.length ? pool : controls).slice(i % 7, (i % 7) + 1).map((c) => c.id)
+    }
   }
 
   // link obligations back to reg-change
@@ -1014,10 +1262,82 @@ function crossLink() {
       issue.sourceRef = f.id
       issue.title = `${f.title} — remediation (${a.id})`
       issue.severity = f.severity
+      // An open finding's 1:1 remediation cannot already be Resolved — otherwise the
+      // finding reads open while its issue reads closed, and the Open-findings metric
+      // (derived from the linked issue) understates the 27 baseline. Coerce off
+      // Resolved so the seed is internally consistent and closure is an in-session act.
+      if (issue.status === 'Resolved') issue.status = 'In progress'
     }
   })
 }
 crossLink()
+
+// ── provenance pass (Epic 1) — attach real instrument sources to records ────
+// Every obligation, policy and control gets ≥1 openable SourceReference; the
+// reverse lookup (lib/sources.ts) resolves a source back to what it produced.
+function linkSources() {
+  const uniq = (xs: string[]) => Array.from(new Set(xs))
+
+  // Obligations: regulator default + title-specific instruments.
+  for (const o of obligations) {
+    const t = o.title.toLowerCase()
+    let refs: string[]
+    if (o.regulator === 'Labour') {
+      // Professional tax → the state PT Act (not the EPF Act — corrects the
+      // earlier mislink); PF/ESI → the EPF & MP Act provisions.
+      refs = /professional tax|profession/.test(t)
+        ? ['SRC-PT-4', 'SRC-PT-6', 'SRC-PT-8']
+        : ['SRC-EPF-6', 'SRC-EPF-14B', 'SRC-EPF-7Q']
+    } else {
+      refs = [sourceForRegulator(o.regulator)]
+      if (o.regulator === 'PFRDA') {
+        if (/invest|nav|aum|exposure|committee/.test(t)) refs.push('SRC-PFRDA-INV-2025')
+        if (/cyber|ics|incident|self-assessment/.test(t)) refs.push('SRC-PFRDA-ICS-2024', 'SRC-PFRDA-ICS-2025')
+      } else if (o.regulator === 'GST') {
+        refs.push('SRC-CGST-50')
+      } else if (o.regulator === 'CERT-In') {
+        refs.push('SRC-ITACT-70B')
+      } else if (o.regulator === 'Companies Act') {
+        if (/mgt-7|annual return/.test(t)) refs.push('SRC-CA-92-5', 'SRC-CA-403')
+        else if (/financial|aoc/.test(t)) refs.push('SRC-CA-137-3', 'SRC-CA-403')
+        else refs.push('SRC-CA-92-5')
+      }
+    }
+    o.sourceRefs = uniq(refs)
+  }
+
+  // Sources pipeline: the clause→control link (linkedControlId) is seed-driven on
+  // the clause itself (src/data/sources.ts) — no obligation linkage here.
+
+  // Policies: by category, leading with the closest instrument/standard.
+  const byCat: Record<string, string[]> = {
+    Investment: ['SRC-PFRDA-INV-2025', 'SRC-ISO-37301'],
+    Security: ['SRC-ISO-27001', 'SRC-NIST-CSF'],
+    Data: ['SRC-DPDP-2025', 'SRC-ISO-27001'],
+    Compliance: ['SRC-ISO-37301'],
+    Governance: ['SRC-CA-92-5', 'SRC-ISO-37301'],
+    Risk: ['SRC-ISO-37301', 'SRC-ISO-27001'],
+    Resilience: ['SRC-ISO-27001'],
+    IT: ['SRC-ISO-27001', 'SRC-NIST-CSF'],
+  }
+  for (const p of policies) {
+    p.sourceRefs = uniq(byCat[p.category] ?? ['SRC-ISO-37301'])
+  }
+
+  // Controls: each framework mapping carries the standard it satisfies. Where a
+  // control maps to frameworks, derive its sourceRefs from them; where it has no
+  // framework mapping (e.g. a state-tax control), keep the seed-provided sourceRefs
+  // so the source→control link to its clauses survives.
+  for (const c of controls) {
+    c.mappedFrameworkRefs = c.mappedFrameworkRefs.map((m) => ({
+      ...m,
+      sourceRef: sourceForFramework(m.framework),
+    }))
+    const derived = uniq(c.mappedFrameworkRefs.map((m) => m.sourceRef!).filter(Boolean))
+    if (derived.length) c.sourceRefs = derived
+  }
+}
+linkSources()
 
 // ── activity stream (15 rows, real IST timestamps near NOW) ─────────────────
 function buildActivity(): ActivityItem[] {
@@ -1030,7 +1350,7 @@ function buildActivity(): ActivityItem[] {
   push(14, 'evidence', 'CCM (auto)', 'Evidence EVD-44192 auto-captured (EDR detection export) and linked to INC-2026-0411', 'EVD-44192', '/incidents/INC-2026-0411')
   push(23, 'incident', 'Neha Joshi', 'Incident INC-2026-0411 escalated to Critical — three regulator clocks started', 'INC-2026-0411', '/incidents/INC-2026-0411')
   push(41, 'evidence', 'CCM (auto)', 'Config baseline export auto-captured for 12 controls (AWS Security Hub feed)', 'EVD-44380', '/evidence')
-  push(58, 'reg-change', 'TeamLease RegTech', 'Regulatory change RCM-2026-118 ingested — GSTR-3B Table 4 format revised; obligation + control auto-updated', 'RCM-2026-118', '/reg-change/RCM-2026-118')
+  push(58, 'reg-change', 'Regulatory Intelligence feed', 'Regulatory change RCM-2026-118 ingested — GSTR-3B Table 4 format revised; obligation + control auto-updated', 'RCM-2026-118', '/reg-change/RCM-2026-118')
   push(72, 'dsar', 'Priya Sharma', 'DSAR-2026-0047 raised — erasure request placed on hold pending PFRDA retention rule', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047')
   push(96, 'approval', 'Anjali Deshmukh', 'Approved (maker-checker) quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations')
   push(118, 'obligation', 'Deepa Iyer', 'GSTR-3B monthly return moved to "In review" after reg-change impact assessment', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations')
@@ -1053,91 +1373,95 @@ function buildQueue(): QueueTask[] {
   const add = (role: RoleKey, kind: QueueTask['kind'], title: string, ref: string, route: string, dueDays: number, priority: Severity) =>
     q.push({ id: `Q-${n++}`, role, kind, title, ref, route, due: daysFromNow(dueDays), priority })
 
-  // CRO (Meera) — 14 tasks
-  add('CRO', 'Approval', 'Approve quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 1, 'High')
-  add('CRO', 'Incident action', 'Review & sign off three-regulator response for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
-  add('CRO', 'Approval', 'Approve enterprise risk treatment plan for top-5 residual risks', risks[0].id, '/risks', 2, 'High')
-  add('CRO', 'Reg-change review', 'Endorse impact assessment of PFRDA exposure-cap circular', 'RCM-2026-117', '/reg-change/RCM-2026-117', 1, 'High')
-  add('CRO', 'Approval', 'Approve board risk pack for Risk Management Committee', 'POL-016', '/policies', 3, 'Medium')
-  add('CRO', 'Evidence request', 'Confirm KRI evidence for monthly board dashboard', 'EVD-44380', '/evidence', 2, 'Medium')
-  add('CRO', 'Approval', 'Sign off DPDP erasure-vs-retention decision (DSAR-2026-0047)', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047', 4, 'Medium')
-  add('CRO', 'Incident action', 'Approve PFRDA 48-hour intimation for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'Critical')
-  add('CRO', 'Control re-test', 'Review failing CCM control escalation', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
-  add('CRO', 'Approval', 'Approve overdue obligation remediation plan (9 items)', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 2, 'High')
-  add('CRO', 'Reg-change review', 'Acknowledge GSTR-3B format change impact', 'RCM-2026-118', '/reg-change/RCM-2026-118', 3, 'Low')
-  add('CRO', 'Evidence request', 'Approve audit evidence pack for AUD-IS-2026-01', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 5, 'Medium')
-  add('CRO', 'Approval', 'Approve third-party risk acceptance for vendor renewal', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 6, 'Low')
-  add('CRO', 'Incident action', 'Review open High incidents on the clock (4)', 'INC-2026-0405', '/incidents', 1, 'High')
+  // EXECUTIVE (Meera) — board-altitude oversight, sign-offs and exceptions
+  add('EXEC', 'Approval', 'Approve quarterly PFRDA compliance return for filing', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 1, 'High')
+  add('EXEC', 'Incident action', 'Review & sign off three-regulator response for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
+  add('EXEC', 'Approval', 'Approve enterprise risk treatment plan for top-5 residual risks', risks[0].id, '/risks', 2, 'High')
+  add('EXEC', 'Reg-change review', 'Endorse impact assessment of PFRDA exposure-cap circular', 'RCM-2026-117', '/reg-change/RCM-2026-117', 1, 'High')
+  add('EXEC', 'Approval', 'Approve board risk pack for Risk Management Committee', 'POL-016', '/policies', 3, 'Medium')
+  add('EXEC', 'Evidence request', 'Confirm KRI evidence for monthly board dashboard', 'EVD-44380', '/evidence', 2, 'Medium')
+  add('EXEC', 'Approval', 'Sign off DPDP erasure-vs-retention decision (DSAR-2026-0047)', 'DSAR-2026-0047', '/dpdp/dsar/DSAR-2026-0047', 4, 'Medium')
+  add('EXEC', 'Incident action', 'Approve PFRDA 48-hour intimation for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'Critical')
+  add('EXEC', 'Approval', 'Approve overdue obligation remediation plan (9 items)', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 2, 'High')
+  add('EXEC', 'Evidence request', 'Approve audit evidence pack for AUD-IS-2026-01', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 5, 'Medium')
+  add('EXEC', 'Approval', 'Approve third-party risk acceptance for vendor renewal', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 6, 'Low')
+  add('EXEC', 'Incident action', 'Review open High incidents on the clock (4)', 'INC-2026-0405', '/incidents', 1, 'High')
 
-  // CISO (Rajesh)
-  add('CISO', 'Incident action', 'Sign off CERT-In Annexure I for INC-2026-0411 (clock running)', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
-  add('CISO', 'Control re-test', 'Re-test failing patch-SLA CCM rule', 'CTRL-PCI-6.3.3', '/ccm', 0, 'Critical')
-  add('CISO', 'Incident action', 'Approve containment closure for INC-2026-0402', 'INC-2026-0402', '/incidents', 1, 'High')
-  add('CISO', 'Control re-test', 'Recertify privileged access (CRA interface)', 'CTRL-ISO-A.8.2', '/controls/CTRL-ISO-A.8.2', 2, 'High')
-  add('CISO', 'Evidence request', 'Provide SIEM log evidence for IS audit', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 3, 'Medium')
-  add('CISO', 'Approval', 'Approve vulnerability remediation exception', 'ISS-2026-0100', '/issues', 2, 'High')
-  add('CISO', 'Reg-change review', 'Assess CERT-In log-retention advisory', 'RCM-2026-116', '/reg-change/RCM-2026-116', 4, 'Medium')
-  add('CISO', 'Control re-test', 'Review backup restoration test result', 'CTRL-ISO-A.8.13', '/controls/CTRL-ISO-A.8.13', 5, 'Medium')
-  add('CISO', 'Incident action', 'Tune detection rule from phishing incident', 'INC-2026-0405', '/incidents/INC-2026-0405', 3, 'Medium')
-  add('CISO', 'Approval', 'Approve cloud security policy update', 'POL-013', '/policies/POL-013', 6, 'Low')
-  add('CISO', 'Evidence request', 'Attest endpoint EDR coverage', 'EVD-44192', '/evidence', 4, 'Low')
-  add('CISO', 'Control re-test', 'Validate NTP clock-sync control', 'CTRL-ISO-A.8.17', '/controls/CTRL-ISO-A.8.17', 2, 'Medium')
+  // RISK MANAGER (Sanjay) — register, treatment, heat map, investment risk
+  add('RISK', 'Reg-change review', 'Assess Scheme E exposure-cap circular impact on risk', 'RCM-2026-117', '/reg-change/RCM-2026-117', 0, 'Critical')
+  add('RISK', 'Approval', 'Endorse top-5 residual risk treatment plans', risks[0].id, '/risks', 1, 'High')
+  add('RISK', 'Approval', 'Approve issuer concentration risk treatment (Scheme E)', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 2, 'High')
+  add('RISK', 'Control re-test', 'Review failing CCM control feeding cyber risk', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
+  add('RISK', 'Approval', 'Sign off liquidity-mismatch risk monitoring for Scheme G', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 2, 'Medium')
+  add('RISK', 'Evidence request', 'Confirm KRI evidence for Risk Management Committee', 'EVD-44380', '/evidence', 3, 'Medium')
+  add('RISK', 'Incident action', 'Update risk realised by INC-2026-0411 (ransomware)', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
+  add('RISK', 'Approval', 'Approve third-party / vendor risk acceptance (CRA services)', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 4, 'Medium')
+  add('RISK', 'Reg-change review', 'Reassess operational risk after labour-code change', 'RCM-2026-112', '/reg-change', 5, 'Low')
+  add('RISK', 'Approval', 'Refresh RCSA for IT & cyber domain', risks.find((x) => x.domain === 'Cyber')!.id, '/risks', 6, 'Medium')
 
-  // Compliance (Anjali)
-  add('COMPLIANCE', 'Approval', 'Check & approve GSTR-3B monthly return', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations', 1, 'High')
-  add('COMPLIANCE', 'Reg-change review', 'Assess GSTR-3B Table 4 format change', 'RCM-2026-118', '/reg-change/RCM-2026-118', 1, 'High')
-  add('COMPLIANCE', 'Approval', 'Approve DSAR fulfilment status report', 'DSAR-2026-0047', '/dpdp', 2, 'Medium')
-  add('COMPLIANCE', 'Approval', 'Sign off 9 overdue obligations remediation', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 0, 'Critical')
-  add('COMPLIANCE', 'Reg-change review', 'Review DPDP Rules 2025 consent-manager obligations', 'RCM-2026-115', '/reg-change/RCM-2026-115', 3, 'Medium')
-  add('COMPLIANCE', 'Evidence request', 'Collect consent reconciliation evidence', 'EVD-44400', '/evidence', 4, 'Medium')
-  add('COMPLIANCE', 'Approval', 'Approve regulatory change closure (12 assessed)', 'RCM-2026-114', '/reg-change', 5, 'Low')
-  add('COMPLIANCE', 'Approval', 'Check PFRDA half-yearly ICS self-assessment', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 6, 'Medium')
-  add('COMPLIANCE', 'Reg-change review', 'Triage 8 new regulatory updates this week', 'RCM-2026-113', '/reg-change', 2, 'Medium')
-  add('COMPLIANCE', 'Approval', 'Approve AML/KYC policy refresh', 'POL-020', '/policies', 7, 'Low')
-  add('COMPLIANCE', 'Evidence request', 'Provide filing acks for board compliance pack', 'EVD-44510', '/evidence', 3, 'Low')
-  add('COMPLIANCE', 'Incident action', 'Confirm DPDP track for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
+  // COMPLIANCE MANAGER (Anjali) — obligations, reg-change, DPDP, clause decisions
+  add('CCO', 'Approval', 'Sign off 9 overdue obligations remediation', obligations.find((o) => o.status === 'Overdue')!.id, '/obligations', 0, 'Critical')
+  add('CCO', 'Approval', 'Check & approve GSTR-3B monthly return', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations', 1, 'High')
+  add('CCO', 'Reg-change review', 'Assess GSTR-3B Table 4 format change', 'RCM-2026-118', '/reg-change/RCM-2026-118', 1, 'High')
+  add('CCO', 'Approval', 'Decide DPDP breach-intimation clause (save to control)', 'SRC-DPDP-6', '/sources/section/SRC-DPDP-6', 1, 'High')
+  add('CCO', 'Approval', 'Approve DSAR fulfilment status report', 'DSAR-2026-0047', '/dpdp', 2, 'Medium')
+  add('CCO', 'Reg-change review', 'Review DPDP Rules 2025 consent-manager obligations', 'RCM-2026-115', '/reg-change/RCM-2026-115', 3, 'Medium')
+  add('CCO', 'Reg-change review', 'Triage 8 new regulatory updates this week', 'RCM-2026-113', '/reg-change', 2, 'Medium')
+  add('CCO', 'Approval', 'Approve MGT-7 annual return draft (Companies Act)', 'OBL-CA-FY26-03', '/obligations', 8, 'Low')
+  add('CCO', 'Approval', 'Check PFRDA half-yearly ICS self-assessment', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/obligations', 6, 'Medium')
+  add('CCO', 'Incident action', 'Confirm DPDP track for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
+  add('CCO', 'Approval', 'Approve AML/KYC policy refresh', 'POL-020', '/policies', 7, 'Low')
+  add('CCO', 'Evidence request', 'Provide filing acks for board compliance pack', 'EVD-44510', '/evidence', 3, 'Low')
 
-  // CoSec (Vikram)
-  add('COSEC', 'Approval', 'Finalize board meeting minutes (Q1)', 'OBL-CA-Q1-01', '/obligations', 2, 'Medium')
-  add('COSEC', 'Approval', 'Approve audit committee agenda', 'OBL-CA-Q1-02', '/obligations', 3, 'Medium')
-  add('COSEC', 'Reg-change review', 'Assess Companies Act CSR disclosure amendment', 'RCM-2026-114', '/reg-change/RCM-2026-114', 4, 'Medium')
-  add('COSEC', 'Approval', 'Approve MGT-7 annual return draft', 'OBL-CA-FY26-03', '/obligations', 8, 'Low')
-  add('COSEC', 'Evidence request', 'Compile committee cadence evidence (PFRDA Pack)', 'EVD-44420', '/pfrda', 5, 'Medium')
-  add('COSEC', 'Approval', 'Approve whistleblower policy update', 'POL-019', '/policies/POL-019', 6, 'Low')
-  add('COSEC', 'Reg-change review', 'Review labour code wage-definition change', 'RCM-2026-112', '/reg-change', 7, 'Low')
-  add('COSEC', 'Approval', 'Sign off NRC committee minutes', 'OBL-CA-Q1-04', '/obligations', 9, 'Low')
-  add('COSEC', 'Incident action', 'Note board-reportable status of INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 2, 'High')
-  add('COSEC', 'Evidence request', 'Provide secretarial filings for internal audit', 'AUD-INT-2026-06', '/audits', 4, 'Low')
-  add('COSEC', 'Approval', 'Approve code of conduct annual attestation', 'POL-018', '/policies/POL-018', 10, 'Low')
-  add('COSEC', 'Reg-change review', 'Acknowledge MCA filing portal change', 'RCM-2026-111', '/reg-change', 5, 'Low')
+  // COMPLIANCE ANALYST (Deepa) — first-line filings, clause-pipeline work, evidence
+  add('ANALYST', 'Approval', 'File GSTR-3B monthly return and submit for check', obligations.find((o) => o.regulator === 'GST')!.id, '/obligations', 1, 'High')
+  add('ANALYST', 'Approval', 'Deposit EPF contributions & file ECR (due 15th)', 'OBL-EPF-JUN26-01', '/obligations', 3, 'High')
+  add('ANALYST', 'Reg-change review', 'Work GST late-fee clause into the monthly control', 'SRC-CGST-47', '/sources/section/SRC-CGST-47', 2, 'Medium')
+  add('ANALYST', 'Evidence request', 'Attach GSTR-3B filing acknowledgement as evidence', 'EVD-44400', '/evidence', 1, 'High')
+  add('ANALYST', 'Reg-change review', 'Process newly arrived EPFO ECR validation update', 'SRC-EPF-6', '/sources/section/SRC-EPF-6', 4, 'Medium')
+  add('ANALYST', 'Approval', 'Submit Maharashtra PTRC monthly return for check', 'OBL-PT-JUN26-01', '/obligations', 2, 'Medium')
+  add('ANALYST', 'Evidence request', 'Collect consent reconciliation evidence', 'EVD-44400', '/evidence', 4, 'Medium')
+  add('ANALYST', 'Reg-change review', 'Triage labour-code wage-definition change for HR filings', 'RCM-2026-112', '/reg-change', 5, 'Low')
+  add('ANALYST', 'Approval', 'File professional-tax PTEC annual payment', 'OBL-PT-FY26-02', '/obligations', 6, 'Low')
+  add('ANALYST', 'Evidence request', 'Upload contribution reconciliation for internal audit', 'EVD-44430', '/evidence', 4, 'Medium')
 
-  // Audit (Sunita)
-  add('AUDIT', 'Evidence request', 'Request access-recertification evidence (finding F1)', 'AUD-INT-2026-03', '/audits/AUD-INT-2026-03', 1, 'High')
-  add('AUDIT', 'Approval', 'Approve audit report for IS audit FY2025-26', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 2, 'High')
-  add('AUDIT', 'Incident action', 'Verify post-incident actions for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 3, 'High')
-  add('AUDIT', 'Evidence request', 'Collect logging-coverage evidence for NAV engine', 'EVD-44380', '/evidence', 2, 'Medium')
-  add('AUDIT', 'Approval', 'Approve issue closure for ISS-2026-0102', 'ISS-2026-0102', '/issues', 4, 'Medium')
-  add('AUDIT', 'Control re-test', 'Independent re-test of patch-SLA control', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
-  add('AUDIT', 'Evidence request', 'Sample exposure-limit monitoring evidence', 'EVD-44420', '/evidence', 5, 'Medium')
-  add('AUDIT', 'Approval', 'Approve DPDP readiness audit scope', 'AUD-INT-2026-05', '/audits/AUD-INT-2026-05', 6, 'Low')
-  add('AUDIT', 'Evidence request', 'Request BCP/DR test evidence', 'EVD-44510', '/evidence', 3, 'Medium')
-  add('AUDIT', 'Approval', 'Approve internal audit plan for next quarter', 'AUD-INT-2026-08', '/audits', 8, 'Low')
-  add('AUDIT', 'Incident action', 'Track 27 open findings to remediation', 'ISS-2026-0100', '/issues', 2, 'Medium')
-  add('AUDIT', 'Control re-test', 'Validate segregation-of-duties remediation', 'CTRL-ISO-A.5.3', '/controls/CTRL-ISO-A.5.3', 4, 'Medium')
+  // CONTROL OWNER (Rajesh / security & IT controls) — tests, CCM, incident actions
+  add('CTRLOWNER', 'Incident action', 'Sign off CERT-In Annexure I for INC-2026-0411 (clock running)', 'INC-2026-0411', '/incidents/INC-2026-0411', 0, 'Critical')
+  add('CTRLOWNER', 'Control re-test', 'Re-test failing patch-SLA CCM rule', 'CTRL-PCI-6.3.3', '/ccm', 0, 'Critical')
+  add('CTRLOWNER', 'Incident action', 'Approve containment closure for INC-2026-0402', 'INC-2026-0402', '/incidents', 1, 'High')
+  add('CTRLOWNER', 'Control re-test', 'Recertify privileged access (CRA interface)', 'CTRL-ISO-A.8.2', '/controls/CTRL-ISO-A.8.2', 2, 'High')
+  add('CTRLOWNER', 'Evidence request', 'Provide SIEM log evidence for IS audit', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 3, 'Medium')
+  add('CTRLOWNER', 'Approval', 'Approve vulnerability remediation exception', 'ISS-2026-0100', '/issues', 2, 'High')
+  add('CTRLOWNER', 'Reg-change review', 'Assess CERT-In log-retention advisory', 'RCM-2026-116', '/reg-change/RCM-2026-116', 4, 'Medium')
+  add('CTRLOWNER', 'Control re-test', 'Review backup restoration test result', 'CTRL-ISO-A.8.13', '/controls/CTRL-ISO-A.8.13', 5, 'Medium')
+  add('CTRLOWNER', 'Incident action', 'Tune detection rule from phishing incident', 'INC-2026-0405', '/incidents/INC-2026-0405', 3, 'Medium')
+  add('CTRLOWNER', 'Approval', 'Approve cloud security policy update', 'POL-013', '/policies/POL-013', 6, 'Low')
+  add('CTRLOWNER', 'Evidence request', 'Attest endpoint EDR coverage', 'EVD-44192', '/evidence', 4, 'Low')
+  add('CTRLOWNER', 'Control re-test', 'Validate NTP clock-sync control', 'CTRL-ISO-A.8.17', '/controls/CTRL-ISO-A.8.17', 2, 'Medium')
 
-  // Investment Compliance (Arvind)
-  add('INVCOMP', 'Approval', 'Approve exposure-limit breach report to PFRDA', obligations.find((o) => o.regulator === 'PFRDA')!.id, '/pfrda', 1, 'High')
-  add('INVCOMP', 'Reg-change review', 'Assess Scheme E exposure-cap circular impact', 'RCM-2026-117', '/reg-change/RCM-2026-117', 0, 'Critical')
-  add('INVCOMP', 'Control re-test', 'Validate exposure-limit monitoring control', 'CTRL-PFRDA-ICS-40', '/controls', 2, 'High')
-  add('INVCOMP', 'Approval', 'Check monthly NAV & AUM statement', obligations.find((o) => o.regulator === 'PFRDA' && o.title.includes('NAV'))?.id ?? 'OBL-PFRDA-JUN26-02', '/obligations', 1, 'High')
-  add('INVCOMP', 'Evidence request', 'Provide investment committee minutes evidence', 'EVD-44420', '/pfrda', 3, 'Medium')
-  add('INVCOMP', 'Approval', 'Approve issuer concentration risk treatment', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 4, 'Medium')
-  add('INVCOMP', 'Control re-test', 'Re-test maker-checker on financial transactions', 'CTRL-PFRDA-ICS-43', '/controls', 5, 'Medium')
-  add('INVCOMP', 'Reg-change review', 'Review derivatives mandate clarification', 'RCM-2026-110', '/reg-change', 6, 'Low')
-  add('INVCOMP', 'Approval', 'Sign off liquidity-mismatch monitoring for Scheme G', risks.find((x) => x.domain === 'Investment')!.id, '/risks', 3, 'Medium')
-  add('INVCOMP', 'Evidence request', 'Collect reconciliation evidence for contributions', 'EVD-44430', '/evidence', 4, 'Medium')
-  add('INVCOMP', 'Incident action', 'Confirm subscriber-impact assessment for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 1, 'High')
-  add('INVCOMP', 'Approval', 'Approve vendor TPRM renewal (CRA services)', risks.find((x) => x.domain === 'ThirdParty')!.id, '/risks', 7, 'Low')
+  // AUDITOR (Sunita) — audits, findings, remediation, evidence trail
+  add('AUDITOR', 'Evidence request', 'Request access-recertification evidence (finding F1)', 'AUD-INT-2026-03', '/audits/AUD-INT-2026-03', 1, 'High')
+  add('AUDITOR', 'Approval', 'Approve audit report for IS audit FY2025-26', 'AUD-IS-2026-01', '/audits/AUD-IS-2026-01', 2, 'High')
+  add('AUDITOR', 'Incident action', 'Verify post-incident actions for INC-2026-0411', 'INC-2026-0411', '/incidents/INC-2026-0411', 3, 'High')
+  add('AUDITOR', 'Evidence request', 'Collect logging-coverage evidence for NAV engine', 'EVD-44380', '/evidence', 2, 'Medium')
+  add('AUDITOR', 'Approval', 'Approve issue closure for ISS-2026-0102', 'ISS-2026-0102', '/issues', 4, 'Medium')
+  add('AUDITOR', 'Control re-test', 'Independent re-test of patch-SLA control', 'CTRL-PCI-6.3.3', '/ccm', 1, 'High')
+  add('AUDITOR', 'Evidence request', 'Sample exposure-limit monitoring evidence', 'EVD-44420', '/evidence', 5, 'Medium')
+  add('AUDITOR', 'Approval', 'Approve DPDP readiness audit scope', 'AUD-INT-2026-05', '/audits/AUD-INT-2026-05', 6, 'Low')
+  add('AUDITOR', 'Evidence request', 'Request BCP/DR test evidence', 'EVD-44510', '/evidence', 3, 'Medium')
+  add('AUDITOR', 'Approval', 'Approve internal audit plan for next quarter', 'AUD-INT-2026-08', '/audits', 8, 'Low')
+  add('AUDITOR', 'Incident action', 'Track 27 open findings to remediation', 'ISS-2026-0100', '/issues', 2, 'Medium')
+  add('AUDITOR', 'Control re-test', 'Validate segregation-of-duties remediation', 'CTRL-ISO-A.5.3', '/controls/CTRL-ISO-A.5.3', 4, 'Medium')
+
+  // ADMINISTRATOR (Imran) — users, roles, frameworks, integrations, audit log
+  add('ADMIN', 'Approval', 'Recertify platform user access (quarterly review)', 'EVD-44380', '/settings', 1, 'High')
+  add('ADMIN', 'Approval', 'Approve maker-checker rule change for incident sign-off', 'POL-016', '/settings', 2, 'High')
+  add('ADMIN', 'Evidence request', 'Review integration health: 11 connected spokes', 'EVD-44192', '/integrations', 0, 'Medium')
+  add('ADMIN', 'Approval', 'Enable PFRDA ICS framework library for new clauses', 'POL-013', '/settings', 3, 'Medium')
+  add('ADMIN', 'Evidence request', 'Export tamper-evident audit log for IS audit', 'AUD-IS-2026-01', '/settings', 2, 'Medium')
+  add('ADMIN', 'Approval', 'Provision Compliance Analyst seat & role grant', 'EVD-44510', '/settings', 4, 'Low')
+  add('ADMIN', 'Reg-change review', 'Confirm CERT-In feed connector after advisory', 'RCM-2026-116', '/integrations', 3, 'Low')
+  add('ADMIN', 'Approval', 'Update data-retention policy configuration', 'POL-018', '/settings', 5, 'Low')
 
   return q
 }
@@ -1181,6 +1505,8 @@ export const WORLD = {
   dsars,
   activity,
   queue,
+  sources: SOURCES,
+  instruments: INSTRUMENTS,
 }
 
 export type World = typeof WORLD

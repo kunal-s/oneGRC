@@ -1,8 +1,10 @@
 import * as React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Download, Bot, User, FileText, FileCode, Image, ShieldCheck, ReceiptText, Layers } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column, type TableFilter } from '@/components/DataTable'
 import { FrameworkPills } from '@/components/FrameworkPill'
+import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
 import { WORLD } from '@/data'
 import { personName } from '@/data/people'
@@ -21,8 +23,15 @@ const TYPE_ICON: Record<Evidence['type'], React.ComponentType<{ className?: stri
 const TYPES: Evidence['type'][] = ['Screenshot', 'Log', 'Config export', 'Attestation', 'Filing ack']
 
 export function EvidenceVault() {
+  const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const openDrawer = useApp((s) => s.openDrawer)
+  const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
+  const evidenceWorkflow = useApp((s) => s.evidenceWorkflow)
+  const sessionEvidence = useApp((s) => s.sessionEvidence)
+  // Session-uploaded evidence appears alongside the seeded vault.
+  const allEvidence = React.useMemo(() => [...sessionEvidence, ...WORLD.evidence], [sessionEvidence])
+  // Seed evidence is historical (Verified); session evidence carries its workflow.
+  const statusOf = (e: Evidence): 'Submitted' | 'Verified' => evidenceWorkflow[e.id]?.status ?? 'Verified'
 
   const auto = WORLD.evidence.filter((e) => e.auto).length
   const autoPct = Math.round((auto / WORLD.evidence.length) * 100)
@@ -44,9 +53,9 @@ export function EvidenceVault() {
       render: (e) => {
         const Icon = TYPE_ICON[e.type]
         return (
-          <span className="inline-flex items-center gap-2">
+          <span className="flex min-w-0 items-center gap-2">
             <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate text-sm text-foreground">{e.title}</span>
+            <span className="min-w-0 truncate text-sm text-foreground">{e.title}</span>
           </span>
         )
       },
@@ -67,7 +76,7 @@ export function EvidenceVault() {
           </span>
         ),
     },
-    { key: 'source', header: 'Source', sortValue: (e) => e.source, render: (e) => <span className="text-xs text-muted-foreground">{e.source}</span> },
+    { key: 'source', header: 'Source', className: 'max-w-[160px]', sortValue: (e) => e.source, render: (e) => <span className="block truncate text-xs text-muted-foreground" title={e.source}>{e.source}</span> },
     {
       key: 'capturedAt',
       header: 'Captured',
@@ -76,13 +85,35 @@ export function EvidenceVault() {
     },
     {
       key: 'links',
-      header: 'Linked to',
+      header: 'Linked to (walk upstream)',
       render: (e) => (
         <span className="inline-flex items-center gap-1.5 text-2xs">
-          <span className="rounded bg-info-soft px-1.5 py-0.5 font-medium text-info">{e.linkedControls.length} ctrl</span>
-          {e.linkedObligations.length > 0 && <span className="rounded bg-medium-soft px-1.5 py-0.5 font-medium text-medium">{e.linkedObligations.length} obl</span>}
+          {e.linkedObligations.length > 0 && (
+            <button
+              onClick={() => navigate(`/obligations/${e.linkedObligations[0]}`)}
+              title={`Up to obligation ${e.linkedObligations[0]}`}
+              className="rounded bg-medium-soft px-1.5 py-0.5 font-medium text-medium hover:underline"
+            >
+              {e.linkedObligations.length} obl
+            </button>
+          )}
+          {e.linkedControls.length > 0 && (
+            <button
+              onClick={() => navigate(`/controls/${e.linkedControls[0]}`)}
+              title={`Up to control ${e.linkedControls[0]}`}
+              className="rounded bg-info-soft px-1.5 py-0.5 font-medium text-info hover:underline"
+            >
+              {e.linkedControls.length} ctrl
+            </button>
+          )}
         </span>
       ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (e) => statusOf(e),
+      render: (e) => <StatusChip status={statusOf(e)} />,
     },
     {
       key: 'frameworks',
@@ -93,6 +124,7 @@ export function EvidenceVault() {
   ]
 
   const filters: TableFilter<Evidence>[] = [
+    { key: 'status', label: 'Status', options: ['Submitted', 'Verified'], predicate: (e, v) => statusOf(e) === v },
     { key: 'type', label: 'Type', options: TYPES, predicate: (e, v) => e.type === v },
     { key: 'capture', label: 'Capture', options: ['CCM (auto)', 'Manual'], predicate: (e, v) => (v === 'CCM (auto)' ? e.auto : !e.auto) },
     { key: 'source', label: 'Source', options: sources, predicate: (e, v) => e.source === v },
@@ -113,7 +145,7 @@ export function EvidenceVault() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'evidence-upload', title: 'Attach evidence' })}>
+            <Button variant="outline" size="sm" onClick={() => { setEvidenceDraft(null); navigate('/evidence/new') }}>
               Attach
             </Button>
             <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Evidence index exported', description: 'evidence-vault-index.csv.', variant: 'success' })}>
@@ -135,12 +167,13 @@ export function EvidenceVault() {
       </div>
 
       <DataTable
-        data={WORLD.evidence}
+        data={allEvidence}
         columns={columns}
         searchKeys={['id', 'title', 'source']}
         searchPlaceholder="Search evidence id, title or source…"
         filters={filters}
         initialSort={{ key: 'capturedAt', dir: 'desc' }}
+        onRowClick={(e) => navigate(`/evidence/${e.id}`)}
       />
     </div>
   )

@@ -1,8 +1,10 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Download, FileText, GitBranch, ShieldCheck, ArrowUpRight, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Download, FileText, GitBranch, ShieldCheck, ArrowUpRight, CheckCircle2, AlertTriangle, ScrollText } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPills } from '@/components/FrameworkPill'
+import { SourceList } from '@/components/SourceRef'
+import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -132,6 +134,11 @@ export function PolicyDetail() {
               <ApprovalStep role="Approved by" person={policy.approvedBy} done={policy.status === 'Published'} />
             </div>
           </div>
+
+          {/* Copilot — only on policies grounded to a source instrument (the mapped samples) */}
+          {policy.sourceRefs && policy.sourceRefs.length > 0 && (
+            <CopilotInline entityId={policy.id} tabs={['ask']} />
+          )}
         </div>
 
         {/* mapped controls */}
@@ -161,6 +168,18 @@ export function PolicyDetail() {
               ))}
             </div>
           </div>
+          {policy.sourceRefs && policy.sourceRefs.length > 0 && (
+            <div className="card-surface p-4">
+              <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <ScrollText className="size-4 text-info" /> Source
+              </h3>
+              <SourceList ids={policy.sourceRefs} />
+              <p className="mt-2 text-2xs text-muted-foreground">
+                The standard or instrument this policy is built on — open to read the exact clause and excerpt.
+              </p>
+            </div>
+          )}
+
           <div className="card-surface p-3.5 text-2xs leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Policy → control → evidence.</span> This policy is enforced by
             real controls, each continuously or periodically tested with its own evidence trail — so "we have a policy"

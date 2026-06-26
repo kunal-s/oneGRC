@@ -5,10 +5,12 @@ import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { RegulatorChip } from '@/lib/regulators'
-import { getRegChange, getObligation, getControl } from '@/data'
+import { getObligation, getControl } from '@/data'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
 import { fmtIST, fmtRelative } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveRegChange } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 
 // who gets alerted, per featured change
@@ -20,10 +22,12 @@ const ALERT_TARGET: Record<string, string> = {
 export function RegChangeDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const pushToast = useApp((s) => s.pushToast)
-  const c = id ? getRegChange(id) : undefined
+  const acknowledgeRegChange = useApp((s) => s.acknowledgeRegChange)
+  const canAck = useCanAct({ kind: 'regchange.acknowledge' })
+  const c = useEffectiveRegChange(id ?? '')
 
   if (!c) return <ComingSoon title="Regulatory change not found" />
+  const acknowledged = c.status === 'Closed'
 
   const owner = PEOPLE_BY_ID[c.owner]
   const obligations = c.impactedObligations.map((o) => getObligation(o)).filter(Boolean)
@@ -50,8 +54,8 @@ export function RegChangeDetail() {
         actions={
           <div className="flex items-center gap-2">
             <StatusChip status={c.status} />
-            <Button size="sm" onClick={() => pushToast({ title: 'Impact assessment acknowledged', description: `${c.id} — owners notified, obligation & control updates confirmed.`, variant: 'success' })}>
-              Acknowledge impact
+            <Button size="sm" disabled={acknowledged || !canAck} title={canAck ? undefined : 'Acknowledging is restricted to the Compliance Manager / Analyst / Risk Manager.'} onClick={() => acknowledgeRegChange(c.id)}>
+              {acknowledged ? 'Acknowledged' : 'Acknowledge impact'}
             </Button>
           </div>
         }

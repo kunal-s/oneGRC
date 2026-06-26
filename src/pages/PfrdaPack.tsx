@@ -9,16 +9,12 @@ import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { WORLD, MARQUEE } from '@/data'
 import { personName } from '@/data/people'
-import { fmtDate, fmtRelative, daysFromNow } from '@/lib/time'
+import { fmtDate, fmtRelative, daysFromNow, NOW } from '@/lib/time'
 import { inCrore, inGroup } from '@/lib/format'
 import { useApp } from '@/store'
-
-const COMMITTEES = [
-  { name: 'Investment Committee', cadence: 'Quarterly + monthly review', chair: 'arvind', lastDays: -22, nextDays: 68 },
-  { name: 'Risk Management Committee', cadence: 'Quarterly', chair: 'meera', lastDays: -35, nextDays: 55 },
-  { name: 'Audit Committee', cadence: 'Quarterly', chair: 'sunita', lastDays: -14, nextDays: 76 },
-  { name: 'Nomination & Remuneration Committee', cadence: 'Half-yearly', chair: 'vikram', lastDays: -88, nextDays: 92 },
-]
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
+import { COMMITTEES } from '@/data/committees'
 
 const TEMPLATES = [
   'PFRDA Quarterly Compliance Return (Annexure)',
@@ -32,6 +28,13 @@ const TEMPLATES = [
 export function PfrdaPack() {
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
+  const addArtifact = useApp((s) => s.addArtifact)
+
+  // Generating any PFRDA template records a session artifact, then previews it.
+  const generatePack = (title: string, filename: string) => {
+    addArtifact({ kind: 'report', title, createdAt: NOW.toISOString(), payload: { module: 'PFRDA', filename } })
+    openDrawer({ kind: 'export-pdf', title, payload: { filename } })
+  }
 
   const pfrdaObls = WORLD.obligations.filter((o) => o.regulator === 'PFRDA')
   const returns = pfrdaObls.slice(0, 8)
@@ -53,9 +56,12 @@ export function PfrdaPack() {
           </>
         }
         actions={
-          <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'export-pdf', title: 'PFRDA board pack', payload: { filename: 'PFRDA-pack-Q1-FY27.pdf' } })}>
-            <Download className="size-4" /> Export PFRDA pack
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('PFRDA')} />
+            <Button variant="outline" size="sm" onClick={() => generatePack('PFRDA board pack', 'PFRDA-pack-Q1-FY27.pdf')}>
+              <Download className="size-4" /> Export PFRDA pack
+            </Button>
+          </div>
         }
       />
 
@@ -154,7 +160,7 @@ export function PfrdaPack() {
           {TEMPLATES.map((t) => (
             <button
               key={t}
-              onClick={() => openDrawer({ kind: 'export-pdf', title: t, payload: { filename: `${t.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf` } })}
+              onClick={() => generatePack(t, `${t.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.pdf`)}
               className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-muted"
             >
               <FileText className="size-3.5 shrink-0 text-info" />

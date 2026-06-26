@@ -6,10 +6,12 @@ import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { getIssue, getControl } from '@/data'
+import { getControl } from '@/data'
 import { PEOPLE_BY_ID } from '@/data/people'
 import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveIssue } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 import type { Issue } from '@/types'
 
@@ -25,7 +27,9 @@ export function IssueDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const issue = id ? getIssue(id) : undefined
+  const resolveIssue = useApp((s) => s.resolveIssue)
+  const canResolve = useCanAct({ kind: 'issue.resolve' })
+  const issue = useEffectiveIssue(id ?? '')
 
   if (!issue) return <ComingSoon title="Issue not found" />
 
@@ -54,7 +58,15 @@ export function IssueDetail() {
             <SeverityBadge severity={issue.severity} />
             <StatusChip status={issue.status} />
             {issue.status !== 'Resolved' && (
-              <Button size="sm" onClick={() => pushToast({ title: 'Issue resolved', description: `${issue.id} closed with remediation evidence.`, variant: 'success' })}>
+              <Button
+                size="sm"
+                disabled={!canResolve}
+                title={canResolve ? undefined : 'Resolving issues is done by the Control Owner, Auditor or Compliance Manager.'}
+                onClick={() => {
+                  resolveIssue(issue.id)
+                  pushToast({ title: 'Issue resolved', description: `${issue.id} closed with remediation evidence.`, variant: 'success' })
+                }}
+              >
                 <CheckCircle2 className="size-4" /> Resolve
               </Button>
             )}

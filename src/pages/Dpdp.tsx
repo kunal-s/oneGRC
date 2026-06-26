@@ -9,6 +9,9 @@ import { KpiTile } from '@/components/KpiTile'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { WORLD, MARQUEE } from '@/data'
+import { useEffectiveDsars } from '@/lib/effective'
+import { ReportMenu } from '@/components/kit/ReportMenu'
+import { reportsForModule } from '@/components/kit/reports'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
 import { inGroup, maskPran } from '@/lib/format'
 import { useApp } from '@/store'
@@ -28,7 +31,7 @@ export function Dpdp() {
   const pushToast = useApp((s) => s.pushToast)
 
   const assets = WORLD.dataAssets
-  const dsars = WORLD.dsars
+  const dsars = useEffectiveDsars()
   const openDsars = dsars.filter((d) => d.status !== 'Fulfilled')
   const totalRecords = assets.reduce((s, a) => s + a.records, 0)
   const consent = {
@@ -78,9 +81,12 @@ export function Dpdp() {
         title="DPDP / Data Governance"
         description="Subscriber PII governed end to end — data inventory, consent ledger and data-principal requests (DSARs) under the DPDP Act 2023 / Rules 2025. Breach signals feed the same incident workflow."
         actions={
-          <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Data map exported', description: 'dpdp-data-inventory.csv.', variant: 'success' })}>
-            <Download className="size-4" /> Export data map
-          </Button>
+          <div className="flex items-center gap-2">
+            <ReportMenu templates={reportsForModule('DSAR')} />
+            <Button variant="outline" size="sm" onClick={() => pushToast({ title: 'Data map exported', description: 'dpdp-data-inventory.csv.', variant: 'success' })}>
+              <Download className="size-4" /> Export data map
+            </Button>
+          </div>
         }
       />
 
@@ -137,11 +143,11 @@ export function Dpdp() {
           <div className="card-surface p-3.5">
             <div className="mb-2 flex items-center gap-1.5">
               <Plug className="size-4 text-info" />
-              <h3 className="text-sm font-semibold text-foreground">OneTrust — integrated spoke</h3>
+              <h3 className="text-sm font-semibold text-foreground">Consent &amp; Privacy platform — integrated spoke</h3>
               <span className="ml-auto inline-flex items-center gap-1 text-2xs text-ok"><span className="size-1.5 rounded-full bg-ok" /> live</span>
             </div>
             <p className="text-2xs leading-relaxed text-muted-foreground">
-              Consent and data-discovery managed in OneTrust and fed into OneGRC. Parent-bank (Sankalp Bank) discovery
+              Consent and data-discovery managed in the consent &amp; privacy platform and fed into OneGRC. Parent-bank (Sankalp Bank) discovery
               scans feed newly-found PII stores into this inventory automatically. Last sync {fmtRelative(new Date(NOW_MS - 37 * 60000).toISOString())}.
             </p>
           </div>

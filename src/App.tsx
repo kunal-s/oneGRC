@@ -6,7 +6,6 @@ import { RiskRegister } from '@/pages/RiskRegister'
 import { RiskDetail } from '@/pages/RiskDetail'
 import { Incidents } from '@/pages/Incidents'
 import { IncidentDetail } from '@/pages/IncidentDetail'
-import { RegulatorClocks } from '@/pages/RegulatorClocks'
 import { ControlLibrary } from '@/pages/ControlLibrary'
 import { ControlDetail } from '@/pages/ControlDetail'
 import { Ccm } from '@/pages/Ccm'
@@ -15,8 +14,12 @@ import { Policies } from '@/pages/Policies'
 import { PolicyDetail } from '@/pages/PolicyDetail'
 import { Obligations } from '@/pages/Obligations'
 import { ObligationDetail } from '@/pages/ObligationDetail'
+import { TaskDetail } from '@/pages/TaskDetail'
 import { RegChange } from '@/pages/RegChange'
 import { RegChangeDetail } from '@/pages/RegChangeDetail'
+import { Sources } from '@/pages/Sources'
+import { SourceInstrumentDetail } from '@/pages/SourceInstrumentDetail'
+import { SourceSectionDetail } from '@/pages/SourceSectionDetail'
 import { PfrdaPack } from '@/pages/PfrdaPack'
 import { Dpdp } from '@/pages/Dpdp'
 import { DsarDetail } from '@/pages/DsarDetail'
@@ -25,6 +28,7 @@ import { AuditDetail } from '@/pages/AuditDetail'
 import { Issues } from '@/pages/Issues'
 import { IssueDetail } from '@/pages/IssueDetail'
 import { EvidenceVault } from '@/pages/EvidenceVault'
+import { EvidenceDetail } from '@/pages/EvidenceDetail'
 import { Integrations } from '@/pages/Integrations'
 import { Settings } from '@/pages/Settings'
 import { ComingSoon } from '@/pages/ComingSoon'
@@ -45,11 +49,14 @@ export default function App() {
         <Route path="/policies/:id" element={<PolicyDetail />} />
         <Route path="/incidents" element={<Incidents />} />
         <Route path="/incidents/:id" element={<IncidentDetail />} />
-        <Route path="/clocks" element={<RegulatorClocks />} />
         <Route path="/obligations" element={<Obligations />} />
         <Route path="/obligations/:id" element={<ObligationDetail />} />
+        <Route path="/tasks/:id" element={<TaskDetail />} />
         <Route path="/reg-change" element={<RegChange />} />
         <Route path="/reg-change/:id" element={<RegChangeDetail />} />
+        <Route path="/sources" element={<Sources />} />
+        <Route path="/sources/section/:id" element={<SourceSectionDetail />} />
+        <Route path="/sources/:id" element={<SourceInstrumentDetail />} />
         <Route path="/pfrda" element={<PfrdaPack />} />
         <Route path="/dpdp" element={<Dpdp />} />
         <Route path="/dpdp/dsar/:id" element={<DsarDetail />} />
@@ -58,6 +65,7 @@ export default function App() {
         <Route path="/issues" element={<Issues />} />
         <Route path="/issues/:id" element={<IssueDetail />} />
         <Route path="/evidence" element={<EvidenceVault />} />
+        <Route path="/evidence/:id" element={<EvidenceDetail />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<ComingSoon title="Not found" />} />

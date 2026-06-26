@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle } from 'lucide-react'
+import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, CalendarClock, Paperclip } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPill } from '@/components/FrameworkPill'
@@ -9,12 +10,18 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
-import { getControl, getIssue, WORLD } from '@/data'
+import { SourceList, SourceChip } from '@/components/SourceRef'
+import { CopilotInline } from '@/components/copilot/CopilotInline'
+import { getIssue, getInstrument, WORLD } from '@/data'
+import { clausesForControl } from '@/lib/sources'
+import { controlLedger, filingTiming } from '@/lib/cycles'
 import { personName, PEOPLE_BY_ID } from '@/data/people'
-import { fmtDate, fmtIST, NOW_MS } from '@/lib/time'
+import { fmtDate } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveControl } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
-import type { Control } from '@/types'
+import type { SourceProvision } from '@/types'
 
 const RESULT_ICON = {
   Pass: <CheckCircle2 className="size-4 text-ok" />,
@@ -22,12 +29,29 @@ const RESULT_ICON = {
   Partial: <MinusCircle className="size-4 text-medium" />,
 }
 
+/** Group satisfied clauses by their act, preserving first-seen order. */
+function groupByAct(clauses: SourceProvision[]): { instrumentId: string; clauses: SourceProvision[] }[] {
+  const order: string[] = []
+  const map = new Map<string, SourceProvision[]>()
+  for (const c of clauses) {
+    if (!map.has(c.instrumentId)) {
+      map.set(c.instrumentId, [])
+      order.push(c.instrumentId)
+    }
+    map.get(c.instrumentId)!.push(c)
+  }
+  return order.map((instrumentId) => ({ instrumentId, clauses: map.get(instrumentId)! }))
+}
+
 export function ControlDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const pushToast = useApp((s) => s.pushToast)
   const openDrawer = useApp((s) => s.openDrawer)
-  const control = id ? getControl(id) : undefined
+  const retestControl = useApp((s) => s.retestControl)
+  const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
+  const clauseOverrides = useApp((s) => s.clauseOverrides)
+  const canRetest = useCanAct({ kind: 'control.retest' })
+  const control = useEffectiveControl(id ?? '')
   const [tab, setTab] = React.useState('overview')
 
   if (!control) return <ComingSoon title="Control not found" />
@@ -35,12 +59,20 @@ export function ControlDetail() {
   const evidence = WORLD.evidence.filter((e) => e.linkedControls.includes(control.id))
   const issues = control.linkedIssues.map((i) => getIssue(i)).filter(Boolean)
   const owner = PEOPLE_BY_ID[control.owner]
-  const testHistory = buildTestHistory(control)
+  // Sources pipeline — the clauses (across acts) this control satisfies.
+  const satisfied = clausesForControl(control.id, clauseOverrides)
+  const satisfiedByAct = groupByAct(satisfied)
+  // The obligations this control satisfies (control -> clause -> obligation), so a
+  // user can walk control -> obligation -> evidence (E-E4).
+  const satisfiedClauseIds = new Set(satisfied.map((c) => c.id))
+  const obligationsSatisfied = WORLD.obligations.filter((o) => o.sourceRefs?.some((r) => satisfiedClauseIds.has(r)))
+  // Period-by-period evidence ledger (E3.1).
+  const ledger = controlLedger(control, evidence)
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'mappings', label: 'Mappings', count: control.frameworks.length },
-    { key: 'history', label: 'Test history', count: testHistory.length },
+    { key: 'history', label: 'Evidence ledger', count: ledger.length },
     { key: 'evidence', label: 'Evidence', count: evidence.length },
     { key: 'issues', label: 'Issues', count: issues.length },
   ]
@@ -85,7 +117,9 @@ export function ControlDetail() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => pushToast({ title: 'Control re-test queued', description: `${control.id} re-test scheduled.`, variant: 'info' })}
+              disabled={!canRetest}
+              title={canRetest ? undefined : 'Recording a test is restricted to the Control Owner, Auditor or Executive.'}
+              onClick={() => retestControl(control.id)}
             >
               Re-test
             </Button>
@@ -119,13 +153,17 @@ export function ControlDetail() {
               <Attr label="Line of defence">{owner.lod}</Attr>
               <Attr label="Type">{control.type}</Attr>
               <Attr label="Automation">{control.automation === 'CCM' ? 'Continuous (CCM)' : 'Manual'}</Attr>
-              <Attr label="Frequency">{control.frequency}</Attr>
+              <Attr label="Cadence">{control.frequency}</Attr>
+              <Attr label="Next due">{control.nextDue ? fmtDate(control.nextDue) : '—'}</Attr>
               <Attr label="Last tested">{fmtDate(control.lastTested)}</Attr>
               <Attr label="Result">
                 <StatusChip status={control.result} />
               </Attr>
               <Attr label="Evidence items">{evidence.length}</Attr>
-              <Attr label="Frameworks">{control.frameworks.length}</Attr>
+            </div>
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">Control activity — what must be done</div>
+              <p className="mt-1 text-sm text-foreground">{control.description}</p>
             </div>
           </div>
           <div className="card-surface p-4">
@@ -148,7 +186,86 @@ export function ControlDetail() {
             ) : (
               <p className="text-xs text-muted-foreground">No risks currently mapped to this control.</p>
             )}
+            {control.sourceRefs && control.sourceRefs.length > 0 && (
+              <div className="mt-4 border-t border-border pt-3">
+                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <ScrollText className="size-4 text-info" /> Source
+                </h3>
+                <SourceList ids={control.sourceRefs} />
+                <p className="mt-2 text-2xs text-muted-foreground">
+                  The standards this control is tested against — each mapping carries its instrument.
+                </p>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Implementation & assurance card removed per request */}
+
+      {tab === 'overview' && satisfied.length > 0 && (
+        <div className="card-surface mt-4 p-4">
+          <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Layers className="size-4 text-info" /> Satisfies — clauses across acts
+          </h3>
+          <p className="mb-3 text-2xs text-muted-foreground">
+            {satisfied.length} clause{satisfied.length === 1 ? '' : 's'} from {satisfiedByAct.length} act{satisfiedByAct.length === 1 ? '' : 's'} are
+            saved to this control — one control, many clauses across acts.
+          </p>
+          <div className="space-y-3">
+            {satisfiedByAct.map(({ instrumentId, clauses }) => {
+              const inst = getInstrument(instrumentId)
+              return (
+                <div key={instrumentId}>
+                  <button onClick={() => inst && navigate(`/sources/${inst.id}`)} className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-info">
+                    <Scale className="size-3.5 text-info" /> {inst?.title ?? instrumentId}
+                    <span className="rounded bg-muted px-1 py-0 text-2xs font-medium text-muted-foreground">{inst?.authority}</span>
+                  </button>
+                  <div className="space-y-1">
+                    {clauses.map((c) => (
+                      <button key={c.id} onClick={() => navigate(`/sources/section/${c.id}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+                        <span className="font-mono text-2xs font-semibold text-info">{c.id}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-foreground">{c.nameOfCompliance ?? c.title}</span>
+                        {c.severity && <SeverityBadge severity={c.severity} dense />}
+                        <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === 'overview' && obligationsSatisfied.length > 0 && (
+        <div className="card-surface mt-4 p-4">
+          <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <CalendarClock className="size-4 text-info" /> Obligations this control satisfies
+          </h3>
+          <p className="mb-3 text-2xs text-muted-foreground">
+            The duties this control discharges — walk control &rarr; obligation &rarr; evidence to prove each period.
+          </p>
+          <div className="space-y-1">
+            {obligationsSatisfied.map((o) => {
+              const t = filingTiming(o)
+              return (
+                <button key={o.id} onClick={() => navigate(`/obligations/${o.id}`)} className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-left hover:border-info/40 hover:bg-info-soft/40">
+                  <span className="font-mono text-2xs font-semibold text-info">{o.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{o.title}</span>
+                  <StatusChip status={o.status} />
+                  {o.status === 'Filed' && <span className={cn('rounded px-1.5 py-0 text-2xs font-medium', t === 'late' ? 'bg-medium-soft text-medium' : 'bg-ok-soft text-ok')}>{t === 'late' ? 'late' : 'on time'}</span>}
+                  <ArrowUpRight className="size-3 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === 'overview' && (
+        <div className="mt-4">
+          <CopilotInline entityId={control.id} tabs={['ask']} />
         </div>
       )}
 
@@ -167,7 +284,10 @@ export function ControlDetail() {
                   <div className="font-mono text-sm font-semibold text-foreground">{m.ref}</div>
                   <div className="text-2xs text-muted-foreground">{m.framework} clause satisfied by {control.id}</div>
                 </div>
-                <CheckCircle2 className="ml-auto size-4 text-ok" />
+                <div className="ml-auto flex items-center gap-2">
+                  {m.sourceRef && <SourceChip id={m.sourceRef} />}
+                  <CheckCircle2 className="size-4 text-ok" />
+                </div>
               </div>
             ))}
           </div>
@@ -180,24 +300,42 @@ export function ControlDetail() {
 
       {tab === 'history' && (
         <div className="card-surface overflow-hidden">
+          <div className="border-b border-border px-4 py-2.5">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <CalendarClock className="size-4 text-info" /> Evidence ledger · period by period
+            </h3>
+            <p className="mt-0.5 text-2xs text-muted-foreground">For each cycle: what was due, the evidence filed, whether it was on time, and the result.</p>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2">Run date (IST)</th>
+                <th className="px-4 py-2">Period</th>
+                <th className="px-4 py-2">Due</th>
+                <th className="px-4 py-2">Evidence filed</th>
+                <th className="px-4 py-2">On time</th>
                 <th className="px-4 py-2">Result</th>
-                <th className="px-4 py-2">Method</th>
-                <th className="px-4 py-2">Tester</th>
-                <th className="px-4 py-2">Note</th>
               </tr>
             </thead>
             <tbody>
-              {testHistory.map((h, i) => (
+              {ledger.map((row, i) => (
                 <tr key={i} className="border-b border-border/70 last:border-0">
-                  <td className="px-4 py-2 text-xs text-foreground">{fmtIST(h.at)}</td>
-                  <td className="px-4 py-2"><StatusChip status={h.result} /></td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.method}</td>
-                  <td className="px-4 py-2 text-xs text-foreground">{h.tester}</td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">{h.note}</td>
+                  <td className="px-4 py-2 text-xs text-foreground">{row.period}{i === 0 && <span className="ml-1 text-2xs text-muted-foreground">· current</span>}</td>
+                  <td className="px-4 py-2 text-xs tnum text-muted-foreground">{fmtDate(row.dueDate)}</td>
+                  <td className="px-4 py-2">
+                    {row.evidenceId ? (
+                      <button onClick={() => navigate(`/evidence/${row.evidenceId}`)} className="inline-flex items-center gap-1 rounded border border-ok/30 bg-ok-soft/50 px-1.5 py-0.5 text-2xs text-ok hover:underline">
+                        <Paperclip className="size-3" /> {row.evidenceId} · {row.capturedAt ? fmtDate(row.capturedAt) : ''}
+                      </button>
+                    ) : (
+                      <span className="text-2xs text-muted-foreground">— no evidence</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className={cn('rounded px-1.5 py-0.5 text-2xs font-medium', row.timing === 'on-time' ? 'bg-ok-soft text-ok' : row.timing === 'late' ? 'bg-medium-soft text-medium' : 'bg-muted text-muted-foreground')}>
+                      {row.timing === 'on-time' ? 'On time' : row.timing === 'late' ? 'Late' : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2"><StatusChip status={row.result} /></td>
                 </tr>
               ))}
             </tbody>
@@ -213,7 +351,7 @@ export function ControlDetail() {
               <span className="text-2xs text-muted-foreground">
                 {evidence.filter((e) => e.auto).length} auto-captured · {evidence.filter((e) => !e.auto).length} manual
               </span>
-              <Button variant="outline" size="sm" onClick={() => openDrawer({ kind: 'evidence-upload', title: `Attach evidence — ${control.id}` })}>
+              <Button variant="outline" size="sm" onClick={() => { setEvidenceDraft({ controlId: control.id }); navigate('/evidence/new') }}>
                 Attach evidence
               </Button>
             </div>
@@ -284,40 +422,3 @@ function Attr({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-interface TestRun {
-  at: string
-  result: Control['result']
-  method: string
-  tester: string
-  note: string
-}
-
-function buildTestHistory(control: Control): TestRun[] {
-  const auto = control.automation === 'CCM'
-  const method = auto ? `Automated (${control.frequency})` : 'Manual test'
-  const tester = auto ? 'CCM (auto)' : personName(control.owner)
-  const runs: TestRun[] = []
-  const intervalDays = auto ? 7 : 30
-  // most recent run reflects current result
-  for (let i = 0; i < 6; i++) {
-    const at = new Date(NOW_MS - i * intervalDays * 86400000 - (auto ? 0 : 3) * 3600000).toISOString()
-    const result: Control['result'] = i === 0 ? control.result : i === 2 && control.result !== 'Pass' ? 'Partial' : 'Pass'
-    runs.push({
-      at,
-      result,
-      method,
-      tester,
-      note:
-        i === 0
-          ? control.result === 'Fail'
-            ? 'Exceptions detected in population — issue auto-spawned'
-            : control.result === 'Partial'
-              ? 'Minor exceptions — remediation tracked'
-              : 'No exceptions across population'
-          : result === 'Pass'
-            ? 'Passed — evidence auto-captured'
-            : 'Exceptions cleared on re-test',
-    })
-  }
-  return runs
-}
