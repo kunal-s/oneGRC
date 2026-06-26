@@ -118,16 +118,9 @@ interface AppState {
   commandOpen: boolean
   setCommandOpen: (v: boolean) => void
 
-  copilotOpen: boolean
-  setCopilotOpen: (v: boolean) => void
-
-  // ── Agentic runs (Phase 0.5) — Agents tab in the Copilot slide-over ──────────
+  // ── Agentic runs (Phase 0.5) — Agents tab in the embedded Copilot panel ──────
   // Runs are deterministic proposals; approving an action reuses an existing
   // mutation (approve-to-apply). Each run and approval is audit-trailed.
-  copilotTab: 'ask' | 'agents'
-  setCopilotTab: (t: 'ask' | 'agents') => void
-  agentScope?: string // a clause id to pre-scope the mapping run (contextual entry)
-  openAgents: (clauseId?: string) => void
   agentRuns: AgentRunResult[]
   recordAgentRun: (r: AgentRunResult) => void
   approveAgentAction: (run: AgentRunResult, action: ProposedAction) => void
@@ -276,14 +269,7 @@ export const useApp = create<AppState>((set, get) => ({
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
 
-  copilotOpen: false,
-  setCopilotOpen: (v) => set({ copilotOpen: v }),
-
   // ── Agentic runs (Phase 0.5) ────────────────────────────────────────────────
-  copilotTab: 'ask',
-  setCopilotTab: (t) => set({ copilotTab: t }),
-  agentScope: undefined,
-  openAgents: (clauseId) => set({ copilotOpen: true, copilotTab: 'agents', agentScope: clauseId }),
   agentRuns: [],
   recordAgentRun: (r) => {
     if (get().agentRuns.some((x) => x.runId === r.runId)) return

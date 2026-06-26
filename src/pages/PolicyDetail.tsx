@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPills } from '@/components/FrameworkPill'
 import { SourceList } from '@/components/SourceRef'
+import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
@@ -133,6 +134,11 @@ export function PolicyDetail() {
               <ApprovalStep role="Approved by" person={policy.approvedBy} done={policy.status === 'Published'} />
             </div>
           </div>
+
+          {/* Copilot — only on policies grounded to a source instrument (the mapped samples) */}
+          {policy.sourceRefs && policy.sourceRefs.length > 0 && (
+            <CopilotInline entityId={policy.id} tabs={['ask']} />
+          )}
         </div>
 
         {/* mapped controls */}

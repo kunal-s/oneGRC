@@ -96,9 +96,9 @@ export function ObligationDetail() {
         </span>
       </div>
 
-      <CycleHistory o={o} />
-
       <TasksTable tasks={tasks} navigate={navigate} />
+
+      <CycleHistory o={o} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {o.sourceRefs && o.sourceRefs.length > 0 && (

@@ -3,10 +3,10 @@
 // a scripted responder now — or a real model later — can answer grounded
 // questions without touching screens.
 import {
-  getRisk, getControl, getObligation, getIncident, getPolicy, getSource,
+  getRisk, getControl, getObligation, getIncident, getPolicy, getSource, getInstrument,
 } from '@/data'
 import { resolveEntity } from '@/lib/entity'
-import { refDisplayTitle } from '@/lib/sources'
+import { refDisplayTitle, provisionsForInstrument, awaitingDecision } from '@/lib/sources'
 import type { SourceProvision } from '@/types'
 
 export interface ContextLink {
@@ -100,6 +100,36 @@ export function buildRecordContext(entityId: string): RecordContext | null {
         ...r.linkedIssues.map((i) => link(i, 'Open issue')),
       ],
       sources: [],
+    }
+  }
+  if (entityId.startsWith('INST-')) {
+    const inst = getInstrument(entityId)
+    if (!inst) return null
+    const clauses = provisionsForInstrument(inst.id)
+    const saved = clauses.filter((c) => c.status === 'Saved')
+    const awaiting = clauses.filter((c) => c.status && awaitingDecision(c.status))
+    const controlIds = Array.from(new Set(saved.map((c) => c.linkedControlId).filter((x): x is string => Boolean(x))))
+    const links: ContextLink[] = [
+      ...clauses.map((c) => link(c.id, 'Clause')),
+      ...controlIds.map((cid) => link(cid, 'Satisfying control')),
+      ...(inst.supersedesId ? [link(inst.supersedesId, 'Prior version')] : []),
+      ...(inst.supersededById ? [link(inst.supersededById, 'Superseded by')] : []),
+    ]
+    return {
+      id: inst.id, type: 'Act', title: inst.title,
+      summary: inst.summary ?? `${inst.instrumentType} issued by ${inst.authority}; ${clauses.length} clause${clauses.length === 1 ? '' : 's'}.`,
+      fields: {
+        authority: inst.authority,
+        type: inst.instrumentType,
+        status: inst.status,
+        version: inst.version ?? '—',
+        clauses: clauses.length,
+        awaitingDecision: awaiting.length,
+        savedToControls: saved.length,
+      },
+      links,
+      // The act's own clauses are its cited sources; cap so a grounded answer stays readable.
+      sources: clauses.slice(0, 6).map((s) => ({ id: s.id, documentTitle: refDisplayTitle(s), citation: s.citation, snippet: s.sourceExtract })),
     }
   }
   if (entityId.startsWith('SRC-')) {

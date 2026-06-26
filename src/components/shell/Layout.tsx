@@ -5,7 +5,6 @@ import { NeedsMe } from '../kit/NeedsMe'
 import { DrawerHost } from './DrawerHost'
 import { Toasts } from '../Toasts'
 import { CommandSearch } from '../CommandSearch'
-import { CopilotPanel } from '../copilot/CopilotPanel'
 
 export function Layout() {
   return (
@@ -22,7 +21,6 @@ export function Layout() {
       </div>
       <Toasts />
       <CommandSearch />
-      <CopilotPanel />
       <DrawerHost />
     </div>
   )

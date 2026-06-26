@@ -47,6 +47,12 @@ const SCRIPTS: Record<string, Script[]> = {
     { keywords: ['control', 'risk', 'touch', 'evidence'], text: 'It links the controls that failed and mitigate it, the risks it realised (RISK-IT-0034/0037/0038), the remediation issue ISS-2026-0103, and a shared evidence trail — one object, every view.' },
   ],
   // ── Profession-tax chain ──────────────────────────────────────────────────
+  'INST-PT-MAH-1975': [
+    { keywords: ['require', 'what', 'about', 'cover', 'do', 'us'], text: 'The Maharashtra Profession Tax Act, 1975 makes SPF, as an employer, deduct profession tax from salaries, pay it to the State and file the periodic return — and it is liable whether or not it actually deducts. The operative clause is s.4 (deduct & pay), saved to CTRL-COMP-PT-01.', citedIds: ['SRC-PT-4', 'CTRL-COMP-PT-01'], sourceIds: ['SRC-PT-4'] },
+    { keywords: ['control', 'satisf', 'map', 'owner', 'who'], text: 'One control satisfies this act end-to-end: CTRL-COMP-PT-01 — the profession-tax deduction, remittance & return control owned by Farhan Ali — which in turn supports the monthly remittance duty OBL-LAB-JUN26-02.', citedIds: ['CTRL-COMP-PT-01', 'OBL-LAB-JUN26-02'] },
+    { keywords: ['penalt', 'consequence', 'late', 'miss', 'fine', 'non-compl'], text: 'Late deposit attracts simple interest of 1.25% per month (s.9) and a penalty of up to 10% of the tax due (s.10) — the tiers behind this act’s clause severities.', sourceIds: ['SRC-PT-4'] },
+    { keywords: ['decision', 'awaiting', 'pending', 'need', 'outstanding', 'clause'], text: 'The clause table above shows where each clause stands; the lead clause s.4 (deduct & pay) is already Saved to CTRL-COMP-PT-01. Open any clause for its extract, penalty tiers and decision.', citedIds: ['SRC-PT-4', 'CTRL-COMP-PT-01'] },
+  ],
   'SRC-PT-4': [
     { keywords: ['require', 'what', 'mean', 'do'], text: 'Section 4 makes SPF, as employer, deduct Maharashtra profession tax from salaries and pay it to the State — and it is liable whether or not it actually deducts. It is Saved to CTRL-COMP-PT-01.', citedIds: ['CTRL-COMP-PT-01'], sourceIds: ['SRC-PT-4'] },
     { keywords: ['control', 'satisf', 'map'], text: 'Saved to CTRL-COMP-PT-01 — the profession-tax deduction, remittance & return control owned by Farhan Ali.', citedIds: ['CTRL-COMP-PT-01'] },

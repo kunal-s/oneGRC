@@ -10,6 +10,7 @@ import { SeverityBadge } from '@/components/SeverityBadge'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/Avatar'
 import { SaveClauseChooser } from '@/components/SaveClauseChooser'
+import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { getInstrument, getControl, getSource } from '@/data'
 import { effectiveClause, statusTone } from '@/lib/sources'
 import { personName } from '@/data/people'
@@ -29,8 +30,6 @@ export function SourceSectionDetail() {
   const engageSpecialist = useApp((s) => s.engageSpecialist)
   const completeSpecialist = useApp((s) => s.completeSpecialist)
   const pushToast = useApp((s) => s.pushToast)
-  const setCopilotOpen = useApp((s) => s.setCopilotOpen)
-  const openAgents = useApp((s) => s.openAgents)
   const [saving, setSaving] = React.useState(false)
 
   if (!base) return <ComingSoon title="Clause not found" />
@@ -59,9 +58,6 @@ export function SourceSectionDetail() {
           <div className="flex items-center gap-2">
             {p.severity && <SeverityBadge severity={p.severity} />}
             {p.status && <StatusChip status={p.status} tone={statusTone(p.status)} />}
-            <Button variant="outline" size="sm" onClick={() => setCopilotOpen(true)} title="Ask the OneGRC Copilot to clarify this clause">
-              <Sparkles className="size-4 text-info" /> Ask Copilot
-            </Button>
           </div>
         }
       />
@@ -176,11 +172,6 @@ export function SourceSectionDetail() {
                         <UserSearch className="size-3.5" /> Engage specialist
                       </button>
                     )}
-                    {p.applicable !== false && (
-                      <button onClick={() => openAgents(p.id)} className="inline-flex items-center gap-1.5 rounded-md border border-info/40 bg-info-soft/40 px-2.5 py-1.5 text-xs font-medium text-info transition-colors hover:bg-info-soft">
-                        <Sparkles className="size-3.5" /> Propose mapping
-                      </button>
-                    )}
                   </div>
                   <p className="mt-1.5 text-2xs text-muted-foreground">Save maps this clause to a control (existing or new) and tracks it in the Control Library.</p>
                 </div>
@@ -189,6 +180,8 @@ export function SourceSectionDetail() {
               )}
             </div>
           )}
+
+          <CopilotInline entityId={p.id} tabs={['ask', 'agents']} agentRun="mapping" />
         </div>
 
         {/* Supporting */}

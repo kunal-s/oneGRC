@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { SourceList, SourceChip } from '@/components/SourceRef'
+import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { getIssue, getInstrument, WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
 import { controlLedger, filingTiming } from '@/lib/cycles'
@@ -259,6 +260,12 @@ export function ControlDetail() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {tab === 'overview' && (
+        <div className="mt-4">
+          <CopilotInline entityId={control.id} tabs={['ask']} />
         </div>
       )}
 
