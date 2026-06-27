@@ -4,7 +4,8 @@
 // session overrides, and the control "Satisfies" lookup (clauses across acts).
 import { WORLD, getSource, getInstrument } from '@/data'
 import { severityFromPenalty } from '@/data/sources'
-import type { ClauseStatus, SourceInstrument, SourceProvision } from '@/types'
+import type { ClauseStatus, Evidence, Obligation, SourceInstrument, SourceProvision } from '@/types'
+import { tasksForObligation, type Task, controlIdsForClause } from '@/lib/tasks'
 
 export { getSource, getInstrument, severityFromPenalty }
 
@@ -119,4 +120,47 @@ export function clausesForControl(controlId: string, overrides: ClauseOverrides)
   return WORLD.sources
     .map((p) => effectiveClause(p, overrides))
     .filter((p) => p.linkedControlId === controlId)
+}
+
+// ── Reverse lookups for the Source clause spine ────────────────────────────
+// A clause resolves to the controls that satisfy it, the obligations that
+// derive from it, the evidence that proves those, and the tasks that perform
+// them. Used by ProofChain on /sources/section/:id.
+
+/** Obligations whose sourceRefs cite this clause. */
+export function obligationsForClause(clauseId: string): Obligation[] {
+  return WORLD.obligations.filter((o) => o.sourceRefs?.includes(clauseId))
+}
+
+/** Evidence linked either to a control that satisfies the clause, or to an
+ *  obligation that derives from it. Deduplicated. */
+export function evidenceForClause(clauseId: string): Evidence[] {
+  const controlIds = new Set(controlIdsForClause(clauseId))
+  const oblIds = new Set(obligationsForClause(clauseId).map((o) => o.id))
+  const seen = new Set<string>()
+  const out: Evidence[] = []
+  for (const e of WORLD.evidence) {
+    const hit =
+      e.linkedControls.some((c) => controlIds.has(c)) ||
+      e.linkedObligations.some((o) => oblIds.has(o))
+    if (hit && !seen.has(e.id)) {
+      seen.add(e.id)
+      out.push(e)
+    }
+  }
+  return out
+}
+
+/** Tasks (across all obligations that cite the clause) whose clauseRefs include it.
+ *  Falls back to all tasks of obligations linked to the clause when the per-task
+ *  clauseRefs are empty (single-action obligations). */
+export function tasksForClause(clauseId: string): Task[] {
+  const out: Task[] = []
+  for (const o of obligationsForClause(clauseId)) {
+    const tasks = tasksForObligation(o)
+    for (const t of tasks) {
+      if (t.clauseRefs.length === 0 || t.clauseRefs.includes(clauseId)) out.push(t)
+    }
+  }
+  return out
 }
