@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, ListChecks, FileCheck, Paperclip, BellRing, AlertTriangle, CheckCircle2, Clock, ClipboardCheck } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
