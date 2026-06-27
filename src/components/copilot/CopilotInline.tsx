@@ -44,9 +44,11 @@ interface Props {
   collapsible?: boolean
   /** Start folded (only meaningful with `collapsible`). */
   defaultCollapsed?: boolean
+  /** Override the built-in suggestion chips with host-scoped questions. */
+  suggestedQuestions?: string[]
 }
 
-export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun = 'mapping', collapsible = false, defaultCollapsed = false }: Props) {
+export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun = 'mapping', collapsible = false, defaultCollapsed = false, suggestedQuestions }: Props) {
   const navigate = useNavigate()
   const ctx: RecordContext | null = React.useMemo(() => buildRecordContext(entityId), [entityId])
 
@@ -101,7 +103,7 @@ export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun =
     })
   }
 
-  const suggestions = ctx ? SUGGESTIONS[ctx.type] ?? [] : []
+  const suggestions = suggestedQuestions ?? (ctx ? SUGGESTIONS[ctx.type] ?? [] : [])
   const showTabs = tabs.length > 1
 
   const header = (
