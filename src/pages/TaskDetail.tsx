@@ -1,12 +1,12 @@
-import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, ListChecks, FileCheck, Paperclip, BellRing, AlertTriangle, CheckCircle2, Clock, ScrollText, ShieldCheck, FileText, ClipboardCheck } from 'lucide-react'
+import { ArrowLeft, ListChecks, FileCheck, Paperclip, BellRing, AlertTriangle, CheckCircle2, Clock, ClipboardCheck } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
+import { ProofChain } from '@/components/ProofChain'
+import { resolveProofChain } from '@/lib/proofChain'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { getControl } from '@/data'
 import { PEOPLE_BY_ID, personName, departmentOfPerson, departmentHeadOf } from '@/data/people'
 import { useApp } from '@/store'
 import { useEffectiveObligations } from '@/lib/effective'
@@ -46,8 +46,8 @@ export function TaskDetail() {
   const maker = PEOPLE_BY_ID[task.maker]
   const checker = PEOPLE_BY_ID[task.checker]
   const controlId = controlIdsForTask(task)[0]
-  const control = controlId ? getControl(controlId) : undefined
   const evidence = task.evidenceId ? getAnyEvidence(task.evidenceId) : undefined
+  const chain = resolveProofChain({ kind: 'task', task, obligation }, { taskWorkflow })
   const verified = task.status === 'Done'
   // The department head may step into the maker step on the owner's behalf (1.5).
   const head = departmentHeadOf(departmentOfPerson(task.maker))
@@ -106,23 +106,7 @@ export function TaskDetail() {
         }
       />
 
-      {/* Proof chain — step upstream (why / what proves it) and downstream (the proof). */}
-      <div className="card-surface mb-4 p-3.5">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Proof chain</h3>
-        </div>
-        <div className="flex flex-wrap items-stretch gap-1.5">
-          <ChainNode icon={<ScrollText className="size-3.5" />} kind="Source clause" id={task.clauseRefs[0]} extra={task.clauseRefs.length > 1 ? task.clauseRefs.length - 1 : 0} onClick={task.clauseRefs[0] ? () => navigate(`/sources/section/${task!.clauseRefs[0]}`) : undefined} />
-          <Arrow />
-          <ChainNode icon={<ShieldCheck className="size-3.5" />} kind="Control" id={control?.id} onClick={control ? () => navigate(`/controls/${control.id}`) : undefined} />
-          <Arrow />
-          <ChainNode icon={<FileText className="size-3.5" />} kind="Obligation" id={obligation.id} onClick={() => navigate(`/obligations/${obligation!.id}`)} />
-          <Arrow />
-          <ChainNode icon={<ClipboardCheck className="size-3.5" />} kind="This task" id={task.id} current />
-          <Arrow />
-          <ChainNode icon={<Paperclip className="size-3.5" />} kind="Evidence" id={evidence?.id} placeholder="none yet" tone="ok" onClick={evidence ? openEvidence : undefined} />
-        </div>
-      </div>
+      <ProofChain nodes={chain} className="mb-4" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Maker -> checker */}
@@ -211,55 +195,6 @@ export function TaskDetail() {
         </div>
       </div>
     </div>
-  )
-}
-
-function Arrow() {
-  return <span className="flex items-center text-muted-foreground"><ChevronRight className="size-4" /></span>
-}
-
-function ChainNode({
-  icon,
-  kind,
-  id,
-  onClick,
-  current,
-  placeholder,
-  tone,
-  extra = 0,
-}: {
-  icon: React.ReactNode
-  kind: string
-  id?: string
-  onClick?: () => void
-  current?: boolean
-  placeholder?: string
-  tone?: 'ok'
-  extra?: number
-}) {
-  const clickable = !!onClick && !!id
-  return (
-    <button
-      onClick={onClick}
-      disabled={!clickable}
-      className={cn(
-        'flex min-w-[130px] flex-col gap-0.5 rounded-md border px-2.5 py-1.5 text-left transition-colors',
-        current
-          ? 'border-primary bg-primary/10'
-          : id
-            ? cn('border-border bg-background', clickable && 'hover:border-info/40 hover:bg-info-soft/40')
-            : 'border-dashed border-border bg-muted/30',
-        !clickable && 'cursor-default',
-      )}
-    >
-      <span className="flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-        {icon} {kind}
-      </span>
-      <span className={cn('font-mono text-2xs font-semibold', id ? (tone === 'ok' ? 'text-ok' : 'text-info') : 'text-muted-foreground')}>
-        {id ?? placeholder ?? '—'}
-        {extra > 0 && <span className="ml-1 text-muted-foreground">+{extra}</span>}
-      </span>
-    </button>
   )
 }
 

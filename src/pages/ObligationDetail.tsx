@@ -5,6 +5,8 @@ import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { SourceList } from '@/components/SourceRef'
+import { ProofChain } from '@/components/ProofChain'
+import { resolveProofChain } from '@/lib/proofChain'
 import { RegulatorChip } from '@/lib/regulators'
 import { cn } from '@/lib/utils'
 import { getRegChange, getEvidence } from '@/data'
@@ -32,6 +34,7 @@ export function ObligationDetail() {
   const owner = PEOPLE_BY_ID[o.owner]
   const taskWorkflow = useApp((s) => s.taskWorkflow)
   const tasks = tasksForObligation(o, taskWorkflow)
+  const chain = resolveProofChain({ kind: 'obligation', obligation: o }, { taskWorkflow })
   // The "done but not documented" gap, computed from the tasks (Req 2).
   const gap = tasks.some((t) => t.status === 'Done' && !t.evidenceId)
   const regChange = o.linkedRegChange ? getRegChange(o.linkedRegChange) : undefined
@@ -77,6 +80,8 @@ export function ObligationDetail() {
           </div>
         }
       />
+
+      <ProofChain nodes={chain} className="mb-4" />
 
       {gap && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-medium/40 bg-medium-soft/40 px-3.5 py-2.5 text-sm text-foreground">

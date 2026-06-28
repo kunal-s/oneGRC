@@ -244,8 +244,8 @@ let evidenceSeq = 0
 let sourceActSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
-  role: 'EXEC',
-  personId: 'meera',
+  role: 'CCO',
+  personId: 'anjali',
   // Selecting a persona sets the active person AND keeps role synced (role still
   // drives the queue + gating; the person drives the department access boundary).
   setPersona: (personId) => set({ personId, role: PEOPLE_BY_ID[personId]?.role ?? 'EXEC' }),

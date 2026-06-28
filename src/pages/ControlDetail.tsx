@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
 import { SeverityBadge } from '@/components/SeverityBadge'
 import { SourceList, SourceChip } from '@/components/SourceRef'
+import { ProofChain } from '@/components/ProofChain'
+import { resolveProofChain } from '@/lib/proofChain'
 import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { getIssue, getInstrument, WORLD } from '@/data'
 import { clausesForControl } from '@/lib/sources'
@@ -50,6 +52,7 @@ export function ControlDetail() {
   const retestControl = useApp((s) => s.retestControl)
   const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)
   const clauseOverrides = useApp((s) => s.clauseOverrides)
+  const taskWorkflow = useApp((s) => s.taskWorkflow)
   const canRetest = useCanAct({ kind: 'control.retest' })
   const control = useEffectiveControl(id ?? '')
   const [tab, setTab] = React.useState('overview')
@@ -68,6 +71,7 @@ export function ControlDetail() {
   const obligationsSatisfied = WORLD.obligations.filter((o) => o.sourceRefs?.some((r) => satisfiedClauseIds.has(r)))
   // Period-by-period evidence ledger (E3.1).
   const ledger = controlLedger(control, evidence)
+  const chain = resolveProofChain({ kind: 'control', control, obligation: obligationsSatisfied[0] }, { taskWorkflow })
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -126,6 +130,8 @@ export function ControlDetail() {
           </div>
         }
       />
+
+      <ProofChain nodes={chain} className="mb-4" />
 
       {/* map-once banner */}
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-info/30 bg-info-soft/40 px-3.5 py-2.5">

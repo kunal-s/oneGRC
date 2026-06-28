@@ -5,6 +5,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
+import { ProofChain } from '@/components/ProofChain'
+import { resolveProofChain } from '@/lib/proofChain'
 import { cn } from '@/lib/utils'
 import { getControl, getObligation } from '@/data'
 import { personName } from '@/data/people'
@@ -126,6 +128,10 @@ function ExistingEvidence({ id }: { id: string }) {
   const canVerify = !verified && !!wf && selfId !== wf.submittedBy
   const controlId = ev.linkedControls[0]
   const taskId = Object.keys(taskWorkflow).find((k) => taskWorkflow[k].evidenceId === id)
+  const chain = resolveProofChain(
+    { kind: 'evidence', evidence: ev, control: controlId ? getControl(controlId) : undefined, obligation: ev.linkedObligations[0] ? getObligation(ev.linkedObligations[0]) : undefined },
+    { taskWorkflow },
+  )
 
   const onVerify = () => {
     verifyEvidence(id)
@@ -159,6 +165,8 @@ function ExistingEvidence({ id }: { id: string }) {
           </div>
         }
       />
+
+      <ProofChain nodes={chain} className="mb-4" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="space-y-4">
