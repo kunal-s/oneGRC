@@ -41,10 +41,10 @@ export function Policies() {
       header: 'Title',
       sortValue: (p) => p.title,
       className: 'max-w-[300px]',
-      render: (p) => (
+        render: (p) => (
         <span className="inline-flex items-center gap-2">
           <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm text-foreground">{p.title}</span>
+          <span className="truncate block text-sm text-foreground">{p.title}</span>
         </span>
       ),
     },
@@ -146,6 +146,7 @@ export function Policies() {
           filters={filters}
           initialSort={{ key: 'id', dir: 'asc' }}
           onRowClick={(p) => navigate(`/policies/${p.id}`)}
+            tableClassName="table-fixed"
         />
       )}
     </div>

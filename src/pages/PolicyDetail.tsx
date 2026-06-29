@@ -4,6 +4,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { FrameworkPills } from '@/components/FrameworkPill'
 import { SourceList } from '@/components/SourceRef'
+import { ProofChain } from '@/components/ProofChain'
+import { resolveProofChain } from '@/lib/proofChain'
 import { CopilotInline } from '@/components/copilot/CopilotInline'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -30,6 +32,7 @@ export function PolicyDetail() {
   ) as Framework[]
   const versions = buildVersions(policy)
   const reviewOverdue = new Date(policy.nextReview).getTime() < NOW_MS
+  const chain = resolveProofChain({ kind: 'policy', policyId: policy.id })
 
   return (
     <div>
@@ -64,6 +67,8 @@ export function PolicyDetail() {
           </div>
         }
       />
+
+      <ProofChain nodes={chain} className="mb-4" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="space-y-4">

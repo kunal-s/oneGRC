@@ -14,7 +14,7 @@
 // identically everywhere (no per-screen drift). Every populated node is a link;
 // they all share the one link colour (no node is special-cased).
 import type { Obligation, Control, Evidence, Policy } from '@/types'
-import { WORLD, getControl, getObligation } from '@/data'
+import { WORLD, getControl, getObligation, getPolicy } from '@/data'
 import { controlIdsForClause, controlIdsForTask, tasksForObligation, type Task, type TaskWorkflow } from '@/lib/tasks'
 import { obligationsForClause, evidenceForClause, tasksForClause } from '@/lib/sources'
 
@@ -139,6 +139,7 @@ interface ChainContext {
   evidenceId?: string
   clauseId?: string // overrides the SRC clause (e.g. a task's own clause)
   clauseExtra?: number
+  polId?: string // the policy occupying slot 0 when current === 'POL'
   // Fan-out id lists — when one clause maps to many controls / obligations /
   // tasks / evidence, the first is the jump-link and the rest fill the popover.
   controlIds?: string[]
@@ -166,12 +167,15 @@ function buildChain(ctx: ChainContext): ProofNode[] {
   const clauseId = ctx.clauseId ?? o?.sourceRefs?.[0] ?? control?.sourceRefs?.[0] ?? control?.mappedFrameworkRefs.find((m) => m.sourceRef)?.sourceRef
   const clauseExtra = ctx.clauseExtra ?? (o?.sourceRefs ? Math.max(0, o.sourceRefs.length - 1) : 0)
 
-  // When the clause itself is the entry (SRC page), it occupies slot 0 regardless
-  // of origin — the conditional POL slot only applies upstream of a control.
+  // When the clause or policy is itself the entry (Source / Policy page), it
+  // occupies slot 0 — the conditional SRC|POL slot only applies upstream of a
+  // control elsewhere.
   const provenance: ProofNode =
-    ctx.current === 'SRC'
-      ? { kind: 'SRC', label: KIND_LABEL.SRC, id: clauseId, route: clauseId ? `/sources/section/${clauseId}` : undefined, extra: clauseExtra }
-      : provenanceNode(o, control, clauseId, clauseExtra)
+    ctx.current === 'POL'
+      ? { kind: 'POL', label: KIND_LABEL.POL, id: ctx.polId, route: ctx.polId ? `/policies/${ctx.polId}` : undefined }
+      : ctx.current === 'SRC'
+        ? { kind: 'SRC', label: KIND_LABEL.SRC, id: clauseId, route: clauseId ? `/sources/section/${clauseId}` : undefined, extra: clauseExtra }
+        : provenanceNode(o, control, clauseId, clauseExtra)
 
   const nodes: ProofNode[] = [
     provenance,
@@ -193,12 +197,42 @@ export type ProofAnchor =
   | { kind: 'task'; task: Task; obligation: Obligation }
   | { kind: 'evidence'; evidence: Evidence; control?: Control; obligation?: Obligation }
   | { kind: 'source'; clauseId: string; linkedControlId?: string }
+  | { kind: 'policy'; policyId: string }
 
 /** Resolve the canonical proof chain for a screen's anchor entity. */
 export function resolveProofChain(anchor: ProofAnchor, opts: ProofChainOpts = {}): ProofNode[] {
   switch (anchor.kind) {
     case 'obligation':
       return buildChain({ obligation: anchor.obligation, current: 'OBL', opts })
+    case 'policy': {
+      // A policy is enforced through its mapped controls; from those controls the
+      // chain fans out to the obligations they satisfy and the tasks/evidence that
+      // discharge them. POL leads in slot 0; each downstream node carries "+N".
+      const policy = getPolicy(anchor.policyId)
+      const controlIds = policy?.mappedControls ?? []
+      const clauseSet = new Set<string>()
+      for (const cid of controlIds) {
+        const c = getControl(cid)
+        if (c) for (const cl of clausesForControl(c)) clauseSet.add(cl)
+      }
+      const oblIds = new Set<string>()
+      const taskIds = new Set<string>()
+      const evIds = new Set<string>()
+      for (const cl of clauseSet) {
+        obligationsForClause(cl).forEach((o) => oblIds.add(o.id))
+        tasksForClause(cl).forEach((t) => taskIds.add(t.id))
+        evidenceForClause(cl).forEach((e) => evIds.add(e.id))
+      }
+      return buildChain({
+        polId: anchor.policyId,
+        controlIds,
+        obligationIds: [...oblIds],
+        taskIds: [...taskIds],
+        evidenceIds: [...evIds],
+        current: 'POL',
+        opts,
+      })
+    }
     case 'source': {
       // One clause fans out to many controls, obligations, tasks and evidence;
       // the first of each is the jump-link, the rest fill the "+N" popover.

@@ -67,6 +67,37 @@ const SCRIPTS: Record<string, Script[]> = {
     { keywords: ['evidence', 'prove', 'proof', 'audit'], text: 'Proven by the monthly PT challan acknowledgement (EVD-44601), the return acknowledgement (EVD-44602) and the payroll deduction register (EVD-44603) — a complete, audit-ready trail.' },
     { keywords: ['due', 'when', 'status', 'filed'], text: 'Monthly; currently Filed for the period and approved under maker-checker (maker Farhan Ali, checker Meera Krishnan).' },
   ],
+  // ── Companies Act / ROC filings ───────────────────────────────────────────
+  'SRC-CA-92-5': [
+    { keywords: ['require', 'what', 'mean', 'do'], text: 'Section 92(5) requires the company to file the annual return (MGT-7) within the prescribed period; officers in default may be penalised. It is satisfied in OneGRC by CTRL-COMP-CA-02 which owns the MGT-7 preparation and filing process.', citedIds: ['CTRL-COMP-CA-02'], sourceIds: ['SRC-CA-92-5'] },
+    { keywords: ['penalt', 'fine', 'consequence', 'miss'], text: 'Failure to file attracts a company-level penalty and a per-day additional fee under the ROC Fees Rules; the platform captures filing acknowledgements as evidence (EVD-44610).', sourceIds: ['SRC-CA-92-5', 'SRC-CA-403'] },
+  ],
+  'SRC-CA-137-3': [
+    { keywords: ['require', 'what', 'mean'], text: 'Section 137(3) requires timely filing of financial statements (AOC-4); CTRL-COMP-CA-03 is the control that prepares and files AOC-4 and captures the auditors’ sign-off.', citedIds: ['CTRL-COMP-CA-03'], sourceIds: ['SRC-CA-137-3'] },
+    { keywords: ['penalt', 'fine'], text: 'Late filing attracts per-day penalties and additional fees under the Fees Rules; preserve the filing acknowledgements for audit (EVD-44611).', sourceIds: ['SRC-CA-137-3', 'SRC-CA-403'] },
+  ],
+  'CTRL-COMP-CA-02': [
+    { keywords: ['derive', 'source', 'why', 'satisf'], text: 'This preventive control prepares, reviews and files the MGT-7 annual return; it derives from Companies Act Section 92(5) and the Fees Rules (SRC-CA-92-5, SRC-CA-403).', sourceIds: ['SRC-CA-92-5', 'SRC-CA-403'] },
+    { keywords: ['evidence', 'prove', 'file', 'ack'], text: 'Proven by the MGT-7 filing acknowledgement (EVD-44610) and board-signed minutes approving the annual return (EVD-44612).', citedIds: ['EVD-44610', 'EVD-44612'] },
+  ],
+  'SRC-CA-164-2': [
+    { keywords: ['require', 'what', 'mean', 'do'], text: 'Section 164(2) is a consequence provision: a continuous three-year filing default would disqualify directors. OneGRC tracks the risk through CTRL-COMP-CA-04 and a quarterly ROC filing health review obligation, keeping the risk visible even while SPF is current on filings.', citedIds: ['CTRL-COMP-CA-04'], sourceIds: ['SRC-CA-164-2'] },
+    { keywords: ['penalt', 'fine', 'disqualif', 'consequence'], text: 'The clause is about director disqualification for continuous default, not a regular filing. The platform models it as a monitoring risk rather than a separate filing duty.', sourceIds: ['SRC-CA-164-2'] },
+  ],
+  'CTRL-COMP-CA-04': [
+    { keywords: ['derive', 'source', 'why', 'satisf'], text: 'It monitors ROC filing health and the director-disqualification trigger in Section 164(2); it is mapped to SRC-CA-164-2, SRC-CA-92-5 and SRC-CA-137-3 so the team sees the end-to-end filing risk.', sourceIds: ['SRC-CA-164-2', 'SRC-CA-92-5', 'SRC-CA-137-3'] },
+    { keywords: ['evidence', 'prove', 'file', 'ack'], text: 'Proven by the ROC filing health attestation (EVD-44613).', citedIds: ['EVD-44613'] },
+  ],
+  'OBL-CA-FY26-05': [
+    { keywords: ['source', 'derive', 'why', 'come from'], text: 'This obligation is a quarterly ROC filing health review derived from Section 164(2) and the Companies Act filing duties. It keeps the director-disqualification risk visible even though the trigger has not occurred.', sourceIds: ['SRC-CA-164-2', 'SRC-CA-92-5', 'SRC-CA-137-3'] },
+    { keywords: ['evidence', 'prove', 'proof'], text: 'Proven by the ROC filing health attestation (EVD-44613).', citedIds: ['EVD-44613'] },
+    { keywords: ['monitor', 'risk', 'health', 'due'], text: 'Quarterly monitoring; this obligation surfaces the health check, not a one-time ROC filing itself.', sourceIds: ['SRC-CA-164-2'] },
+  ],
+  'OBL-CA-FY26-03': [
+    { keywords: ['source', 'derive', 'why', 'come from'], text: 'This obligation is the annual MGT-7 ROC filing derived from Section 92(5) of the Companies Act; maker-checker is assigned to the Company Secretary and Finance.', sourceIds: ['SRC-CA-92-5'] },
+    { keywords: ['evidence', 'prove', 'proof'], text: 'Proven by the MGT-7 filing acknowledgement (EVD-44610) and supporting board minutes (EVD-44612).', citedIds: ['EVD-44610', 'EVD-44612'] },
+    { keywords: ['when', 'due', 'next'], text: 'Annual; check the obligation card for the exact due date and the next filing window in the obligations list.' },
+  ],
 }
 
 /** Return a crafted answer for a known demo question, or null to fall back. */

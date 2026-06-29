@@ -19,6 +19,20 @@ export const PEOPLE: Person[] = [
   { id: 'sanjay', name: 'Sanjay Verma', title: 'Investment Risk', role: 'RISK', initials: 'SV', lod: '1LoD', email: 'sanjay.verma@sankalppf.in', department: 'Risk' },
   { id: 'lakshmi', name: 'Lakshmi Rao', title: 'Internal Auditor', role: 'AUDITOR', initials: 'LR', lod: '3LoD', email: 'lakshmi.rao@sankalppf.in', department: 'Internal Audit' },
   { id: 'imran', name: 'Imran Sheikh', title: 'Platform Administrator', role: 'ADMIN', initials: 'IS', lod: '2LoD', email: 'imran.sheikh@sankalppf.in', department: 'Risk' },
+  // ── Sector-allocated research analysts (8) ────────────────────────────────
+  // The first line of defence behind the board-approved Investment Research &
+  // Review Policy: each owns one sector and must evidence a research review per
+  // cycle (twice-weekly for active holdings, annual for the PFRDA top-250
+  // universe), tabled at the Investment Sub-Committee (IISC). They sit under the
+  // Head of Investment Compliance (arvind); escalation resolves to him.
+  { id: 'aditya', name: 'Aditya Kulkarni', title: 'Research Analyst — Banking & Financials', role: 'ANALYST', initials: 'AK', lod: '1LoD', email: 'aditya.kulkarni@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'sneha', name: 'Sneha Reddy', title: 'Research Analyst — IT & Technology', role: 'ANALYST', initials: 'SR', lod: '1LoD', email: 'sneha.reddy@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'vivek', name: 'Vivek Menon', title: 'Research Analyst — Energy & Utilities', role: 'ANALYST', initials: 'VM', lod: '1LoD', email: 'vivek.menon@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'pooja', name: 'Pooja Bhatt', title: 'Research Analyst — FMCG & Consumer', role: 'ANALYST', initials: 'PB', lod: '1LoD', email: 'pooja.bhatt@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'rahul', name: 'Rahul Saxena', title: 'Research Analyst — Pharma & Healthcare', role: 'ANALYST', initials: 'RS', lod: '1LoD', email: 'rahul.saxena@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'kavya', name: 'Kavya Iyer', title: 'Research Analyst — Auto & Industrials', role: 'ANALYST', initials: 'KI', lod: '1LoD', email: 'kavya.iyer@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'manish', name: 'Manish Agarwal', title: 'Research Analyst — Metals & Materials', role: 'ANALYST', initials: 'MA', lod: '1LoD', email: 'manish.agarwal@sankalppf.in', department: 'Investment Compliance' },
+  { id: 'divya', name: 'Divya Pillai', title: 'Research Analyst — Infrastructure & Realty', role: 'ANALYST', initials: 'DP', lod: '1LoD', email: 'divya.pillai@sankalppf.in', department: 'Investment Compliance' },
 ]
 
 export const PEOPLE_BY_ID: Record<string, Person> = Object.fromEntries(

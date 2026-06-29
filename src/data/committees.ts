@@ -13,13 +13,21 @@ export interface Committee {
   chair: string
   lastDays: number
   nextDays: number
+  quorum?: string // the constitutional quorum for the meeting
+  members?: string[] // person ids on the committee (chair first)
 }
 
+// The five board committees, each with a cadence, a quorum, a membership and a
+// next meeting. Minutes double as evidence on the obligations they cover — the
+// IISC minutes anchor the investment-research review; the Audit Committee minutes
+// evidence the related-party approvals. Agenda-from-registers and a resolutions
+// register are the next governance build on top of this.
 export const COMMITTEES: Committee[] = [
-  { name: 'Investment Committee', short: 'Investment', cadence: 'Quarterly + monthly review', chair: 'arvind', lastDays: -22, nextDays: 68 },
-  { name: 'Risk Management Committee', short: 'Risk', cadence: 'Quarterly', chair: 'meera', lastDays: -35, nextDays: 55 },
-  { name: 'Audit Committee', short: 'Audit', cadence: 'Quarterly', chair: 'sunita', lastDays: -14, nextDays: 76 },
-  { name: 'Nomination & Remuneration Committee', short: 'NRC', cadence: 'Half-yearly', chair: 'vikram', lastDays: -88, nextDays: 92 },
+  { name: 'Investment Sub-Committee (IISC)', short: 'IISC', cadence: 'Twice a week + monthly review', chair: 'arvind', lastDays: -3, nextDays: 4, quorum: '3 (incl. chair)', members: ['arvind', 'sanjay', 'meera', 'aditya', 'sneha'] },
+  { name: 'Risk Management Committee', short: 'Risk', cadence: 'Quarterly', chair: 'meera', lastDays: -35, nextDays: 55, quorum: '3 (majority independent)', members: ['meera', 'rajesh', 'sunita', 'arvind'] },
+  { name: 'Audit Committee', short: 'Audit', cadence: 'Quarterly', chair: 'sunita', lastDays: -14, nextDays: 76, quorum: '3 (majority independent)', members: ['sunita', 'lakshmi', 'vikram', 'meera'] },
+  { name: 'Nomination & Remuneration Committee', short: 'NRC', cadence: 'Half-yearly', chair: 'vikram', lastDays: -88, nextDays: 92, quorum: '2 (majority independent)', members: ['vikram', 'meera', 'sunita'] },
+  { name: 'Compliance Committee', short: 'Compliance', cadence: 'Quarterly', chair: 'anjali', lastDays: -28, nextDays: 62, quorum: '3 (incl. chair)', members: ['anjali', 'priya', 'vikram', 'arvind'] },
 ]
 
 /** Resolve a committee's relative-day offsets to ISO last/next meeting dates. */

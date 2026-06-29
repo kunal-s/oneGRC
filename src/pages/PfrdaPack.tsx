@@ -93,15 +93,22 @@ export function PfrdaPack() {
         </Section>
 
         {/* committee cadence */}
-        <Section title="Committee cadence" icon={<Users className="size-4 text-info" />} sub="Investment · Risk · Audit · NRC">
+        <Section title="Committee cadence" icon={<Users className="size-4 text-info" />} sub="IISC · Risk · Audit · NRC · Compliance">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {COMMITTEES.map((c) => (
               <div key={c.name} className="rounded-md border border-border bg-background p-2.5">
                 <div className="text-xs font-medium text-foreground">{c.name}</div>
                 <div className="mt-0.5 text-2xs text-muted-foreground">{c.cadence}</div>
+                {(c.quorum || c.members) && (
+                  <div className="mt-0.5 text-2xs text-muted-foreground">
+                    {c.members ? `${c.members.length} members` : null}
+                    {c.members && c.quorum ? ' · ' : null}
+                    {c.quorum ? `quorum ${c.quorum}` : null}
+                  </div>
+                )}
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <Avatar id={c.chair} size={18} />
-                  <span className="text-2xs text-foreground">{personName(c.chair)}</span>
+                  <span className="text-2xs text-foreground">Chair {personName(c.chair)}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-2xs text-muted-foreground">
                   <span>Last {fmtDate(daysFromNow(c.lastDays))}</span>
