@@ -13,7 +13,7 @@ import type { Obligation } from '@/types'
  * Home and My Queue calendar embeds (1.x: the calendar follows the user).
  */
 export function useMyObligations(): Obligation[] {
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const all = useEffectiveObligations()
   return React.useMemo(
     () => all.filter((o) => o.owner === selfId || o.makerChecker.checker === selfId),

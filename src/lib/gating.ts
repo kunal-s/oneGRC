@@ -69,6 +69,6 @@ export function canAct(role: RoleKey, selfId: string, action: GrcAction): boolea
 /** Hook form: gate UI affordances against the active persona. */
 export function useCanAct(action: GrcAction): boolean {
   const role = useApp((s) => s.role)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   return canAct(role, selfId, action)
 }

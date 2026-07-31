@@ -14,7 +14,7 @@ import type { SourceProvision } from '@/types'
 export function SaveClauseChooser({ clause, onClose }: { clause: SourceProvision; onClose: () => void }) {
   const navigate = useNavigate()
   const sessionControls = useApp((s) => s.sessionControls)
-  const currentPerson = useApp((s) => s.currentPersonId)()
+  const currentPerson = useApp((s) => s.personId)
   const saveClauseToControl = useApp((s) => s.saveClauseToControl)
   const createControlForClause = useApp((s) => s.createControlForClause)
   const pushToast = useApp((s) => s.pushToast)

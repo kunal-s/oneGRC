@@ -25,7 +25,7 @@ import type { QueueTask, RoleKey } from '@/types'
 
 function usePersona() {
   const role = useApp((s) => s.role)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const label = ROLES.find((r) => r.key === role)?.label ?? 'OneGRC'
   const person = PEOPLE_BY_ID[selfId]
   const first = person?.name.split(' ')[0] ?? ''

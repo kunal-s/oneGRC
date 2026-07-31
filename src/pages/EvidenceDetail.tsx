@@ -57,7 +57,7 @@ function AttachEvidence() {
   const attachTaskEvidence = useApp((s) => s.attachTaskEvidence)
   const addManualEvidence = useApp((s) => s.addManualEvidence)
   const pushToast = useApp((s) => s.pushToast)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
 
   const controlId = draft?.controlId
   const control = controlId ? getControl(controlId) : undefined
@@ -117,7 +117,7 @@ function ExistingEvidence({ id }: { id: string }) {
   const verifyEvidence = useApp((s) => s.verifyEvidence)
   const taskWorkflow = useApp((s) => s.taskWorkflow)
   const pushToast = useApp((s) => s.pushToast)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
 
   const ev = getAnyEvidence(id)
   if (!ev) return <ComingSoon title="Evidence not found" />

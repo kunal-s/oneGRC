@@ -53,7 +53,7 @@ function ExecutiveDashboard() {
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
   const addArtifact = useApp((s) => s.addArtifact)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const M = useEffectiveMetrics()
   const nearest = nearestTrack()
   const first = PEOPLE_BY_ID[selfId]?.name.split(' ')[0] ?? 'Meera'

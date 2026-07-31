@@ -41,7 +41,7 @@ export interface Scope {
 /** The active user's access scope, derived from the role switcher. */
 export function useScope(): Scope {
   const role = useApp((s) => s.role)
-  const personId = useApp((s) => s.currentPersonId)()
+  const personId = useApp((s) => s.personId)
   const department = departmentOfPerson(personId)
   const seesAll = role === 'ADMIN' || department === COMPLIANCE_DEPT
   return { personId, department, seesAll, label: seesAll ? 'All departments' : (department ?? 'Unassigned') }

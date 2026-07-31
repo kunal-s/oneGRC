@@ -21,7 +21,7 @@ export function TaskDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const scope = useScope()
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const taskWorkflow = useApp((s) => s.taskWorkflow)
   const getAnyEvidence = useApp((s) => s.getAnyEvidence)
   const setEvidenceDraft = useApp((s) => s.setEvidenceDraft)

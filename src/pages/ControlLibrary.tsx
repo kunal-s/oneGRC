@@ -27,7 +27,7 @@ type ViewId = 'all' | 'failing' | 'partial' | 'ccm' | 'mine' | 'multi'
 export function ControlLibrary() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const clauseOverrides = useApp((s) => s.clauseOverrides)
   const scope = useScope()
   const [dept, setDept] = React.useState(() => initialDepartment(scope))

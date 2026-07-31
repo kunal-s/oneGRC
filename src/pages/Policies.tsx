@@ -41,10 +41,10 @@ export function Policies() {
       header: 'Title',
       sortValue: (p) => p.title,
       className: 'max-w-[300px]',
-        render: (p) => (
-        <span className="inline-flex items-center gap-2">
+      render: (p) => (
+        <span className="flex items-center gap-2">
           <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate block text-sm text-foreground">{p.title}</span>
+          <span className="min-w-0 truncate text-sm text-foreground">{p.title}</span>
         </span>
       ),
     },

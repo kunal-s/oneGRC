@@ -46,7 +46,7 @@ const STATUS_TABS: { key: StatusKey; label: string }[] = [
 export function Obligations() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const scope = useScope()
   const raw = useEffectiveObligations()
   // Department access boundary (1.1): a user sees only their department's duties;

@@ -57,7 +57,7 @@ function makerCheckerLabel(kind: QueueTask['kind']): string {
 export function MyQueue() {
   const navigate = useNavigate()
   const role = useApp((s) => s.role)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const pushToast = useApp((s) => s.pushToast)
   const [active, setActive] = React.useState<'All' | QueueTask['kind']>('All')
 
