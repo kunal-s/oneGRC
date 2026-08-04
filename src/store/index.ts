@@ -346,9 +346,27 @@ export const useApp = create<AppState>((set, get) => ({
     set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: { ...prev, specialistNote: note } } }))
   },
   setClauseApplicability: (provisionId, applicable, basis) => {
+    // A first-class compliance decision, recorded like any other: the deciding
+    // officer, the moment, and the reason are written onto the clause and appended
+    // to the audit log, so "why is this not tracked?" is answerable at inspection.
+    const reviewer = get().currentPersonId()
     const prev = get().clauseOverrides[provisionId] ?? {}
-    const merged: ClauseOverride = { ...prev, applicable, applicabilityBasis: basis, status: applicable ? prev.status : 'Not applicable' }
+    const merged: ClauseOverride = {
+      ...prev,
+      applicable,
+      applicabilityBasis: basis,
+      status: applicable ? prev.status : 'Not applicable',
+      reviewer,
+      reviewedAt: NOW.toISOString(),
+      rationale: basis ?? prev.rationale,
+    }
     set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+    get().recordAction({
+      action: applicable ? `Clause marked applicable · ${provisionId}` : `Clause marked not applicable · ${provisionId}`,
+      entityId: provisionId,
+      route: `/sources/section/${provisionId}`,
+      detail: basis ?? 'No reason recorded',
+    })
   },
 
   // ── AI-assisted Source Act creation (E0.6 / 1.6) ────────────────────────────

@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/shell/Layout'
+import { TourProvider } from '@/components/tour/TourProvider'
 import { Home } from '@/pages/Home'
 import { MyQueue } from '@/pages/MyQueue'
 import { RiskRegister } from '@/pages/RiskRegister'
@@ -35,7 +36,8 @@ import { ComingSoon } from '@/pages/ComingSoon'
 
 export default function App() {
   return (
-    <Routes>
+    <TourProvider>
+      <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/queue" element={<MyQueue />} />
@@ -70,6 +72,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<ComingSoon title="Not found" />} />
       </Route>
-    </Routes>
+      </Routes>
+    </TourProvider>
   )
 }

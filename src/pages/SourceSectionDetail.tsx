@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowUpRight, ScrollText, ExternalLink, Sparkles, CheckCircle2, UserSearch,
-  ShieldCheck, Gavel, CalendarClock, Link2, ListChecks, Building2, ClipboardCheck,
+  ShieldCheck, Gavel, CalendarClock, Link2, ListChecks, Building2, ClipboardCheck, CircleSlash,
 } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
@@ -35,15 +35,21 @@ export function SourceSectionDetail() {
   const getSessionControl = useApp((s) => s.getSessionControl)
   const engageSpecialist = useApp((s) => s.engageSpecialist)
   const completeSpecialist = useApp((s) => s.completeSpecialist)
+  const setClauseApplicability = useApp((s) => s.setClauseApplicability)
+  const selfId = useApp((s) => s.personId)
   const pushToast = useApp((s) => s.pushToast)
   const [saving, setSaving] = React.useState(false)
   const [extractOpen, setExtractOpen] = React.useState(false)
+  // "Not applicable" is a recorded decision, so it collects its reason before it commits.
+  const [naOpen, setNaOpen] = React.useState(false)
+  const [naReason, setNaReason] = React.useState('')
 
   if (!base) return <ComingSoon title="Clause not found" />
 
   const p = effectiveClause(base, overrides)
   const inst = getInstrument(p.instrumentId)
   const canAct = useCanAct({ kind: 'clause.save' })
+  const canSetApplicability = useCanAct({ kind: 'clause.applicability' })
   const reviewable = Boolean(p.status)
   const saved = p.status === 'Saved'
   const inSpecialist = p.status === 'Specialist review'
@@ -92,11 +98,13 @@ export function SourceSectionDetail() {
       />
 
       {/* Proof chain — Source highlighted as the entry node. */}
-      <ProofChain nodes={chain} className="mb-4" />
+      <ProofChain nodes={chain} className="mb-4" dataTour="proof-chain" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Core */}
         <div className="space-y-4">
+          {/* What the clause asks for, and what it costs to miss — read together. */}
+          <div data-tour="clause-requires-and-penalty" className="space-y-4">
           <div className="card-surface p-4">
             {p.nameOfCompliance && (
               <div className="mb-3">
@@ -167,10 +175,11 @@ export function SourceSectionDetail() {
               <p className="mt-2 text-2xs text-muted-foreground">Severity is derived from the gravity of these penalty tiers.</p>
             </div>
           )}
+          </div>
 
           {/* Recommendation + decision */}
           {reviewable && (
-            <div className="card-surface p-4">
+            <div data-tour="clause-decision" className="card-surface p-4">
               {p.aiRecommendation && (
                 <div className="rounded-md border border-info/20 bg-info-soft/30 p-2.5">
                   <div className="flex items-center gap-1.5">
@@ -224,12 +233,56 @@ export function SourceSectionDetail() {
                     {p.applicable !== false && (
                       <Button size="sm" onClick={() => setSaving(true)}><CheckCircle2 className="size-4" /> Save to a control</Button>
                     )}
+                    {p.applicable !== false && canSetApplicability && (
+                      <button onClick={() => setNaOpen((v) => !v)} aria-expanded={naOpen} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-medium/50 hover:bg-medium-soft/40">
+                        <CircleSlash className="size-3.5" /> Mark not applicable
+                      </button>
+                    )}
                     {!inSpecialist && (
                       <button onClick={() => { engageSpecialist(p.id); pushToast({ title: 'Specialist engaged', description: `${p.id} routed to outside counsel for review.`, variant: 'info' }) }} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-info/40 hover:bg-info-soft/40">
                         <UserSearch className="size-3.5" /> Engage specialist
                       </button>
                     )}
                   </div>
+
+                  {/* Not applicable is a decision on the record: it does not commit
+                      without a reason, and it is written to the audit log. */}
+                  {naOpen && (
+                    <div className="mt-2.5 rounded-md border border-medium/40 bg-medium-soft/25 p-2.5">
+                      <label htmlFor="na-reason" className="text-2xs font-semibold uppercase tracking-wide text-medium">
+                        Why does this clause not apply to SPF?
+                      </label>
+                      <textarea
+                        id="na-reason"
+                        value={naReason}
+                        onChange={(e) => setNaReason(e.target.value)}
+                        rows={2}
+                        placeholder="e.g. the trigger condition is not met; SPF consumes rather than provides the regulated service"
+                        className="mt-1.5 w-full resize-none rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-info/50"
+                      />
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={naReason.trim().length < 8}
+                          title={naReason.trim().length < 8 ? 'Record the reason before marking this clause not applicable.' : undefined}
+                          onClick={() => {
+                            const reason = naReason.trim()
+                            setClauseApplicability(p.id, false, reason)
+                            setNaOpen(false)
+                            setNaReason('')
+                            pushToast({ title: 'Marked not applicable', description: `${p.id} recorded against ${personName(selfId)} with a reason.`, variant: 'info' })
+                          }}
+                        >
+                          <CircleSlash className="size-4" /> Record decision
+                        </Button>
+                        <button onClick={() => { setNaOpen(false); setNaReason('') }} className="text-2xs font-medium text-muted-foreground hover:text-foreground">
+                          Cancel
+                        </button>
+                        <span className="ml-auto text-2xs text-muted-foreground">Reversible; the trail keeps both decisions.</span>
+                      </div>
+                    </div>
+                  )}
+
                   <p className="mt-1.5 text-2xs text-muted-foreground">Save maps this clause to a control (existing or new) and tracks it in the Control Library.</p>
                 </div>
               ) : (

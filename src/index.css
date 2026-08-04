@@ -85,3 +85,14 @@
     background: transparent;
   }
 }
+
+/* Guided tour: the caption bubble's per-step progress bar runs for the step's
+   own durationMs (docs/onegrc-video-pack.md, Section 5 is the timing authority). */
+@keyframes tour-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}

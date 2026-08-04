@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download, Search, ChevronRight, Sparkles } from 'lucide-react'
+import { Scale, ScrollText, CheckCircle2, AlertTriangle, Download, Search, ChevronRight, Sparkles, FileText } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
@@ -112,18 +112,26 @@ export function Sources() {
 
   return (
     <div>
+      <div data-tour="sources-intake">
       <PageHeader
         eyebrow="Compliance"
         title="Source Library"
         description={
           <>
-            <span className="font-medium text-foreground">The acts behind the controls.</span> {WORLD.instruments.length}{' '}
-            instruments broken into {totalClauses} clauses. Items awaiting a decision rise to the top; open an act to read what
-            it covers and save each clause to a control.
+            <span className="font-medium text-foreground">The acts behind the controls.</span> Duties enter OneGRC from two
+            places: public and industry-regulated sources here — {WORLD.instruments.length} instruments broken into{' '}
+            {totalClauses} clauses — and the firm's own{' '}
+            <button onClick={() => navigate('/policies')} className="font-medium text-info hover:underline">
+              internal policies
+            </button>
+            . Both are parsed into clauses and saved to the controls that satisfy them.
           </>
         }
         actions={
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/policies')}>
+              <FileText className="size-4" /> Internal policies
+            </Button>
             <Button size="sm" disabled={!canCreate} title={canCreate ? undefined : 'Source-act creation is restricted to Compliance and the Company Secretary.'} onClick={() => setCreateOpen(true)}>
               <Sparkles className="size-4" /> Create source act
             </Button>
@@ -152,6 +160,7 @@ export function Sources() {
             className="w-full bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
+      </div>
       </div>
 
       {!scope.seesAll && rows.length === 0 ? (

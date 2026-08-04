@@ -46,9 +46,16 @@ interface Props {
   defaultCollapsed?: boolean
   /** Override the built-in suggestion chips with host-scoped questions. */
   suggestedQuestions?: string[]
+  /**
+   * Fire one suggested question by index as soon as the panel mounts, so the
+   * guided tour can show a grounded answer without a presenter clicking. Asking
+   * is a read: it composes a scripted, cited answer in local state and mutates
+   * nothing in the store. Out-of-range values are ignored.
+   */
+  autoAskIndex?: number
 }
 
-export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun = 'mapping', collapsible = false, defaultCollapsed = false, suggestedQuestions }: Props) {
+export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun = 'mapping', collapsible = false, defaultCollapsed = false, suggestedQuestions, autoAskIndex }: Props) {
   const navigate = useNavigate()
   const ctx: RecordContext | null = React.useMemo(() => buildRecordContext(entityId), [entityId])
 
@@ -57,6 +64,7 @@ export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun =
   const [turns, setTurns] = React.useState<Turn[]>([])
   const [draft, setDraft] = React.useState('')
   const timers = React.useRef<ReturnType<typeof setTimeout>[]>([])
+  const autoAsked = React.useRef<string | null>(null)
 
   const clearTimers = () => {
     timers.current.forEach(clearTimeout)
@@ -68,6 +76,7 @@ export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun =
     clearTimers()
     setTurns([])
     setDraft('')
+    autoAsked.current = null
     return clearTimers
   }, [entityId])
 
@@ -105,6 +114,19 @@ export function CopilotInline({ entityId, tabs = ['ask'], defaultTab, agentRun =
 
   const suggestions = suggestedQuestions ?? (ctx ? SUGGESTIONS[ctx.type] ?? [] : [])
   const showTabs = tabs.length > 1
+
+  // Guided tour: fire exactly one suggested question, once per grounding record.
+  React.useEffect(() => {
+    if (autoAskIndex == null || !Number.isInteger(autoAskIndex) || autoAskIndex < 0) return
+    const question = suggestions[autoAskIndex]
+    if (!ctx || !question) return
+    const token = `${entityId}:${autoAskIndex}`
+    if (autoAsked.current === token) return
+    autoAsked.current = token
+    ask(question)
+    // `ask` is stable enough for this one-shot; the token guard prevents repeats.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAskIndex, entityId, ctx, suggestions])
 
   const header = (
     <>

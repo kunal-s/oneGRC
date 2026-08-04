@@ -165,7 +165,7 @@ export function TaskDetail() {
         </div>
 
         {/* Reminders & escalations */}
-        <div className="card-surface p-4">
+        <div data-tour="reminders-ladder" className="card-surface p-4">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
             <BellRing className="size-4 text-info" /> Reminders &amp; escalations
           </h3>

@@ -11,6 +11,7 @@ import { NeedsAttention } from './home/NeedsAttention'
 import { ActivityStream } from './home/ActivityStream'
 import { TrendCharts } from './home/TrendCharts'
 import { MyComplianceCalendarCard } from '@/components/MyComplianceCalendar'
+import { StartTourButton } from '@/components/tour/StartTourButton'
 import { nearestTrack } from '@/lib/clocks'
 import { pct } from '@/lib/format'
 import { fmtIST, fmtDate, fmtRelative, NOW } from '@/lib/time'
@@ -76,7 +77,8 @@ function ExecutiveDashboard() {
             </div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Good morning, {first} - OneGRC</h1>
           </div>
-          <div className="hidden shrink-0 flex-col items-end gap-2 lg:flex">
+          <div className="hidden shrink-0 items-center gap-2 lg:flex">
+            <StartTourButton className="border-white/25 bg-white/10 text-white hover:bg-white/20" />
             <Button
               variant="outline"
               size="sm"
@@ -91,14 +93,25 @@ function ExecutiveDashboard() {
         <div className="pointer-events-none absolute -right-10 -top-16 size-64 rounded-full bg-accent/10 blur-2xl" />
       </div>
 
-      {/* 6 KPI tiles - now on effective (seed + override) metrics */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      {/* Live posture: the six headline tiles and the enterprise heat map read as
+          one block — the board's "where do we stand right now" answer — with the
+          readiness drill-down and committee prep below it. */}
+      <div className="space-y-3">
+        {/* 6 KPI tiles - now on effective (seed + override) metrics */}
+        <div data-tour="home-posture" className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <KpiTile label="Enterprise risk" value={M.enterpriseRisk.toFixed(1)} unit="/10" icon={<Gauge className="size-3.5" />} tone="warn" trend="up" trendLabel="+0.3 QoQ" sub="Residual, board-weighted" onClick={() => navigate('/risks')} />
         <KpiTile label="Control coverage" value={pct(M.controlCoverage)} icon={<ShieldCheck className="size-3.5" />} tone="ok" spark={controlPassRateTrend.map((p) => p.value)} sparkColor="hsl(var(--ok))" sub={`${M.ccmAutomated} CCM-automated`} onClick={() => navigate('/controls')} />
         <KpiTile label="Open incidents" value={M.openIncidents} icon={<Siren className="size-3.5" />} tone="danger" spark={openIncidentsTrend.map((p) => p.value)} sparkColor="hsl(var(--critical))" sub={`${M.criticalOpen} Critical · 4 High`} onClick={() => navigate('/incidents')} />
         <KpiTile label={`Nearest clock · ${nearest?.track.regulator ?? '-'}`} value={nearest ? <RegulatorClockInline track={nearest.track} /> : '-'} icon={<Timer className="size-3.5" />} tone="danger" live sub="6-hour incident report" onClick={() => nearest && navigate(`/incidents/${nearest.incidentId}`)} />
         <KpiTile label="Overdue obligations" value={M.overdueObligations} icon={<CalendarX2 className="size-3.5" />} tone="warn" sub={`${M.dueSoonObligations} due soon`} onClick={() => navigate('/obligations')} />
         <KpiTile label="Open findings" value={M.openFindings} icon={<FileSearch className="size-3.5" />} tone="warn" sub="Across 18 audits" onClick={() => navigate('/audits')} />
+        </div>
+
+        {/* Heat map + needs attention */}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <HeatMap />
+          <NeedsAttention />
+        </div>
       </div>
 
       {/* Inspection readiness — the drillable "are we in control" band (Req 14) */}
@@ -156,12 +169,6 @@ function ExecutiveDashboard() {
             <Download className="size-4" /> Export board pack
           </Button>
         </div>
-      </div>
-
-      {/* Heat map + needs attention */}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <HeatMap />
-        <NeedsAttention />
       </div>
 
       {/* The logged-in user's own compliance calendar — act on what you own */}

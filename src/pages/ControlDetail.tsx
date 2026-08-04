@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Bot, Hand, Download, ShieldCheck, Layers, Activity, ArrowUpRight, CheckCircle2, XCircle, MinusCircle, ScrollText, Scale, CalendarClock, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
@@ -56,6 +56,11 @@ export function ControlDetail() {
   const canRetest = useCanAct({ kind: 'control.retest' })
   const control = useEffectiveControl(id ?? '')
   const [tab, setTab] = React.useState('overview')
+  // `?ask=<n>` fires one suggested Copilot question on arrival (guided tour).
+  // Read-only: it selects a question by index and nothing else.
+  const [search] = useSearchParams()
+  const askParam = Number(search.get('ask'))
+  const autoAsk = search.has('ask') && Number.isInteger(askParam) && askParam >= 0 ? askParam : undefined
 
   if (!control) return <ComingSoon title="Control not found" />
 
@@ -270,8 +275,8 @@ export function ControlDetail() {
       )}
 
       {tab === 'overview' && (
-        <div className="mt-4">
-          <CopilotInline entityId={control.id} tabs={['ask']} />
+        <div data-tour="copilot" className="mt-4">
+          <CopilotInline entityId={control.id} tabs={['ask']} autoAskIndex={autoAsk} />
         </div>
       )}
 

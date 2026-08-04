@@ -19,9 +19,9 @@ const ICON: Record<ChainKind, LucideIcon> = {
  * node is an active link; the current screen's own node is highlighted. When a
  * node fans out to several siblings, "+N" opens a popover of jump-links.
  */
-export function ProofChain({ nodes, className }: { nodes: ProofNode[]; className?: string }) {
+export function ProofChain({ nodes, className, dataTour }: { nodes: ProofNode[]; className?: string; dataTour?: string }) {
   return (
-    <div className={cn('card-surface p-3.5', className)}>
+    <div data-tour={dataTour} className={cn('card-surface p-3.5', className)}>
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Proof chain</h3>
       </div>

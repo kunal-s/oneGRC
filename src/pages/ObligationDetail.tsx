@@ -101,9 +101,12 @@ export function ObligationDetail() {
         </span>
       </div>
 
-      <TasksTable tasks={tasks} navigate={navigate} />
+      {/* The recurring cycle and the maker/checker split that discharges it. */}
+      <div data-tour="obligation-cycles-and-tasks">
+        <TasksTable tasks={tasks} navigate={navigate} />
 
-      <CycleHistory o={o} />
+        <CycleHistory o={o} />
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {o.sourceRefs && o.sourceRefs.length > 0 && (

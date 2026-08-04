@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { StartTourButton } from '@/components/tour/StartTourButton'
 
 /**
  * The persona landing-page shell: a greeting, an optional summary band, then a
@@ -31,7 +32,11 @@ export function RoleDashboard({
           <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
           {description && <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">{description}</p>}
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {/* Every persona's Home carries the same tour entry point, same copy. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <StartTourButton />
+          {actions}
+        </div>
       </div>
       {summary}
       {children && <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{children}</div>}
