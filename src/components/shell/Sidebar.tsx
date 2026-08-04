@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { NAV_GROUPS, NAV_BOTTOM, type NavItem } from '../nav-config'
+import { useApp } from '@/store'
+import { navGroupsForRole, navBottomForRole, type NavItem } from '../nav-config'
 
 function Item({ item }: { item: NavItem }) {
   const Icon = item.icon
@@ -29,6 +30,9 @@ function Item({ item }: { item: NavItem }) {
 }
 
 export function Sidebar() {
+  const role = useApp((s) => s.role)
+  const groups = navGroupsForRole(role)
+  const bottom = navBottomForRole(role)
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-background">
       <div className="flex items-center gap-2.5 px-4 py-3.5">
@@ -42,7 +46,7 @@ export function Sidebar() {
       </div>
 
       <nav className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-2.5 pb-3">
-        {NAV_GROUPS.map((group, gi) => (
+        {groups.map((group, gi) => (
           <div key={gi}>
             {group.header && (
               <div className="px-2.5 pb-1 pt-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -58,11 +62,13 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="space-y-0.5 border-t border-border px-2.5 py-2.5">
-        {NAV_BOTTOM.map((item) => (
-          <Item key={item.to} item={item} />
-        ))}
-      </div>
+      {bottom.length > 0 && (
+        <div className="space-y-0.5 border-t border-border px-2.5 py-2.5">
+          {bottom.map((item) => (
+            <Item key={item.to} item={item} />
+          ))}
+        </div>
+      )}
     </aside>
   )
 }

@@ -12,11 +12,14 @@ import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/Drawer'
 import { cn } from '@/lib/utils'
-import { PEOPLE, personName } from '@/data/people'
+import { PEOPLE, personName, DEFAULT_DEPARTMENT_HEADS } from '@/data/people'
+import { DEPARTMENTS } from '@/lib/access'
 import { fmtRelative, fmtIST, minsFromNow } from '@/lib/time'
 import { inCrore, inGroup } from '@/lib/format'
 import { resolveEntity } from '@/lib/entity'
 import { useApp } from '@/store'
+import { useCanAct } from '@/lib/gating'
+import { reminderAuditRows } from '@/lib/reminders'
 import type { Person } from '@/types'
 import {
   ORG, ROLE_DEFS, ROLE_LABEL, USER_META, FRAMEWORKS, TOTAL_CONTROLS, REG_CLOCKS, MC_ROWS,
@@ -40,19 +43,23 @@ const SECTIONS = [
 type SectionKey = (typeof SECTIONS)[number]['key']
 
 // ── small UI atoms ──────────────────────────────────────────────────────────
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
+function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
     <button
-      onClick={() => onChange(!on)}
+      onClick={() => !disabled && onChange(!on)}
       role="switch"
       aria-checked={on}
       aria-label={label}
-      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors', on ? 'bg-primary' : 'bg-border')}
+      disabled={disabled}
+      title={disabled ? 'Only the Administrator persona can change platform configuration.' : undefined}
+      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50', on ? 'bg-primary' : 'bg-border')}
     >
       <span className={cn('inline-block size-4 transform rounded-full bg-white shadow transition-transform', on ? 'translate-x-4' : 'translate-x-0.5')} />
     </button>
   )
 }
+
+const NOT_ADMIN_TITLE = 'Only the Administrator persona can change platform configuration.'
 
 function Card({ title, action, children, className }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
@@ -80,13 +87,14 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 // ── 1 · Organisation ────────────────────────────────────────────────────────
 function OrganisationSection() {
   const pushToast = useApp((s) => s.pushToast)
+  const canConfig = useCanAct({ kind: 'admin.configure' })
   const [edit, setEdit] = React.useState(false)
   return (
     <>
       <Card
         title="Organisation profile"
         action={
-          <Button variant="outline" size="sm" onClick={() => setEdit(true)}>
+          <Button variant="outline" size="sm" disabled={!canConfig} title={canConfig ? undefined : NOT_ADMIN_TITLE} onClick={() => setEdit(true)}>
             <Pencil className="size-3.5" /> Edit
           </Button>
         }
@@ -140,7 +148,14 @@ function OrganisationSection() {
 // ── 2 · Users & Roles ───────────────────────────────────────────────────────
 function UsersRolesSection() {
   const pushToast = useApp((s) => s.pushToast)
+  const recordAction = useApp((s) => s.recordAction)
+  const canConfig = useCanAct({ kind: 'admin.configure' })
   const [invite, setInvite] = React.useState(false)
+
+  const changeHead = (dept: string) => {
+    recordAction({ action: `Department-head change requested · ${dept}`, detail: 'Routed to maker-checker; current head retained until approved.' })
+    pushToast({ title: 'Sent for approval', description: `Department-head change for ${dept} routed to maker-checker.`, variant: 'success' })
+  }
 
   const columns: Column<Person>[] = [
     {
@@ -148,6 +163,15 @@ function UsersRolesSection() {
       render: (p) => <span className="inline-flex items-center gap-2"><Avatar id={p.id} size={22} /><span className="text-sm text-foreground">{p.name}</span></span>,
     },
     { key: 'title', header: 'Title', sortValue: (p) => p.title, render: (p) => <span className="text-xs text-foreground">{p.title}</span> },
+    {
+      key: 'department', header: 'Department', sortValue: (p) => p.department,
+      render: (p) => (
+        <span className="inline-flex items-center gap-1 text-xs text-foreground">
+          {p.department}
+          {DEFAULT_DEPARTMENT_HEADS[p.department] === p.id && <span className="rounded bg-accent/15 px-1 py-0 text-2xs font-medium text-accent-foreground">head</span>}
+        </span>
+      ),
+    },
     {
       key: 'role', header: 'Access role', sortValue: (p) => ROLE_LABEL[p.role],
       render: (p) => <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-2xs font-medium text-foreground">{ROLE_LABEL[p.role]}</span>,
@@ -168,7 +192,7 @@ function UsersRolesSection() {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Users <span className="font-normal text-muted-foreground">· {PEOPLE.length} on the platform</span></h3>
-          <Button variant="outline" size="sm" onClick={() => setInvite(true)}><UserPlus className="size-3.5" /> Invite user</Button>
+          <Button variant="outline" size="sm" disabled={!canConfig} title={canConfig ? undefined : NOT_ADMIN_TITLE} onClick={() => setInvite(true)}><UserPlus className="size-3.5" /> Invite user</Button>
         </div>
         <DataTable
           data={PEOPLE}
@@ -180,10 +204,39 @@ function UsersRolesSection() {
         />
       </div>
 
+      <Card title="Department heads · master authority">
+        <p className="mb-3 text-2xs text-muted-foreground">
+          Each department has a named head — the master authority who sees every record in the department and may act on any of them
+          (including stepping in on the owner's behalf), with the action audit-trailed. Each head is selectable from the persona switcher for validation.
+        </p>
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {DEPARTMENTS.map((d) => {
+            const head = DEFAULT_DEPARTMENT_HEADS[d]
+            return (
+              <div key={d} className="flex items-center gap-2.5 rounded-lg border border-border bg-background p-3">
+                <Avatar id={head} size={28} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">{d}</div>
+                  <div className="text-2xs text-muted-foreground">Head: {personName(head)}</div>
+                </div>
+                <button
+                  disabled={!canConfig}
+                  title={canConfig ? undefined : NOT_ADMIN_TITLE}
+                  onClick={() => changeHead(d)}
+                  className="text-2xs font-medium text-info hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                >
+                  Change head
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
       <Card title="Platform roles">
         <p className="mb-3 text-2xs text-muted-foreground">
-          Access is role-based across the three lines of defence. The six roles marked <span className="font-medium text-foreground">role switcher</span> are
-          selectable from the top bar and change My Queue and which approvals appear.
+          Access is role-based across the three lines of defence. Personas — one per department head, plus the Executive and the Administrator — are
+          selectable from the top bar and change the landing dashboard, My Queue, the department-scoped views and which approvals appear.
         </p>
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {ROLE_DEFS.map((r) => (
@@ -191,11 +244,16 @@ function UsersRolesSection() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{r.label}</span>
                 <span className="rounded bg-muted px-1.5 py-0 text-2xs text-muted-foreground">{r.lod}</span>
-                {r.switcher && <span className="rounded bg-info-soft px-1.5 py-0 text-2xs font-medium text-info">role switcher</span>}
+                {r.switcher && <span className="rounded bg-info-soft px-1.5 py-0 text-2xs font-medium text-info">persona switcher</span>}
                 <span className="ml-auto text-2xs text-muted-foreground">{r.members} {r.members === 1 ? 'member' : 'members'}</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">{r.summary}</p>
-              <button onClick={() => pushToast({ title: 'Sent for approval', description: `Role change for ${r.label} routed to maker-checker.`, variant: 'success' })} className="mt-1.5 text-2xs font-medium text-info hover:underline">
+              <button
+                disabled={!canConfig}
+                title={canConfig ? undefined : NOT_ADMIN_TITLE}
+                onClick={() => pushToast({ title: 'Sent for approval', description: `Role change for ${r.label} routed to maker-checker.`, variant: 'success' })}
+                className="mt-1.5 text-2xs font-medium text-info hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+              >
                 Edit role
               </button>
             </div>
@@ -234,6 +292,7 @@ function UsersRolesSection() {
 // ── 3 · Frameworks & Libraries ──────────────────────────────────────────────
 function FrameworksSection() {
   const pushToast = useApp((s) => s.pushToast)
+  const canConfig = useCanAct({ kind: 'admin.configure' })
   const [enabled, setEnabled] = React.useState<Record<string, boolean>>(Object.fromEntries(FRAMEWORKS.map((f) => [f.framework, f.enabled])))
   return (
     <Card title="Frameworks & control libraries">
@@ -250,7 +309,7 @@ function FrameworksSection() {
                 {f.crosswalk ? `${f.mapped} controls mapped via crosswalk` : `${f.mapped} controls mapped`} · library updated {f.lastUpdate}
               </div>
             </div>
-            <Toggle on={enabled[f.framework]} onChange={(v) => { setEnabled((s) => ({ ...s, [f.framework]: v })); pushToast({ title: 'Saved', description: `${f.name} ${v ? 'enabled' : 'disabled'}.`, variant: 'success' }) }} label={f.name} />
+            <Toggle on={enabled[f.framework]} disabled={!canConfig} onChange={(v) => { setEnabled((s) => ({ ...s, [f.framework]: v })); pushToast({ title: 'Saved', description: `${f.name} ${v ? 'enabled' : 'disabled'}.`, variant: 'success' }) }} label={f.name} />
           </div>
         ))}
       </div>
@@ -263,10 +322,9 @@ function FrameworksSection() {
 
 // ── 4 · Regulators & Clocks ─────────────────────────────────────────────────
 function RegulatorsSection() {
-  const navigate = useNavigate()
   return (
-    <Card title="Regulator clock configuration" action={<Button variant="outline" size="sm" onClick={() => navigate('/clocks')}><ExternalLink className="size-3.5" /> View live clocks</Button>}>
-      <p className="mb-3 text-2xs text-muted-foreground">Thresholds below drive the live countdowns on Regulator Clocks and the regulator tracks on each incident. Read-only configuration.</p>
+    <Card title="Regulator clock configuration">
+      <p className="mb-3 text-2xs text-muted-foreground">Thresholds below drive the live countdowns on regulator clock tracking and the regulator tracks on each incident. Read-only configuration.</p>
       <div className="space-y-2">
         {REG_CLOCKS.map((r) => (
           <div key={r.regulator} className="rounded-lg border border-border bg-background p-3">
@@ -296,6 +354,7 @@ function RegulatorsSection() {
 // ── 5 · Maker-Checker & Workflow ────────────────────────────────────────────
 function WorkflowSection() {
   const pushToast = useApp((s) => s.pushToast)
+  const canConfig = useCanAct({ kind: 'admin.configure' })
   const [rows, setRows] = React.useState(MC_ROWS)
   return (
     <Card title="Maker-checker & approval workflow">
@@ -315,7 +374,7 @@ function WorkflowSection() {
               <tr key={r.object} className="border-b border-border/70 last:border-0">
                 <td className="px-3 py-2 text-xs font-medium text-foreground">{r.object}</td>
                 <td className="px-3 py-2">
-                  <Toggle on={r.required} label={r.object} onChange={(v) => { setRows((s) => s.map((x, j) => j === i ? { ...x, required: v } : x)); pushToast({ title: 'Saved', description: `Maker-checker ${v ? 'required' : 'optional'} for ${r.object}.`, variant: 'success' }) }} />
+                  <Toggle on={r.required} label={r.object} disabled={!canConfig} onChange={(v) => { setRows((s) => s.map((x, j) => j === i ? { ...x, required: v } : x)); pushToast({ title: 'Saved', description: `Maker-checker ${v ? 'required' : 'optional'} for ${r.object}.`, variant: 'success' }) }} />
                 </td>
                 <td className="px-3 py-2 text-xs text-foreground">{r.approver}</td>
                 <td className="px-3 py-2 text-xs text-muted-foreground">{r.sla}</td>
@@ -415,8 +474,22 @@ function NotificationsSection() {
 
 // ── 9 · Audit Log ───────────────────────────────────────────────────────────
 const AUDIT_LOG = buildAuditLog()
+// Fired reminders + escalations (E0.2) — derived deterministically from due dates
+// vs the frozen NOW, written into the trail with actor/action/timestamp/interval.
+const REMINDER_LOG = reminderAuditRows()
 function AuditLogSection() {
   const navigate = useNavigate()
+  // Session events (Epic 1.3) appear above the seeded history - the audit log is
+  // append-on-action, not a static fixture.
+  const sessionLog = useApp((s) => s.auditLog)
+  const rows: AuditLogRow[] = React.useMemo(
+    () => [
+      ...sessionLog.map((e) => ({ id: e.id, at: e.at, actor: e.actor, action: e.action, object: e.entityId ?? 'SYSTEM', detail: e.detail ?? '' })),
+      ...AUDIT_LOG,
+      ...REMINDER_LOG,
+    ],
+    [sessionLog],
+  )
   const columns: Column<AuditLogRow>[] = [
     { key: 'at', header: 'When (IST)', sortValue: (r) => new Date(r.at).getTime(), render: (r) => <span className="text-xs text-muted-foreground" title={fmtRelative(r.at)}>{fmtIST(r.at)}</span> },
     { key: 'actor', header: 'Actor', sortValue: (r) => personName(r.actor), render: (r) => <span className="inline-flex items-center gap-1.5"><Avatar id={r.actor} size={20} /><span className="text-xs text-foreground">{personName(r.actor)}</span></span> },
@@ -427,7 +500,7 @@ function AuditLogSection() {
   return (
     <Card title="System audit log" action={<span className="text-2xs text-muted-foreground">tamper-evident · every change is evidence</span>}>
       <DataTable
-        data={AUDIT_LOG}
+        data={rows}
         columns={columns}
         searchKeys={['action', 'object', 'detail', (r) => personName(r.actor)]}
         searchPlaceholder="Search audit log…"
@@ -442,6 +515,7 @@ function AuditLogSection() {
 // ── shell ───────────────────────────────────────────────────────────────────
 export function Settings() {
   const [active, setActive] = React.useState<SectionKey>('org')
+  const canConfig = useCanAct({ kind: 'admin.configure' })
 
   return (
     <div>
@@ -469,8 +543,10 @@ export function Settings() {
               </button>
             )
           })}
-          <div className="mt-3 rounded-md border border-border bg-muted/30 px-2.5 py-2 text-2xs text-muted-foreground">
-            Changes route through maker-checker. Access role determines what you can edit.
+          <div className={cn('mt-3 rounded-md border px-2.5 py-2 text-2xs', canConfig ? 'border-border bg-muted/30 text-muted-foreground' : 'border-medium/30 bg-medium-soft/40 text-medium')}>
+            {canConfig
+              ? 'Changes route through maker-checker. Access role determines what you can edit.'
+              : 'Read-only — switch to the Administrator persona to change platform configuration.'}
           </div>
         </nav>
 

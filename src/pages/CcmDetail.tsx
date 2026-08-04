@@ -93,7 +93,8 @@ export function CcmDetail() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
+        {/* The failing population and what the platform did about it, unassisted. */}
+        <div data-tour="ccm-escalation" className="space-y-4">
           {/* failing population */}
           {rule.failingItems ? (
             <div className="card-surface overflow-hidden border border-critical/30">

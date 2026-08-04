@@ -5,18 +5,24 @@ import { SeverityBadge } from '@/components/SeverityBadge'
 import { StatusChip } from '@/components/StatusChip'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { getAudit, getIssue } from '@/data'
 import { useApp } from '@/store'
+import { useEffectiveAudit, useEffectiveIssues } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import { ComingSoon } from './ComingSoon'
 
 export function AuditDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const openDrawer = useApp((s) => s.openDrawer)
-  const audit = id ? getAudit(id) : undefined
+  const closeFinding = useApp((s) => s.closeFinding)
+  const pushToast = useApp((s) => s.pushToast)
+  const canClose = useCanAct({ kind: 'issue.resolve' })
+  const audit = useEffectiveAudit(id ?? '')
+  const issues = useEffectiveIssues()
 
   if (!audit) return <ComingSoon title="Audit not found" />
 
+  const issueById = (iid?: string) => (iid ? issues.find((x) => x.id === iid) : undefined)
   const open = audit.findings.filter((f) => f.status !== 'Closed')
   const closed = audit.findings.filter((f) => f.status === 'Closed')
 
@@ -58,7 +64,8 @@ export function AuditDetail() {
         <p className="mb-3 text-xs text-muted-foreground">Each finding spawns a tracked Issue with an owner and due date — closing the assurance loop.</p>
         <div className="space-y-1.5">
           {[...open, ...closed].map((f) => {
-            const issue = f.linkedIssue ? getIssue(f.linkedIssue) : undefined
+            const issue = issueById(f.linkedIssue)
+            const canCloseThis = f.status !== 'Closed' && !!f.linkedIssue && canClose
             return (
               <div key={f.id} className="flex flex-col gap-2 rounded-lg border border-border p-2.5 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -81,8 +88,23 @@ export function AuditDetail() {
                   </>
                 ) : (
                   <span className="inline-flex shrink-0 items-center gap-1 text-2xs text-ok sm:w-56">
-                    <CheckCircle2 className="size-3.5" /> No remediation required
+                    <CheckCircle2 className="size-3.5" /> {f.status === 'Closed' ? 'Finding closed' : 'No remediation required'}
                   </span>
+                )}
+                {f.status !== 'Closed' && f.linkedIssue && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    disabled={!canCloseThis}
+                    title={canClose ? undefined : 'Closing a finding (resolving its remediation) is done by the Control Owner, Auditor or Compliance Manager.'}
+                    onClick={() => {
+                      closeFinding(audit.id, f.id)
+                      pushToast({ title: 'Finding closed', description: `${f.id} closed — remediation ${f.linkedIssue} resolved.`, variant: 'success' })
+                    }}
+                  >
+                    <CheckCircle2 className="size-4" /> Close finding
+                  </Button>
                 )}
               </div>
             )

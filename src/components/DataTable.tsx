@@ -34,6 +34,7 @@ export function DataTable<T extends { id: string }>({
   emptyHint,
   selectable,
   bulkBar,
+  tableClassName,
 }: {
   data: T[]
   columns: Column<T>[]
@@ -49,6 +50,8 @@ export function DataTable<T extends { id: string }>({
   emptyHint?: string
   selectable?: boolean
   bulkBar?: (selected: T[], clear: () => void) => React.ReactNode
+  /** Extra classes on the <table> — e.g. `table-fixed` to cap columns and prevent x-scroll. */
+  tableClassName?: string
 }) {
   const [query, setQuery] = React.useState('')
   const [sort, setSort] = React.useState<{ key: string; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
@@ -171,7 +174,7 @@ export function DataTable<T extends { id: string }>({
         </div>
       )}
       <div className="scrollbar-thin overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className={cn('w-full border-collapse text-sm', tableClassName)}>
           <thead>
             <tr className="border-b border-border bg-background">
               {selectable && (

@@ -23,8 +23,8 @@ const SPOKES: Spoke[] = [
   { id: 'crowdstrike', name: 'CrowdStrike EDR', sub: 'Endpoint detection', syncMins: 3, flow: 'in', status: 'Live', route: '/incidents' },
   { id: 'okta', name: 'Okta / AD', sub: 'Identity & access', syncMins: 12, flow: 'in', status: 'Synced', route: '/controls' },
   { id: 'aws', name: 'AWS Security Hub', sub: 'CCM cloud feed', syncMins: 8, flow: 'in', status: 'Live', route: '/ccm' },
-  { id: 'onetrust', name: 'OneTrust', sub: 'DPDP / consent', syncMins: 37, flow: 'in', status: 'Synced', route: '/dpdp' },
-  { id: 'regtech', name: 'TeamLease + Lexplosion', sub: 'Obligation engine (RegTech)', syncMins: 64, flow: 'in', status: 'Synced', route: '/reg-change' },
+  { id: 'onetrust', name: 'Consent & Privacy platform', sub: 'DPDP / consent', syncMins: 37, flow: 'in', status: 'Synced', route: '/dpdp' },
+  { id: 'regtech', name: 'Regulatory Intelligence feed', sub: 'Obligation & statutory-update engine', syncMins: 64, flow: 'in', status: 'Synced', route: '/reg-change' },
   { id: 'gst', name: 'ClearTax / IRIS GST', sub: 'GST filing', syncMins: 126, flow: 'out', status: 'Connected', route: '/obligations' },
   { id: 'cra', name: 'NPS Trust + CRA', sub: 'Protean / KFintech', syncMins: 19, flow: 'in', status: 'Synced', route: '/pfrda' },
 ]

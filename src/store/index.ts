@@ -1,6 +1,77 @@
 import { create } from 'zustand'
-import type { RoleKey } from '@/types'
-import { ROLES } from '@/data/people'
+import type {
+  Control, RoleKey, Obligation, Issue, Incident, RegulatoryChange, Dsar, Evidence,
+  SourceInstrument, SourceProvision, Department,
+} from '@/types'
+import type { ExtractedAct } from '@/lib/sources/ingest'
+import { ROLES, PEOPLE_BY_ID } from '@/data/people'
+import { WORLD, getSource, getObligation, getControl, getRegChange, getIncident, getIssue, getAudit, getDsar, getInstrument, getEvidence, MARQUEE } from '@/data'
+import { provisionsForInstrument } from '@/lib/sources'
+import { dsarTotalSteps } from '@/lib/dsar'
+import { personName } from '@/data/people'
+import { nextInstance } from '@/lib/recurrence'
+import { escalationSeedNotifications } from '@/lib/reminders'
+import type { TaskWorkflow } from '@/lib/tasks'
+import type { AgentRunResult, ProposedAction } from '@/lib/agents'
+
+/** A recorded control test (Epic 2.3). Session re-tests prepend to the seeded history. */
+export interface TestRun {
+  at: string // ISO
+  result: 'Pass' | 'Fail' | 'Partial'
+  method: string
+  tester: string // person id
+  note: string
+}
+import type { ClauseOverride, ClauseOverrides } from '@/lib/sources'
+import { NOW, minsFromNow } from '@/lib/time'
+
+/**
+ * Tamper-evident session audit log entry (Epic 1.3). Every typed workflow action
+ * appends one via recordAction; the Settings audit log shows these alongside the
+ * seeded history. Append-only; resets on reload.
+ */
+export interface AuditEntry {
+  id: string
+  at: string // ISO
+  actor: string // person id or 'system'
+  action: string
+  entityId?: string
+  route?: string
+  detail?: string
+}
+
+/** The submit -> verify lifecycle carried by an evidence artifact (E3.3). */
+export interface EvidenceWorkflow {
+  status: 'Submitted' | 'Verified'
+  submittedBy?: string
+  submittedAt?: string
+  verifiedBy?: string
+  verifiedAt?: string
+}
+
+/** A user notification (Epic 1.3). Seeded baseline + session appends. */
+export interface NotificationItem {
+  id: string
+  at: string // ISO
+  title: string
+  body?: string
+  severity: 'info' | 'warn' | 'critical'
+  entityId?: string
+  route?: string
+  read: boolean
+}
+
+// A small seeded baseline so the notification bell is never empty (no empty
+// states). Timestamps derive from the frozen NOW. Session events prepend.
+// The most recent fired escalations (E0.2) are folded in so the bell reflects the
+// reminder/escalation engine, not just static items.
+const SEED_NOTIFICATIONS: NotificationItem[] = [
+  ...escalationSeedNotifications(3).map((n, i) => ({ ...n, id: `NTF-esc-${i + 1}`, read: false })),
+  { id: 'NTF-seed-1', at: minsFromNow(-8), title: 'CERT-In 6-hour clock at risk', body: 'INC-2026-0411 Annexure I awaiting sign-off.', severity: 'critical', entityId: 'INC-2026-0411', route: '/incidents/INC-2026-0411', read: false },
+  { id: 'NTF-seed-2', at: minsFromNow(-41), title: 'Patch-SLA CCM rule failing', body: '3 critical CVEs past the 14-day window.', severity: 'warn', entityId: 'CTRL-PCI-6.3.3', route: '/ccm', read: false },
+  { id: 'NTF-seed-3', at: minsFromNow(-126), title: 'GSTR-3B Table 4 change ingested', body: 'Reg-change RCM-2026-118 impacts the monthly GST return.', severity: 'warn', entityId: 'RCM-2026-118', route: '/reg-change/RCM-2026-118', read: false },
+  { id: 'NTF-seed-4', at: minsFromNow(-205), title: '9 obligations overdue', body: 'Remediation plan pending approval.', severity: 'info', entityId: undefined, route: '/obligations', read: true },
+]
 
 export interface Toast {
   id: string
@@ -11,14 +82,29 @@ export interface Toast {
 
 export interface DrawerState {
   open: boolean
-  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'export-pdf' | 'generic' | null
+  kind: 'cert-in-report' | 'pfrda-notify' | 'dpdp-track' | 'evidence-upload' | 'evidence-view' | 'export-pdf' | 'source-viewer' | 'generic' | null
   title?: string
+  payload?: unknown
+}
+
+/**
+ * Session-held artifact model (design seam — Epic 1; UI wired in Epic 10).
+ * Generated templates and uploaded evidence live here in-memory and reset on
+ * reload — no persistence, no backend.
+ */
+export interface Artifact {
+  id: string
+  kind: 'template' | 'evidence' | 'report'
+  title: string
+  createdAt: string // ISO
   payload?: unknown
 }
 
 interface AppState {
   role: RoleKey
+  personId: string // the active persona (1.1 / E0.5) — drives the access boundary
   setRole: (role: RoleKey) => void
+  setPersona: (personId: string) => void // select a persona; role stays synced
   currentPersonId: () => string
 
   toasts: Toast[]
@@ -31,14 +117,140 @@ interface AppState {
 
   commandOpen: boolean
   setCommandOpen: (v: boolean) => void
+
+  // ── Agentic runs (Phase 0.5) — Agents tab in the embedded Copilot panel ──────
+  // Runs are deterministic proposals; approving an action reuses an existing
+  // mutation (approve-to-apply). Each run and approval is audit-trailed.
+  agentRuns: AgentRunResult[]
+  recordAgentRun: (r: AgentRunResult) => void
+  approveAgentAction: (run: AgentRunResult, action: ProposedAction) => void
+
+  artifacts: Artifact[]
+  addArtifact: (a: Omit<Artifact, 'id'>) => string
+  getArtifact: (id: string) => Artifact | undefined
+
+  // Sources pipeline (act → clause → control) — session overrides on a clause's
+  // status/applicability, and the session controls minted by "create new".
+  clauseOverrides: ClauseOverrides
+  sessionControls: Control[]
+  getSessionControl: (id: string) => Control | undefined
+  // Save a clause to an existing control — adds it to that control's Satisfies.
+  saveClauseToControl: (provisionId: string, controlId: string) => void
+  // Create a new control from a clause and save the clause to it. Returns the id.
+  createControlForClause: (provisionId: string, c: { title: string; owner: string; frequency: string; nextDue?: string; description?: string }) => string
+  // Route an unclear clause to an external specialist for an interpretation.
+  engageSpecialist: (provisionId: string) => void
+  // Record the specialist's outcome so Save is enabled.
+  completeSpecialist: (provisionId: string, note: string) => void
+  // Officer override of applicability (applicable / not applicable).
+  setClauseApplicability: (provisionId: string, applicable: boolean, basis?: string) => void
+
+  // ── AI-assisted Source Act creation (E0.6 / 1.6) ────────────────────────────
+  // The accepted act + clauses become session-held tracked sources, routed to
+  // departments. Every step is audit-trailed. Role-gated in the UI to Compliance.
+  sessionInstruments: SourceInstrument[]
+  sessionProvisions: SourceProvision[]
+  createSourceAct: (args: { extracted: ExtractedAct; acceptedIdx: number[]; departments: Department[]; entry: 'url' | 'upload' }) => string
+
+  // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
+  // Each slice holds per-id partial overrides merged over the seed on read via
+  // src/lib/effective.ts. Pipeline/workflow actions write here only; the seed is
+  // never mutated, so a reload restores the pristine demo. Typed workflow actions
+  // (submit/approve/re-test/...) live in their epics and call these patchers.
+  obligationOverrides: Record<string, Partial<Obligation>>
+  controlOverrides: Record<string, Partial<Control>>
+  issueOverrides: Record<string, Partial<Issue>>
+  incidentOverrides: Record<string, Partial<Incident>>
+  regChangeOverrides: Record<string, Partial<RegulatoryChange>>
+  dsarOverrides: Record<string, Partial<Dsar>>
+  // Session-appended recurring obligation instances (Epic 2.2 schedules these).
+  sessionObligations: Obligation[]
+  // Session-registered regulatory changes (a new circular / version on an Act).
+  sessionRegChanges: RegulatoryChange[]
+  addInstrumentChange: (instrumentId: string, kind: 'Circular' | 'New version', title: string) => string
+
+  patchObligation: (id: string, patch: Partial<Obligation>) => void
+  patchControl: (id: string, patch: Partial<Control>) => void
+  patchIssue: (id: string, patch: Partial<Issue>) => void
+  patchIncident: (id: string, patch: Partial<Incident>) => void
+  patchRegChange: (id: string, patch: Partial<RegulatoryChange>) => void
+  patchDsar: (id: string, patch: Partial<Dsar>) => void
+  addSessionObligation: (o: Obligation) => void
+
+  // ── Governance primitives (Epic 1.3) ────────────────────────────────────────
+  auditLog: AuditEntry[]
+  notifications: NotificationItem[]
+  recordAction: (e: Omit<AuditEntry, 'id' | 'at' | 'actor'> & { actor?: string }) => void
+  notify: (n: Omit<NotificationItem, 'id' | 'at' | 'read'>) => void
+  markNotificationsRead: () => void
+
+  // ── Task two-step maker-checker (E0.3 maker / E0.4 checker) ──────────────────
+  // The maker creates+links an Evidence record; a DIFFERENT checker verifies it.
+  // Each step records its actor + timestamp; session-only, merged on read.
+  sessionEvidence: Evidence[]
+  taskWorkflow: Record<string, TaskWorkflow> // tskId -> { evidenceId, maker, makerAt, checker, checkerAt }
+  getAnyEvidence: (id: string) => Evidence | undefined
+  attachTaskEvidence: (args: { taskId: string; obligationId: string; controlId?: string; title: string; type: Evidence['type']; onBehalfOf?: string }) => string
+  verifyTask: (args: { taskId: string; obligationId: string }) => void
+
+  // ── Evidence lifecycle (E3.3) ───────────────────────────────────────────────
+  // Evidence is the artifact with one submit -> verify lifecycle. The maker
+  // submits (attach); a different checker verifies (separation of duties). Seed
+  // evidence is historical (Verified); session-created evidence is Submitted.
+  evidenceWorkflow: Record<string, EvidenceWorkflow>
+  getEvidenceStatus: (id: string) => 'Submitted' | 'Verified'
+  verifyEvidence: (evidenceId: string) => void
+  // Context for the "attach evidence" screen (what the new evidence will prove).
+  evidenceDraft: { taskId?: string; obligationId?: string; controlId?: string; onBehalfOf?: string } | null
+  setEvidenceDraft: (d: { taskId?: string; obligationId?: string; controlId?: string; onBehalfOf?: string } | null) => void
+  // Manual evidence upload (e.g. the Evidence Vault "Attach" action) — creates a
+  // real session evidence record so the submit is not a no-op.
+  addManualEvidence: (args?: { title?: string; type?: Evidence['type']; obligationId?: string; controlId?: string }) => string
+
+  // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
+  // Maker submits, a different checker approves; status advances via overrides and
+  // the action is written to the audit log + notifications. On approval the next
+  // recurring instance is scheduled (Epic 2.2).
+  submitObligation: (id: string) => void
+  approveObligation: (id: string) => void
+
+  // ── Control test/re-test (Epic 2.3) ─────────────────────────────────────────
+  controlTests: Record<string, TestRun[]>
+  retestControl: (id: string, opts?: { result?: TestRun['result']; method?: string; note?: string }) => void
+
+  // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
+  acknowledgeRegChange: (id: string) => void
+
+  // ── Incident regulator-track filing (Epic 3.2) ──────────────────────────────
+  fileIncidentTrack: (incidentId: string, trackIndex: number) => void
+
+  // ── Issue remediation + audit findings (Epic 3.3) ───────────────────────────
+  resolveIssue: (id: string) => void
+  bulkSetIssueStatus: (ids: string[], status: Issue['status']) => void
+  closeFinding: (auditId: string, findingId: string) => void
+
+  // ── DSAR erasure-vs-retention workflow (Epic 4.2) ───────────────────────────
+  advanceDsar: (id: string) => void
+  flagDsarBreach: (id: string) => void
 }
 
 let toastSeq = 0
+let artifactSeq = 0
+let sessionControlSeq = 0
+let auditSeq = 0
+let notifSeq = 0
+let regChangeSeq = 0
+let evidenceSeq = 0
+let sourceActSeq = 0
 
 export const useApp = create<AppState>((set, get) => ({
-  role: 'CRO',
-  setRole: (role) => set({ role }),
-  currentPersonId: () => ROLES.find((r) => r.key === get().role)?.person ?? 'meera',
+  role: 'CCO',
+  personId: 'anjali',
+  // Selecting a persona sets the active person AND keeps role synced (role still
+  // drives the queue + gating; the person drives the department access boundary).
+  setPersona: (personId) => set({ personId, role: PEOPLE_BY_ID[personId]?.role ?? 'EXEC' }),
+  setRole: (role) => set({ role, personId: ROLES.find((r) => r.key === role)?.person ?? get().personId }),
+  currentPersonId: () => get().personId,
 
   toasts: [],
   pushToast: (t) => {
@@ -56,4 +268,470 @@ export const useApp = create<AppState>((set, get) => ({
 
   commandOpen: false,
   setCommandOpen: (v) => set({ commandOpen: v }),
+
+  // ── Agentic runs (Phase 0.5) ────────────────────────────────────────────────
+  agentRuns: [],
+  recordAgentRun: (r) => {
+    if (get().agentRuns.some((x) => x.runId === r.runId)) return
+    set((s) => ({ agentRuns: [r, ...s.agentRuns] }))
+    get().recordAction({ action: `Agent run — ${r.agent}`, entityId: r.scopeId, route: r.scopeId ? `/sources/section/${r.scopeId}` : undefined, detail: `${r.findings.length} finding(s), ${r.proposedActions.length} proposed action(s) — awaiting human approval` })
+  },
+  approveAgentAction: (run, action) => {
+    const a = action.apply
+    if (a.op === 'saveClauseToControl') {
+      get().saveClauseToControl(a.provisionId, a.controlId)
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
+      get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+    } else if (a.op === 'createControlForClause') {
+      get().createControlForClause(a.provisionId, { title: a.title, owner: a.owner, frequency: a.frequency, description: a.description })
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: a.provisionId, route: `/sources/section/${a.provisionId}`, detail: `${run.agent}: ${action.detail}` })
+      get().notify({ title: 'Agent proposal approved', body: `${action.label} — ${run.agent}. The clause is now tracked.`, severity: 'info', entityId: a.provisionId, route: `/sources/section/${a.provisionId}` })
+    } else {
+      // addInstrumentChange already records its own audit + owner-alert notification.
+      const id = get().addInstrumentChange(a.instrumentId, a.kind, a.title)
+      get().recordAction({ action: `Approved agent proposal — ${action.label}`, entityId: id || a.instrumentId, route: id ? `/reg-change/${id}` : `/sources/${a.instrumentId}`, detail: `${run.agent}: ${action.detail}` })
+    }
+  },
+
+  artifacts: [],
+  addArtifact: (a) => {
+    const id = `ART-${++artifactSeq}`
+    set((s) => ({ artifacts: [...s.artifacts, { ...a, id }] }))
+    return id
+  },
+  getArtifact: (id) => get().artifacts.find((x) => x.id === id),
+
+  clauseOverrides: {},
+  sessionControls: [],
+  getSessionControl: (id) => get().sessionControls.find((c) => c.id === id),
+
+  saveClauseToControl: (provisionId, controlId) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = { ...prev, status: 'Saved', linkedControlId: controlId, reviewer, reviewedAt: NOW.toISOString() }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+  },
+  createControlForClause: (provisionId, c) => {
+    const id = `CTRL-COMP-NEW-${String(++sessionControlSeq).padStart(3, '0')}`
+    const control: Control = {
+      id,
+      title: c.title,
+      frameworks: [],
+      mappedFrameworkRefs: [],
+      owner: c.owner,
+      type: 'Preventive',
+      automation: 'Manual',
+      lastTested: NOW.toISOString(),
+      result: 'Pass',
+      evidenceCount: 0,
+      linkedRisks: [],
+      linkedIssues: [],
+      description: c.description ?? c.title,
+      frequency: c.frequency,
+      nextDue: c.nextDue,
+      sourceRefs: getSource(provisionId) ? [provisionId] : [],
+    }
+    set((s) => ({ sessionControls: [...s.sessionControls, control] }))
+    get().saveClauseToControl(provisionId, id)
+    return id
+  },
+  engageSpecialist: (provisionId) => {
+    const reviewer = ROLES.find((r) => r.key === get().role)?.person ?? 'anjali'
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = { ...prev, status: 'Specialist review', reviewer, reviewedAt: NOW.toISOString() }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+  },
+  completeSpecialist: (provisionId, note) => {
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: { ...prev, specialistNote: note } } }))
+  },
+  setClauseApplicability: (provisionId, applicable, basis) => {
+    // A first-class compliance decision, recorded like any other: the deciding
+    // officer, the moment, and the reason are written onto the clause and appended
+    // to the audit log, so "why is this not tracked?" is answerable at inspection.
+    const reviewer = get().currentPersonId()
+    const prev = get().clauseOverrides[provisionId] ?? {}
+    const merged: ClauseOverride = {
+      ...prev,
+      applicable,
+      applicabilityBasis: basis,
+      status: applicable ? prev.status : 'Not applicable',
+      reviewer,
+      reviewedAt: NOW.toISOString(),
+      rationale: basis ?? prev.rationale,
+    }
+    set((s) => ({ clauseOverrides: { ...s.clauseOverrides, [provisionId]: merged } }))
+    get().recordAction({
+      action: applicable ? `Clause marked applicable · ${provisionId}` : `Clause marked not applicable · ${provisionId}`,
+      entityId: provisionId,
+      route: `/sources/section/${provisionId}`,
+      detail: basis ?? 'No reason recorded',
+    })
+  },
+
+  // ── AI-assisted Source Act creation (E0.6 / 1.6) ────────────────────────────
+  sessionInstruments: [],
+  sessionProvisions: [],
+  createSourceAct: ({ extracted, acceptedIdx, departments, entry }) => {
+    const n = ++sourceActSeq
+    const instId = `INST-NEW-${String(n).padStart(2, '0')}`
+    const accepted = acceptedIdx.map((i) => extracted.clauses[i]).filter(Boolean)
+    const provisions: SourceProvision[] = accepted.map((c, k) => {
+      const pid = `SRC-NEW-${n}-${k + 1}`
+      return {
+        id: pid,
+        instrumentId: instId,
+        provision: c.provision,
+        title: c.title,
+        citation: c.citation,
+        sourceExtract: c.whatItMeans,
+        nameOfCompliance: c.nameOfCompliance,
+        briefDescription: c.nameOfCompliance,
+        whatItMeans: c.whatItMeans,
+        keyParts: c.keyParts,
+        penaltyTiers: c.penaltyTiers.map((t) => ({ ...t, sourceRef: pid })),
+        severity: c.severity,
+        frequency: c.frequency,
+        applicable: c.applicable,
+        applicabilityBasis: c.applicabilityBasis,
+        status: 'Recommended',
+      }
+    })
+    const instrument: SourceInstrument = {
+      id: instId,
+      title: extracted.title,
+      authority: extracted.authority,
+      instrumentType: extracted.instrumentType,
+      dateOfIssue: NOW.toISOString(),
+      sourceChannel: entry === 'upload' ? 'Manual upload' : 'Regulator site',
+      sourceLink: extracted.sourceLink,
+      status: 'In force',
+      summary: extracted.summary,
+      applicability: extracted.applicability,
+      departments,
+      createdInSession: true,
+    }
+    set((s) => ({
+      sessionInstruments: [...s.sessionInstruments, instrument],
+      sessionProvisions: [...s.sessionProvisions, ...provisions],
+    }))
+    // Audit-trail the full workflow (1.6): extraction, each acceptance, routing.
+    get().recordAction({ action: `AI extraction accepted — created source act ${instId}`, entityId: instId, route: `/sources/${instId}`, detail: `${extracted.title} · ${entry === 'upload' ? 'document upload' : 'name + URL'}` })
+    for (const p of provisions) get().recordAction({ action: `Accepted clause ${p.provision}`, entityId: p.id, route: `/sources/section/${p.id}`, detail: `${p.nameOfCompliance} (${instId})` })
+    get().recordAction({ action: `Routed ${instId} to ${departments.join(', ') || 'Compliance only'}`, entityId: instId, route: `/sources/${instId}`, detail: extracted.title })
+    get().notify({ title: 'Source act created', body: `${instId} — ${extracted.title}: ${provisions.length} clause(s) accepted, routed to ${departments.join(', ') || 'Compliance'}.`, severity: 'info', entityId: instId, route: `/sources/${instId}` })
+    return instId
+  },
+
+  // ── Generalised session-mutation layer (Epic 1.1) ───────────────────────────
+  obligationOverrides: {},
+  controlOverrides: {},
+  issueOverrides: {},
+  incidentOverrides: {},
+  regChangeOverrides: {},
+  dsarOverrides: {},
+  sessionObligations: [],
+
+  patchObligation: (id, patch) =>
+    set((s) => ({ obligationOverrides: { ...s.obligationOverrides, [id]: { ...s.obligationOverrides[id], ...patch } } })),
+  patchControl: (id, patch) =>
+    set((s) => ({ controlOverrides: { ...s.controlOverrides, [id]: { ...s.controlOverrides[id], ...patch } } })),
+  patchIssue: (id, patch) =>
+    set((s) => ({ issueOverrides: { ...s.issueOverrides, [id]: { ...s.issueOverrides[id], ...patch } } })),
+  patchIncident: (id, patch) =>
+    set((s) => ({ incidentOverrides: { ...s.incidentOverrides, [id]: { ...s.incidentOverrides[id], ...patch } } })),
+  patchRegChange: (id, patch) =>
+    set((s) => ({ regChangeOverrides: { ...s.regChangeOverrides, [id]: { ...s.regChangeOverrides[id], ...patch } } })),
+  patchDsar: (id, patch) =>
+    set((s) => ({ dsarOverrides: { ...s.dsarOverrides, [id]: { ...s.dsarOverrides[id], ...patch } } })),
+  addSessionObligation: (o) => set((s) => ({ sessionObligations: [...s.sessionObligations, o] })),
+
+  // ── Add a circular / new version to an existing Act (Item 1) ────────────────
+  // Registers a regulatory change against the instrument, flags the records its
+  // clauses produced, alerts the owner, and routes into the Reg-Change pipeline
+  // (assess → acknowledge). Session-only; never mutates the seed.
+  sessionRegChanges: [],
+  addInstrumentChange: (instrumentId, kind, title) => {
+    const inst = getInstrument(instrumentId)
+    if (!inst) return ''
+    const regulator: RegulatoryChange['regulator'] = inst.regulator ?? 'Companies Act'
+    const provs = provisionsForInstrument(instrumentId)
+    const provIds = provs.map((p) => p.id)
+    const cites = (refs?: string[]) => (refs ?? []).some((r) => provIds.includes(r))
+    let impactedObligations = WORLD.obligations.filter((o) => cites(o.sourceRefs)).map((o) => o.id).slice(0, 8)
+    // Fallback for a newly-arrived instrument whose clauses are not yet cited:
+    // assess impact (and the owner to alert) by the instrument's regulator.
+    if (impactedObligations.length === 0 && inst.regulator) {
+      impactedObligations = WORLD.obligations.filter((o) => o.regulator === inst.regulator).map((o) => o.id).slice(0, 8)
+    }
+    // Controls connect to a clause either by sourceRefs (state-tax style) or by the
+    // clause's linkedControlId (the saved-to-control link, e.g. DPDP -> DPB/SEC).
+    const linkedCtrls = provs.map((p) => p.linkedControlId).filter((x): x is string => Boolean(x))
+    const impactedControls = Array.from(new Set([...WORLD.controls.filter((c) => cites(c.sourceRefs)).map((c) => c.id), ...linkedCtrls])).slice(0, 8)
+    const owner = getObligation(impactedObligations[0] ?? '')?.owner ?? 'anjali'
+    const id = `RCM-2026-S${String(++regChangeSeq).padStart(2, '0')}`
+    const rc: RegulatoryChange = {
+      id,
+      source: regulator === 'PFRDA' ? 'PFRDA circular' : 'Regulatory Intelligence feed',
+      summary: title,
+      regulator,
+      publishedAt: NOW.toISOString(),
+      impactedObligations,
+      impactedControls,
+      owner,
+      status: 'In progress',
+      detail: `${kind} registered against ${inst.title}. ${impactedObligations.length} obligation(s) and ${impactedControls.length} control(s) flagged for review; owner ${personName(owner)} alerted to assess and acknowledge.`,
+      instrumentId,
+    }
+    set((s) => ({ sessionRegChanges: [...s.sessionRegChanges, rc] }))
+    get().recordAction({ action: `Registered ${kind.toLowerCase()} on ${inst.title}`, entityId: id, route: `/reg-change/${id}`, detail: title })
+    get().notify({ title: `${kind} registered`, body: `${id} - ${personName(owner)} alerted; ${impactedObligations.length} obligation(s) and ${impactedControls.length} control(s) to review.`, severity: 'warn', entityId: id, route: `/reg-change/${id}` })
+    return id
+  },
+
+  // ── Governance primitives (Epic 1.3) ────────────────────────────────────────
+  auditLog: [],
+  notifications: SEED_NOTIFICATIONS,
+  recordAction: (e) => {
+    const actor = e.actor ?? get().currentPersonId()
+    const entry: AuditEntry = { ...e, actor, id: `ALOG-S-${++auditSeq}`, at: NOW.toISOString() }
+    set((s) => ({ auditLog: [entry, ...s.auditLog] }))
+  },
+  notify: (n) => {
+    const item: NotificationItem = { ...n, id: `NTF-${++notifSeq}`, at: NOW.toISOString(), read: false }
+    set((s) => ({ notifications: [item, ...s.notifications] }))
+  },
+  markNotificationsRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
+
+  // ── Task two-step maker-checker (E0.3 maker / E0.4 checker) ──────────────────
+  sessionEvidence: [],
+  taskWorkflow: {},
+  getAnyEvidence: (id) => getEvidence(id) ?? get().sessionEvidence.find((e) => e.id === id),
+  attachTaskEvidence: ({ taskId, obligationId, controlId, title, type, onBehalfOf }) => {
+    const actor = get().currentPersonId()
+    const id = `EVD-S-${String(++evidenceSeq).padStart(3, '0')}`
+    const rec: Evidence = {
+      id,
+      title,
+      type,
+      capturedAt: NOW.toISOString(),
+      capturedBy: actor,
+      auto: false,
+      linkedControls: controlId ? [controlId] : [],
+      linkedObligations: [obligationId],
+      frameworkRefs: [],
+      source: 'Manual upload',
+    }
+    set((s) => ({
+      sessionEvidence: [...s.sessionEvidence, rec],
+      // Maker step: record the actor + timestamp alongside the evidence link.
+      // onBehalfOf is set when a department head steps in for the assigned owner.
+      taskWorkflow: { ...s.taskWorkflow, [taskId]: { ...s.taskWorkflow[taskId], evidenceId: id, maker: actor, makerAt: NOW.toISOString(), onBehalfOf } },
+      // The evidence is now Submitted by the maker, awaiting checker verification.
+      evidenceWorkflow: { ...s.evidenceWorkflow, [id]: { status: 'Submitted', submittedBy: actor, submittedAt: NOW.toISOString() } },
+    }))
+    // Reflect the proof on the obligation record too (closes the evidence gap).
+    const base = getObligation(obligationId) ?? get().sessionObligations.find((o) => o.id === obligationId)
+    const curEv = get().obligationOverrides[obligationId]?.evidence ?? base?.evidence ?? []
+    get().patchObligation(obligationId, { evidence: [...curEv, id] })
+    const onBehalfNote = onBehalfOf ? ` on behalf of ${personName(onBehalfOf)}` : ''
+    get().recordAction({ action: `${onBehalfOf ? 'Department head attached' : 'Maker attached'} evidence to ${taskId}${onBehalfNote}`, entityId: id, route: `/tasks/${taskId}`, detail: `${title} — linked to ${obligationId}${controlId ? ` and ${controlId}` : ''}` })
+    get().notify({ title: onBehalfOf ? 'Evidence attached (head step-in)' : 'Evidence attached', body: `${id} linked to task ${taskId}${onBehalfNote}; awaiting checker verification.`, severity: 'info', entityId: obligationId, route: `/tasks/${taskId}` })
+    return id
+  },
+  // Checker step: verifying a task verifies its evidence (the single lifecycle).
+  verifyTask: ({ taskId }) => {
+    const evidenceId = get().taskWorkflow[taskId]?.evidenceId
+    if (evidenceId) get().verifyEvidence(evidenceId)
+  },
+
+  // ── Evidence lifecycle (E3.3) ───────────────────────────────────────────────
+  evidenceWorkflow: {},
+  getEvidenceStatus: (id) => get().evidenceWorkflow[id]?.status ?? (getEvidence(id) ? 'Verified' : 'Submitted'),
+  evidenceDraft: null,
+  setEvidenceDraft: (d) => set({ evidenceDraft: d }),
+  verifyEvidence: (evidenceId) => {
+    const actor = get().currentPersonId()
+    const wf = get().evidenceWorkflow[evidenceId]
+    if (wf?.status === 'Verified') return // already verified
+    if (wf?.submittedBy && actor === wf.submittedBy) return // separation of duties
+    set((s) => ({
+      evidenceWorkflow: { ...s.evidenceWorkflow, [evidenceId]: { ...(s.evidenceWorkflow[evidenceId] ?? { status: 'Submitted' }), status: 'Verified', verifiedBy: actor, verifiedAt: NOW.toISOString() } },
+    }))
+    // Reflect on the owning task (if any) so the task reads verified / Done.
+    const tw = get().taskWorkflow
+    const tskId = Object.keys(tw).find((k) => tw[k].evidenceId === evidenceId)
+    if (tskId) set((s) => ({ taskWorkflow: { ...s.taskWorkflow, [tskId]: { ...s.taskWorkflow[tskId], checker: actor, checkerAt: NOW.toISOString() } } }))
+    const ev = get().getAnyEvidence(evidenceId)
+    get().recordAction({ action: `Checker verified evidence ${evidenceId}`, entityId: evidenceId, route: `/evidence/${evidenceId}`, detail: ev?.title })
+    get().notify({ title: 'Evidence verified', body: `${evidenceId} verified by ${personName(actor)}.`, severity: 'info', entityId: evidenceId, route: `/evidence/${evidenceId}` })
+  },
+
+  addManualEvidence: (args) => {
+    const actor = get().currentPersonId()
+    const id = `EVD-S-${String(++evidenceSeq).padStart(3, '0')}`
+    const rec: Evidence = {
+      id,
+      title: args?.title || 'Manual evidence upload',
+      type: args?.type ?? 'Attestation',
+      capturedAt: NOW.toISOString(),
+      capturedBy: actor,
+      auto: false,
+      linkedControls: args?.controlId ? [args.controlId] : [],
+      linkedObligations: args?.obligationId ? [args.obligationId] : [],
+      frameworkRefs: [],
+      source: 'Manual upload',
+    }
+    set((s) => ({
+      sessionEvidence: [...s.sessionEvidence, rec],
+      evidenceWorkflow: { ...s.evidenceWorkflow, [id]: { status: 'Submitted', submittedBy: actor, submittedAt: NOW.toISOString() } },
+    }))
+    get().recordAction({ action: `Submitted evidence ${id}`, entityId: id, route: `/evidence/${id}`, detail: rec.title })
+    get().notify({ title: 'Evidence submitted', body: `${id} — ${rec.title} submitted; awaiting checker verification.`, severity: 'info', entityId: id, route: `/evidence/${id}` })
+    return id
+  },
+
+  // ── Obligation workflow (Epic 2.1) ──────────────────────────────────────────
+  submitObligation: (id) => {
+    const base = getObligation(id) ?? get().sessionObligations.find((o) => o.id === id)
+    if (!base) return
+    const mc = { ...base.makerChecker, ...(get().obligationOverrides[id]?.makerChecker ?? {}) }
+    get().patchObligation(id, { status: 'In review', makerChecker: { ...mc, state: 'Submitted' } })
+    get().recordAction({ action: `Submitted obligation ${id} for check`, entityId: id, route: `/obligations/${id}`, detail: base.title })
+    get().notify({ title: 'Filing submitted for check', body: `${id} - ${base.title}`, severity: 'info', entityId: id, route: `/obligations/${id}` })
+  },
+  approveObligation: (id) => {
+    const base = getObligation(id) ?? get().sessionObligations.find((o) => o.id === id)
+    if (!base) return
+    const mc = { ...base.makerChecker, ...(get().obligationOverrides[id]?.makerChecker ?? {}) }
+    get().patchObligation(id, { status: 'Filed', makerChecker: { ...mc, state: 'Approved' }, filedAt: NOW.toISOString() })
+    get().recordAction({ action: `Approved & filed obligation ${id}`, entityId: id, route: `/obligations/${id}`, detail: base.title })
+    get().notify({ title: 'Obligation filed', body: `${id} - ${base.title} approved under maker-checker.`, severity: 'info', entityId: id, route: `/obligations/${id}` })
+    // Schedule the next recurring instance (spec 5.4) as a session-appended duty.
+    const merged = { ...base, ...(get().obligationOverrides[id] ?? {}), status: 'Filed' as const }
+    const next = nextInstance(merged)
+    if (next) {
+      get().addSessionObligation(next)
+      get().recordAction({ action: `Scheduled next ${next.frequency.toLowerCase()} cycle ${next.id}`, entityId: next.id, route: `/obligations/${next.id}`, detail: next.title })
+      get().notify({ title: 'Next cycle scheduled', body: `${next.id} - ${next.title} is now due ${new Date(next.dueDate).toLocaleDateString('en-IN')}.`, severity: 'info', entityId: next.id, route: `/obligations/${next.id}` })
+    }
+  },
+
+  // ── Control test/re-test (Epic 2.3) ─────────────────────────────────────────
+  controlTests: {},
+  retestControl: (id, opts) => {
+    const base = getControl(id) ?? get().getSessionControl(id)
+    if (!base) return
+    // Protect the load-bearing marquee CCM chain: a re-test of the patch-SLA
+    // control records remediation-in-progress (Partial), not a clean Pass, so the
+    // failing CCM rule -> issue -> incident story survives.
+    const marquee = id === 'CTRL-PCI-6.3.3'
+    const result = opts?.result ?? (marquee ? 'Partial' : 'Pass')
+    const tester = get().currentPersonId()
+    const run: TestRun = {
+      at: NOW.toISOString(),
+      result,
+      method: opts?.method ?? 'Manual re-test',
+      tester,
+      note: opts?.note ?? (marquee ? 'Re-tested; patch remediation in progress, critical CVEs being closed.' : 'Re-tested and operating effectively.'),
+    }
+    set((s) => ({ controlTests: { ...s.controlTests, [id]: [run, ...(s.controlTests[id] ?? [])] } }))
+    get().patchControl(id, { result, lastTested: run.at })
+    get().recordAction({ action: `Re-tested control ${id} - ${result}`, entityId: id, route: `/controls/${id}`, detail: base.title })
+    get().notify({ title: 'Control re-tested', body: `${id} - ${base.title}: ${result}.`, severity: result === 'Pass' ? 'info' : 'warn', entityId: id, route: `/controls/${id}` })
+  },
+
+  // ── Regulatory change (Epic 3.1) ────────────────────────────────────────────
+  acknowledgeRegChange: (id) => {
+    const c = getRegChange(id) ?? get().sessionRegChanges.find((r) => r.id === id)
+    if (!c) return
+    get().patchRegChange(id, { status: 'Closed' })
+    get().recordAction({ action: `Acknowledged regulatory change ${id}`, entityId: id, route: `/reg-change/${id}`, detail: c.summary })
+    get().notify({ title: 'Regulatory change acknowledged', body: `${id} - ${personName(c.owner)} alerted; ${c.impactedObligations.length} obligation(s) and ${c.impactedControls.length} control(s) updated.`, severity: 'info', entityId: id, route: `/reg-change/${id}` })
+  },
+
+  // ── Incident regulator-track filing (Epic 3.2) ──────────────────────────────
+  // Files one regulator track (it leaves activeTracks); the incident itself stays
+  // open so the marquee "1 Critical live" vital is preserved.
+  fileIncidentTrack: (incidentId, trackIndex) => {
+    const base = getIncident(incidentId)
+    if (!base) return
+    const cur = { ...base, ...(get().incidentOverrides[incidentId] ?? {}) }
+    const tracks = cur.regulatorTracks.map((t, i) => (i === trackIndex ? { ...t, status: 'Filed' as const } : t))
+    const filed = tracks[trackIndex]
+    get().patchIncident(incidentId, { regulatorTracks: tracks })
+    get().recordAction({ action: `Filed ${filed.regulator} report for ${incidentId}`, entityId: incidentId, route: `/incidents/${incidentId}`, detail: filed.output })
+    get().notify({ title: `${filed.regulator} report filed`, body: `${incidentId} - ${filed.clockLabel} satisfied under maker-checker sign-off.`, severity: 'info', entityId: incidentId, route: `/incidents/${incidentId}` })
+  },
+
+  // ── Issue remediation + audit findings (Epic 3.3) ───────────────────────────
+  // Resolving an audit-finding-sourced issue is what retires the finding and drops
+  // the Open-findings metric (see lib/metrics). Session-override only; seed intact.
+  resolveIssue: (id) => {
+    const base = getIssue(id)
+    if (!base) return
+    const cur = { ...base, ...(get().issueOverrides[id] ?? {}) }
+    if (cur.status === 'Resolved') return
+    get().patchIssue(id, { status: 'Resolved' })
+    get().recordAction({ action: `Resolved issue ${id}`, entityId: id, route: `/issues/${id}`, detail: cur.title })
+    get().notify({ title: 'Issue resolved', body: `${id} - ${cur.title} closed with remediation evidence.`, severity: 'info', entityId: id, route: `/issues/${id}` })
+  },
+
+  // Bulk status write across selected issues — one audit-log line for the batch.
+  bulkSetIssueStatus: (ids, status) => {
+    const targets = ids.filter((id) => {
+      const b = getIssue(id)
+      return b && { ...b, ...(get().issueOverrides[id] ?? {}) }.status !== status
+    })
+    if (!targets.length) return
+    for (const id of targets) get().patchIssue(id, { status })
+    const verb = status === 'Resolved' ? 'Resolved' : `Set to "${status}"`
+    get().recordAction({ action: `${verb} ${targets.length} issue(s)`, entityId: targets[0], route: '/issues', detail: targets.join(', ') })
+    get().notify({ title: `${targets.length} issue(s) ${status === 'Resolved' ? 'resolved' : 'updated'}`, body: `Bulk ${status === 'Resolved' ? 'closure recorded with remediation evidence' : `status set to ${status}`}.`, severity: 'info', route: '/issues' })
+  },
+
+  // Closing an audit finding resolves its 1:1 remediation issue; the finding then
+  // reads Closed through effectiveFinding and the Open-findings metric drops.
+  closeFinding: (auditId, findingId) => {
+    const audit = getAudit(auditId)
+    if (!audit) return
+    const f = audit.findings.find((x) => x.id === findingId)
+    if (!f) return
+    if (f.linkedIssue) get().patchIssue(f.linkedIssue, { status: 'Resolved' })
+    get().recordAction({ action: `Closed audit finding ${findingId}`, entityId: auditId, route: `/audits/${auditId}`, detail: f.title })
+    get().notify({ title: 'Audit finding closed', body: `${findingId} - ${f.title}${f.linkedIssue ? ` · remediation ${f.linkedIssue} resolved` : ''}.`, severity: 'info', entityId: auditId, route: `/audits/${auditId}` })
+  },
+
+  // ── DSAR erasure-vs-retention workflow (Epic 4.2) ───────────────────────────
+  // Walks the 5-step locate→retain→erase→log→audit sequence one stage at a time.
+  // The final stage marks the request Fulfilled and generates an immutable
+  // ATR-DSAR-* audit record (a session artifact) — the provable handling the DPDP
+  // Board and internal audit can inspect. Session-override only; seed intact.
+  advanceDsar: (id) => {
+    const base = getDsar(id)
+    if (!base) return
+    const cur = { ...base, ...(get().dsarOverrides[id] ?? {}) }
+    const total = dsarTotalSteps(cur.type)
+    if (cur.step >= total) return
+    const next = cur.step + 1
+    const isFinal = next >= total
+    get().patchDsar(id, isFinal ? { step: next, status: 'Fulfilled' } : { step: next, status: 'In review' })
+    if (isFinal) {
+      const atr = `ATR-${id}`
+      get().addArtifact({ kind: 'report', title: `DSAR audit record ${atr}`, createdAt: NOW.toISOString(), payload: { dsarId: id, kind: 'dsar-audit-record' } })
+      get().recordAction({ action: `Generated DSAR audit record ${atr}`, entityId: id, route: `/dpdp/dsar/${id}`, detail: `${cur.type} request fulfilled; immutable audit record written.` })
+      get().notify({ title: 'DSAR fulfilled', body: `${id} - ${cur.type} request closed; audit record ${atr} generated.`, severity: 'info', entityId: id, route: `/dpdp/dsar/${id}` })
+    } else {
+      get().recordAction({ action: `Advanced DSAR ${id} to step ${next}/${total}`, entityId: id, route: `/dpdp/dsar/${id}`, detail: cur.note })
+    }
+  },
+
+  // A personal-data breach surfaced while handling a request feeds the same
+  // incident workflow (DPDP breach intimation) — routed to the live incident.
+  flagDsarBreach: (id) => {
+    const base = getDsar(id)
+    if (!base) return
+    get().recordAction({ action: `Flagged personal-data breach from ${id}`, entityId: MARQUEE.id, route: `/incidents/${MARQUEE.id}`, detail: `Routed to incident ${MARQUEE.id} for DPDP Board breach intimation.` })
+    get().notify({ title: 'Breach routed to incident workflow', body: `${id} - personal-data breach escalated to ${MARQUEE.id}; DPDP Board 72-hour intimation track engaged.`, severity: 'warn', entityId: MARQUEE.id, route: `/incidents/${MARQUEE.id}` })
+  },
 }))

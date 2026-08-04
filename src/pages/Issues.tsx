@@ -12,6 +12,8 @@ import { WORLD } from '@/data'
 import { personName } from '@/data/people'
 import { fmtDate, NOW_MS } from '@/lib/time'
 import { useApp } from '@/store'
+import { useEffectiveIssues } from '@/lib/effective'
+import { useCanAct } from '@/lib/gating'
 import type { Issue, Severity } from '@/types'
 
 const SEV_ORDER: Record<Severity, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 }
@@ -24,10 +26,13 @@ const SOURCE_ICON = {
 export function Issues() {
   const navigate = useNavigate()
   const pushToast = useApp((s) => s.pushToast)
+  const bulkSetIssueStatus = useApp((s) => s.bulkSetIssueStatus)
+  const canResolve = useCanAct({ kind: 'issue.resolve' })
 
+  const issues = useEffectiveIssues()
   const owners = React.useMemo(() => Array.from(new Set(WORLD.issues.map((i) => personName(i.owner)))).sort(), [])
-  const openCount = WORLD.issues.filter((i) => i.status !== 'Resolved').length
-  const overdue = WORLD.issues.filter((i) => i.status === 'Overdue').length
+  const openCount = issues.filter((i) => i.status !== 'Resolved').length
+  const overdue = issues.filter((i) => i.status === 'Overdue').length
 
   const columns: Column<Issue>[] = [
     {
@@ -129,13 +134,13 @@ export function Issues() {
         <span className="rounded-md border border-critical/30 bg-critical-soft px-2.5 py-1 text-critical">Overdue <span className="font-semibold tnum">{overdue}</span></span>
         {(['Control failure', 'Audit finding', 'Incident'] as const).map((s) => (
           <span key={s} className="rounded-md border border-border bg-background px-2.5 py-1">
-            {s} <span className="font-semibold tnum text-muted-foreground">{WORLD.issues.filter((i) => i.source === s).length}</span>
+            {s} <span className="font-semibold tnum text-muted-foreground">{issues.filter((i) => i.source === s && i.status !== 'Resolved').length}</span>
           </span>
         ))}
       </div>
 
       <DataTable
-        data={WORLD.issues}
+        data={issues}
         columns={columns}
         searchKeys={['id', 'title', 'sourceRef', (i) => personName(i.owner)]}
         searchPlaceholder="Search issue id, title or source ref…"
@@ -143,39 +148,49 @@ export function Issues() {
         initialSort={{ key: 'severity', dir: 'desc' }}
         onRowClick={(i) => navigate(`/issues/${i.id}`)}
         selectable
-        bulkBar={(sel, clear) => (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                pushToast({ title: `${sel.length} issues assigned`, description: 'Bulk reassignment applied.', variant: 'success' })
-                clear()
-              }}
-            >
-              <UserCog className="size-4" /> Assign owner
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                pushToast({ title: `${sel.length} issues set to In progress`, description: 'Bulk status update applied.', variant: 'info' })
-                clear()
-              }}
-            >
-              <Wrench className="size-4" /> Mark in progress
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                pushToast({ title: `${sel.length} issues closed`, description: 'Bulk closure recorded with evidence.', variant: 'success' })
-                clear()
-              }}
-            >
-              <CheckCircle2 className="size-4" /> Close selected
-            </Button>
-          </>
-        )}
+        bulkBar={(sel, clear) => {
+          const open = sel.filter((i) => i.status !== 'Resolved')
+          const inProgress = open.filter((i) => i.status !== 'In progress')
+          return (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  pushToast({ title: `${sel.length} issues assigned`, description: 'Bulk reassignment applied.', variant: 'success' })
+                  clear()
+                }}
+              >
+                <UserCog className="size-4" /> Assign owner
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canResolve || inProgress.length === 0}
+                title={canResolve ? undefined : 'Issue status changes are made by the Control Owner, Auditor or Compliance Manager.'}
+                onClick={() => {
+                  bulkSetIssueStatus(inProgress.map((i) => i.id), 'In progress')
+                  pushToast({ title: `${inProgress.length} issues set to In progress`, description: 'Bulk status update applied.', variant: 'info' })
+                  clear()
+                }}
+              >
+                <Wrench className="size-4" /> Mark in progress
+              </Button>
+              <Button
+                size="sm"
+                disabled={!canResolve || open.length === 0}
+                title={canResolve ? undefined : 'Resolving issues is done by the Control Owner, Auditor or Compliance Manager.'}
+                onClick={() => {
+                  bulkSetIssueStatus(open.map((i) => i.id), 'Resolved')
+                  pushToast({ title: `${open.length} issues resolved`, description: 'Bulk closure recorded with remediation evidence.', variant: 'success' })
+                  clear()
+                }}
+              >
+                <CheckCircle2 className="size-4" /> Resolve selected
+              </Button>
+            </>
+          )
+        }}
       />
     </div>
   )

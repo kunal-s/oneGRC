@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BadgeCheck, RefreshCw, Siren, FileSearch, DatabaseZap, GitPullRequestArrow, ArrowUpRight, Inbox,
+  BadgeCheck, RefreshCw, Siren, FileSearch, DatabaseZap, GitPullRequestArrow, ArrowUpRight, Inbox, BellRing,
 } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { SeverityBadge } from '@/components/SeverityBadge'
@@ -12,7 +12,11 @@ import { useApp } from '@/store'
 import { WORLD } from '@/data'
 import { ROLES, PEOPLE, PEOPLE_BY_ID, personName } from '@/data/people'
 import { fmtDate, fmtRelative, NOW_MS } from '@/lib/time'
+import { reminderEngineSummary } from '@/lib/reminders'
+import { MyComplianceCalendarCard } from '@/components/MyComplianceCalendar'
 import type { QueueTask } from '@/types'
+
+const ENGINE = reminderEngineSummary()
 
 const KIND_META: Record<QueueTask['kind'], { icon: React.ComponentType<{ className?: string }>; cls: string }> = {
   Approval: { icon: BadgeCheck, cls: 'bg-ok-soft text-ok' },
@@ -53,7 +57,7 @@ function makerCheckerLabel(kind: QueueTask['kind']): string {
 export function MyQueue() {
   const navigate = useNavigate()
   const role = useApp((s) => s.role)
-  const selfId = useApp((s) => s.currentPersonId)()
+  const selfId = useApp((s) => s.personId)
   const pushToast = useApp((s) => s.pushToast)
   const [active, setActive] = React.useState<'All' | QueueTask['kind']>('All')
 
@@ -109,6 +113,19 @@ export function MyQueue() {
           </div>
         }
       />
+
+      <button
+        onClick={() => navigate('/obligations')}
+        className="mb-3 flex w-full items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60"
+      >
+        <BellRing className="size-3.5 shrink-0 text-info" />
+        <span className="text-foreground">
+          <span className="font-medium">Reminder &amp; escalation engine active.</span> {ENGINE.reminders} reminders sent and {ENGINE.escalations} escalations fired this period at the set intervals (7/3/1 before due · 1/3/7 overdue) — every event is in the audit log.
+        </span>
+        <ArrowUpRight className="ml-auto size-3.5 shrink-0" />
+      </button>
+
+      <MyComplianceCalendarCard className="mb-3" />
 
       {/* Kind segmented filter */}
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
